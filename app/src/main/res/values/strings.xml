@@ -212,11 +212,4 @@
     <string name="diagnostic_share">Partager</string>
     <string name="diagnostic_share_chooser">Partager le journal</string>
     <string name="diagnostic_subject">Journal de diagnostic Hestia</string>
-
-    <!-- Widget (lot 6) -->
-    <string name="widget_in_progress">…</string>
-    <string name="widget_deleted">Supprimé</string>
-    <string name="widget_config_title">Choisir le canal</string>
-    <string name="widget_config_empty">Ajoute d\'abord un appareil dans Hestia.</string>
-    <string name="widget_description">Piloter un canal Shelly depuis l\'écran d\'accueil.</string>
 </resources>

@@ -545,6 +545,15 @@ au prix de la perte des appareils et des réglages.
 
 ## 8. Widget d'écran d'accueil
 
+> **Note (V1) — fonction retirée.** Le widget a bien été implémenté et testé, mais finalement
+> **retiré de la V1**. Les restrictions Android sur le rafraîchissement des widgets (aucun appel
+> réseau possible dans le rendu, mise à jour seulement après une action ou à l'ouverture de
+> l'application) le rendaient peu utile : il ne pouvait pas refléter l'état réel des appareils au
+> bon moment. Son retrait a aussi éliminé la dépendance **Jetpack Glance / WorkManager** et les
+> permissions qu'elle injectait (`WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED`, `FOREGROUND_SERVICE`,
+> `ACCESS_NETWORK_STATE`), au bénéfice de la sobriété F-Droid. La section ci-dessous est conservée
+> à titre de trace de conception.
+
 Widget **1×1** permettant de piloter un canal sans ouvrir l'application, dans la lignée
 d'Ignis. Construit avec **Jetpack Glance**.
 

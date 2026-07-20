@@ -115,22 +115,7 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
       sont supprimées, la taille de l'application ne dérive pas
 - [ ] Aucun ralentissement perceptible de l'interface avec le journal actif
 
-## 9. Widget
-
-- [ ] Ajout du widget depuis l'écran d'accueil : l'écran de choix du canal apparaît
-- [ ] Le widget affiche le bon nom et le bon état au moment de l'ajout
-- [ ] Appui sur l'interrupteur : la prise bascule, le widget se met à jour
-- [ ] Appui sur le titre : l'application s'ouvre sur le bon écran de détail
-- [ ] Prise débranchée : le widget affiche l'état hors ligne, aucun plantage
-- [ ] **Permission révoquée : l'appui ouvre l'application au lieu d'échouer silencieusement**
-- [ ] **Appui alors que l'application n'a jamais été ouverte depuis le démarrage du téléphone**
-- [ ] Suppression de l'appareil dans l'application : le widget affiche « Appareil supprimé »
-- [ ] Plusieurs widgets pour des canaux différents : chacun pilote bien le sien
-- [ ] Thème clair et thème sombre corrects sur le widget
-- [ ] Redémarrage du téléphone : le widget reste fonctionnel
-- [ ] Les actions du widget apparaissent dans le journal avec l'origine `widget`
-
-## 10. Thèmes et affichage
+## 9. Thèmes et affichage
 
 - [ ] Thème clair : tous les textes lisibles, aucun contraste douteux
 - [ ] Thème sombre : idem
@@ -140,14 +125,14 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Rotation de l'écran sur tous les écrans : pas de perte d'état
 - [ ] Écran de petite taille (Sony) : grille lisible, boutons atteignables au pouce
 
-## 11. Navigation
+## 10. Navigation
 
 - [ ] Bouton retour système cohérent sur tous les écrans
 - [ ] Quitter un écran avec des modifications non enregistrées : dialogue de confirmation
 - [ ] « Abandonner » quitte sans enregistrer, « Continuer » revient à l'édition
 - [ ] Aucun écran ne peut être atteint sans possibilité de retour
 
-## 12. Avant publication
+## 11. Avant publication
 
 - [ ] `./gradlew lint` sans avertissement bloquant
 - [ ] `./gradlew testDebugUnitTest` au vert

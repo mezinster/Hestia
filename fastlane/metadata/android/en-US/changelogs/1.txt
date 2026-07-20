@@ -1,0 +1,1 @@
+First release. Local control of Shelly Gen2+ devices: dashboard and switches, "on for X" timer, presence simulation, JSON backup/restore, and diagnostic log.

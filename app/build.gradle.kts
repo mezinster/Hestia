@@ -77,7 +77,6 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 
-    implementation(libs.glance.appwidget)
     // Génération locale du QR code (Apache 2.0, sans service Google — F-Droid OK).
     implementation(libs.zxing.core)
 

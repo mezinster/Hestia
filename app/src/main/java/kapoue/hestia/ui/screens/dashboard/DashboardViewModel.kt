@@ -9,7 +9,6 @@ import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.repository.DeviceRepository
-import kapoue.hestia.widget.WidgetUpdater
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -86,13 +85,6 @@ class DashboardViewModel @Inject constructor(
                 }.awaitAll()
                 statuses.value = results.toMap()
                 loaded.value = true
-                // Synchroniser les widgets d'écran d'accueil avec l'état relevé.
-                runCatching {
-                    WidgetUpdater.syncAll(
-                        context,
-                        results.associate { (id, status) -> id to (status as? TileStatus.Online)?.output },
-                    )
-                }
             }
             val indicator = if (userInitiated) {
                 refreshing.value = true

@@ -15,7 +15,6 @@ quitte votre réseau.
   allume/éteint dans une plage horaire, avec marge aléatoire.
 - **Sauvegarde / restauration** de la configuration au format JSON.
 - **Journal de diagnostic** local, partageable pour le support.
-- **Widget** d'écran d'accueil pour piloter un canal sans ouvrir l'application.
 
 ## Vie privée
 

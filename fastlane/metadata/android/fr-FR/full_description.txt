@@ -6,7 +6,6 @@ Fonctionnalités :
 * Minuteur « marche pour X » exécuté par l'appareil, en toute autonomie (le téléphone peut être éteint).
 * Simulation de présence : un script généré par l'application s'exécute sur l'appareil et allume/éteint dans une plage horaire, avec une marge aléatoire.
 * Sauvegarde et restauration de votre configuration au format JSON.
-* Widget d'écran d'accueil pour piloter un canal sans ouvrir l'application.
 
 Respect de la vie privée :
 

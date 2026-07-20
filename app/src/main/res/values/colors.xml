@@ -2,12 +2,4 @@
 <resources>
     <!-- Fond craie de l'icône (voir SPEC-V1 § Icône). -->
     <color name="ic_launcher_background">#F4F3EF</color>
-
-    <!-- Couleurs du widget (thème clair ; variantes sombres dans values-night). -->
-    <color name="widget_surface">#FCFBF8</color>
-    <color name="widget_on_surface">#14171A</color>
-    <color name="widget_active">#22B04B</color>
-    <color name="widget_idle">#9AA0A8</color>
-    <color name="widget_offline">#D8342A</color>
-    <color name="widget_state_text">#FFFFFF</color>
 </resources>

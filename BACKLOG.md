@@ -14,9 +14,6 @@ Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bu
   quitte après avoir changé les heures sans déployer (faibles enjeux).
 - **Distinguer l'extinction « fin de minuteur » de l'extinction manuelle** dans le journal
   (les deux apparaissent « Éteint »). Heuristique possible : minuteur actif au relevé précédent.
-- **Widget en 1×2 sur Android 11** (1×1 correct sur Android 17) : `targetCellWidth/Height` est
-  ignoré avant API 31 ; affiner `minWidth/minHeight` pour tenir en 1×1 sur API 30.
-- **Aperçu du widget** dans le sélecteur non stylé (pas de `previewImage`).
 
 ## Fonctionnalités futures (post-V1)
 
