@@ -16,7 +16,7 @@ Repo: https://codeberg.org/kapoue/Hestia.git
 Builds:
   - versionName: 1.0.0
     versionCode: 1
-    commit: 360095c29c27ac37944c9a80622a7d30f75c6825
+    commit: 5e6f3d9351d986f11d404cb2bbbae943cb83c91c
     subdir: app
     gradle:
       - yes
