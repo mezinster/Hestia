@@ -1,0 +1,1 @@
+Pilotage local d'appareils Shelly, sans cloud ni compte.

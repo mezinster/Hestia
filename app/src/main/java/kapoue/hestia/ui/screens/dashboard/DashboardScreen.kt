@@ -10,8 +10,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -45,7 +46,7 @@ import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.permission.PermissionExplanationDialog
 import kotlinx.coroutines.delay
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(
     onAddDevice: () -> Unit,
@@ -98,18 +99,22 @@ fun DashboardScreen(
                 title = {
                     Text(
                         text = stringResource(R.string.app_name),
-                        modifier = Modifier.clickable(
+                        modifier = Modifier.combinedClickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                        ) {
-                            val now = SystemClock.elapsedRealtime()
-                            tapCount = if (now - lastTapAt <= 2_000) tapCount + 1 else 1
-                            lastTapAt = now
-                            if (tapCount >= 5) {
-                                tapCount = 0
-                                onOpenDiagnostic()
-                            }
-                        },
+                            // 5 appuis rapprochés → journal de diagnostic.
+                            onClick = {
+                                val now = SystemClock.elapsedRealtime()
+                                tapCount = if (now - lastTapAt <= 2_000) tapCount + 1 else 1
+                                lastTapAt = now
+                                if (tapCount >= 5) {
+                                    tapCount = 0
+                                    onOpenDiagnostic()
+                                }
+                            },
+                            // Appui long → bascule le mode démo (build debug uniquement).
+                            onLongClick = { viewModel.toggleDemo() },
+                        ),
                     )
                 },
             )

@@ -105,37 +105,44 @@ fun DeviceTile(
                 )
             }
 
-            visual.countdown?.let { countdown ->
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = countdown,
-                    color = visual.textColor,
-                    fontFamily = FontFamily.Monospace,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-
-            Spacer(Modifier.height(10.dp))
-            when (tile.status) {
-                is TileStatus.Online, TileStatus.Loading -> {
-                    val checked = (tile.status as? TileStatus.Online)?.output == true
-                    BreakerSwitch(
-                        checked = checked,
-                        onCheckedChange = onToggle,
-                        onColor = colors.activeLed,
-                        enabled = tile.status is TileStatus.Online,
+            // Emplacement réservé pour le compte à rebours : présent même sans minuteur, afin
+            // que les tuiles voisines gardent la même hauteur (SPEC — cohérence de la grille).
+            Spacer(Modifier.height(2.dp))
+            Box(modifier = Modifier.fillMaxWidth().height(20.dp)) {
+                visual.countdown?.let { countdown ->
+                    Text(
+                        text = countdown,
+                        color = visual.textColor,
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-                TileStatus.Offline -> {
-                    TextButton(onClick = onRetry, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                        Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.size(4.dp))
-                        Text(stringResource(R.string.action_retry))
+            }
+
+            // Emplacement d'action à hauteur fixe (interrupteur / bouton) → tuiles uniformes.
+            Spacer(Modifier.height(8.dp))
+            Box(modifier = Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.CenterStart) {
+                when (tile.status) {
+                    is TileStatus.Online, TileStatus.Loading -> {
+                        val checked = (tile.status as? TileStatus.Online)?.output == true
+                        BreakerSwitch(
+                            checked = checked,
+                            onCheckedChange = onToggle,
+                            onColor = colors.activeLed,
+                            enabled = tile.status is TileStatus.Online,
+                        )
                     }
-                }
-                TileStatus.PermissionRequired -> {
-                    TextButton(onClick = onGrantPermission, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                        Text(stringResource(R.string.tile_grant_permission))
+                    TileStatus.Offline -> {
+                        TextButton(onClick = onRetry, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+                            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.size(4.dp))
+                            Text(stringResource(R.string.action_retry))
+                        }
+                    }
+                    TileStatus.PermissionRequired -> {
+                        TextButton(onClick = onGrantPermission, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
+                            Text(stringResource(R.string.tile_grant_permission))
+                        }
                     }
                 }
             }

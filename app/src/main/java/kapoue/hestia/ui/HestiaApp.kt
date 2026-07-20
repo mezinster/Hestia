@@ -82,7 +82,10 @@ fun HestiaApp() {
         NavHost(
             navController = navController,
             startDestination = TopLevelDestination.DASHBOARD.route,
-            modifier = Modifier.padding(innerPadding),
+            // Seule la marge basse (barre de navigation) est appliquée ici : la marge haute
+            // (barre de statut) est gérée par la TopAppBar de chaque écran, pour éviter un
+            // double espacement au-dessus des titres.
+            modifier = Modifier.padding(bottom = innerPadding.calculateBottomPadding()),
         ) {
             composable(TopLevelDestination.DASHBOARD.route) {
                 DashboardScreen(

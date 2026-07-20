@@ -11,6 +11,7 @@ import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
 import kapoue.hestia.data.presence.PresenceState
 import kapoue.hestia.data.rpc.DeviceCapabilities
+import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.ShellyRpcClient
 import kapoue.hestia.data.rpc.errorOrNull
@@ -47,6 +48,7 @@ class DeviceRepository @Inject constructor(
      * d'état observé** non déclenché par l'application (fin de minuteur, interface web).
      */
     suspend fun getStatus(device: Device): RpcResult<SwitchStatusResult> {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return demoStatus(device)
         val result = rpcClient.getSwitchStatus(device.ipAddress, device.switchId)
         if (result is RpcResult.Success) {
             val output = result.value.output
@@ -65,6 +67,8 @@ class DeviceRepository @Inject constructor(
 
     /** Bascule d'un canal déclenchée par l'utilisateur (journalisée). */
     suspend fun userToggle(device: Device, on: Boolean): RpcResult<SwitchSetResult> {
+        // Appareils démo : succès sans réseau (l'état affiché reste piloté par demoStatus).
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(SwitchSetResult())
         val result = rpcClient.setSwitch(device.ipAddress, device.switchId, on)
         if (result is RpcResult.Success) {
             // Persister l'état commandé : évite de re-journaliser ce changement au prochain relevé.
@@ -266,6 +270,49 @@ class DeviceRepository @Inject constructor(
         deviceDao.update(b.copy(position = a.position))
     }
 
+    // --- Mode démo (captures d'écran, build debug uniquement) ---
+
+    suspend fun hasDemoDevices(): Boolean = deviceDao.countDemoDevices() > 0
+
+    suspend fun addDemoDevices() {
+        if (deviceDao.countDemoDevices() > 0) return
+        var position = deviceDao.maxPosition() + 1
+        val demo = listOf(
+            Triple("Prise scooter", "203.0.113.1", DeviceType.PLUG),
+            Triple("Lampe salon", "203.0.113.2", DeviceType.LAMP),
+            Triple("Radiateur", "203.0.113.3", DeviceType.PLUG),
+            Triple("Prise bureau", "203.0.113.4", DeviceType.PLUG),
+            Triple("Prise balcon", "203.0.113.5", DeviceType.PLUG),
+        )
+        for ((name, ip, type) in demo) {
+            deviceDao.insert(
+                Device(
+                    name = name, ipAddress = ip, switchId = 0, type = type, model = "Démo",
+                    supportsSwitch = true, hasScripting = true, hasPowerMetering = true, position = position,
+                ),
+            )
+            position++
+        }
+    }
+
+    suspend fun removeDemoDevices() = deviceDao.deleteDemoDevices()
+
+    /** État injecté d'un appareil démo (varié pour de belles captures), sans aucun réseau. */
+    private fun demoStatus(device: Device): RpcResult<SwitchStatusResult> {
+        return when (device.ipAddress.substringAfterLast('.').toIntOrNull()) {
+            2 -> RpcResult.Success(SwitchStatusResult(id = device.switchId, output = false)) // Repos
+            3 -> RpcResult.Success(                                                          // Minuté
+                SwitchStatusResult(
+                    id = device.switchId, output = true,
+                    timerStartedAt = System.currentTimeMillis() / 1000.0,
+                    timerDuration = 5400.0,
+                ),
+            )
+            4 -> RpcResult.Failure(RpcFailure.UNREACHABLE)                                   // Hors ligne
+            else -> RpcResult.Success(SwitchStatusResult(id = device.switchId, output = true)) // Actif
+        }
+    }
+
     /**
      * Écrit une entrée de journal d'activité, sans jamais faire échouer l'action en cours,
      * et purge les entrées de plus de 30 jours.
@@ -279,5 +326,6 @@ class DeviceRepository @Inject constructor(
 
     private companion object {
         const val THIRTY_DAYS_MS = 30L * 24 * 60 * 60 * 1000
+        const val DEMO_IP_PREFIX = "203.0.113." // RFC 5737 TEST-NET-3, jamais routable
     }
 }

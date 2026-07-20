@@ -13,6 +13,26 @@
     <string name="dashboard_placeholder">Le tableau des appareils arrive au prochain lot.</string>
     <string name="about_placeholder">L\'écran À propos arrive dans un prochain lot.</string>
 
+    <!-- Écran À propos (lot 7) -->
+    <string name="about_version">Version %1$s</string>
+    <string name="about_name_origin_title">Origine du nom</string>
+    <string name="about_name_origin">Hestia est, dans la mythologie grecque, la déesse du foyer et du feu domestique. Elle veille sur la maison, discrètement et sans jamais la quitter.</string>
+    <string name="about_positioning_title">Pilotage 100 % local</string>
+    <string name="about_positioning">Hestia pilote vos appareils entièrement en local. Aucune donnée ne quitte votre réseau, aucun compte, aucun traçage.</string>
+    <string name="about_permission_title">Permission réseau local</string>
+    <string name="about_permission_body">Depuis Android 17, une application doit demander votre autorisation pour communiquer avec les appareils de votre réseau local. Hestia en a besoin pour parler à vos appareils. Elle ne contacte que les adresses que vous avez saisies vous-même, n\'explore pas votre réseau et n\'envoie rien à l\'extérieur.</string>
+    <string name="about_independence_title">Indépendance</string>
+    <string name="about_independence">Hestia est un projet indépendant, sans aucun lien avec Shelly ni avec Allterco Robotics. Ce projet n\'est ni commandité, ni sponsorisé, ni approuvé par Shelly. Aucune rémunération ni aucun matériel n\'a été fourni ou prêté par la marque. Shelly est une marque déposée de son propriétaire respectif ; elle n\'est citée qu\'à titre de compatibilité technique.</string>
+    <string name="about_compat">Compatible Shelly Gen2 et ultérieur. Support d\'autres marques et version anglaise prévus dans de prochaines versions.</string>
+    <string name="about_language_title">Langue</string>
+    <string name="about_language">L\'application est en français. Une version anglaise est prévue : elle s\'adaptera alors à la langue du système (anglais par défaut, français si l\'appareil est en français).</string>
+    <string name="about_license_title">Licence</string>
+    <string name="about_license">Distribué sous licence GPLv3.</string>
+    <string name="about_license_link">Lire le texte de la licence</string>
+    <string name="about_qr_hint">Touchez le QR code pour éclairer l\'écran (facilite le scan).</string>
+    <string name="gpl_url" translatable="false">https://www.gnu.org/licenses/gpl-3.0.html</string>
+    <string name="fdroid_url" translatable="false">https://f-droid.org/packages/kapoue.hestia/</string>
+
     <!-- Réglages -->
     <string name="settings_devices_title">Appareils</string>
     <string name="settings_devices_empty">Aucun appareil pour l\'instant.\nAjoute ton premier appareil Shelly avec le bouton +.</string>

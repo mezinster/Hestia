@@ -37,6 +37,20 @@ Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bu
   est ignoré avant API 31 ; affiner `minWidth/minHeight` pour tenir en 1×1 sur API 30.
 - **Aperçu du widget** dans le sélecteur non stylé (pas de `previewImage`). Passe finitions.
 
+## Fonctionnalités futures (post-V1)
+
+- **Programmation d'une plage horaire future** (ex. « 2 h de charge de 15 h à 17 h » alors qu'il
+  est 11 h). À faire via le composant **Schedule natif de Shelly** (cron), donc autonome sur
+  l'appareil — fidèle au principe « pas de scheduler côté Android ». Nouvelle fonctionnalité,
+  hors périmètre des lots V1. Relevé au lot 7.
+- **Notifications** : fin de minuterie, début et fin de programmation. ⚠️ Hors V1 (CLAUDE.md :
+  pas de notifications en V1 ; nécessite la permission notifications + un mécanisme de veille).
+- **Vérification du firmware de la prise** (via `Shelly.CheckForUpdate`) + notif si mise à jour
+  dispo. ⚠️ Nuance à trancher : cette méthode fait **contacter le serveur de Shelly par
+  l'appareil** — à confronter au principe « 100 % local » avant de l'implémenter.
+- **Audit des fonctions de la prise non gérées** par Hestia (recenser ce que l'API RPC expose
+  et qu'on n'exploite pas encore : mesure d'énergie détaillée, planning, etc.).
+
 ## Idées à étudier (post-lot 3)
 
 - **Bandeau d'information Android 17+** expliquant la demande d'autorisation réseau local

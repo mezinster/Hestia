@@ -1,29 +1,30 @@
-<!-- Placeholder lot 1 : symbole marche/arrêt (IEC 60417) bleu + voyant orange fixe.
-     Version finale (source SVG de assets/) convertie en VectorDrawable au lot 7. -->
+<!-- Icône Hestia — symbole marche/arrêt (IEC 60417) : anneau bleu ouvert (la barre craie masque
+     le haut de l'anneau) + barre verticale bleue + voyant orange fixe. Converti de assets/. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Anneau ouvert en haut -->
+    <!-- Anneau (cercle plein, tracé) -->
     <path
         android:strokeColor="#1B3AAB"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
+        android:strokeWidth="7.2"
         android:fillColor="#00000000"
-        android:pathData="M62,42 A24,24 0 1 1 46,42" />
+        android:pathData="M32.5,59 A21.5,21.5 0 1 0 75.5,59 A21.5,21.5 0 1 0 32.5,59" />
 
-    <!-- Barre verticale -->
+    <!-- Barre craie qui « ouvre » le haut de l'anneau -->
     <path
-        android:strokeColor="#1B3AAB"
-        android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:fillColor="#00000000"
-        android:pathData="M54,34 L54,60" />
+        android:fillColor="#F4F3EF"
+        android:pathData="M49.8,31.7 A4.2,4.2 0 0 1 58.2,31.7 L58.2,50.8 A4.2,4.2 0 0 1 49.8,50.8 Z" />
 
-    <!-- Voyant orange fixe (mise sous tension), élément décoratif non animé -->
+    <!-- Barre verticale bleue -->
+    <path
+        android:fillColor="#1B3AAB"
+        android:pathData="M50.3,32.9 A3.7,3.7 0 0 1 57.7,32.9 L57.7,49.5 A3.7,3.7 0 0 1 50.3,49.5 Z" />
+
+    <!-- Voyant orange fixe (mise sous tension), décoratif -->
     <path
         android:fillColor="#E8622C"
-        android:pathData="M80,36 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+        android:pathData="M68.8,35 A6.2,6.2 0 1 0 81.2,35 A6.2,6.2 0 1 0 68.8,35" />
 </vector>

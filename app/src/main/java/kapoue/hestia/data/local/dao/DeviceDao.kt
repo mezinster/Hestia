@@ -51,4 +51,11 @@ interface DeviceDao {
     /** Efface tous les appareils (import = remplacement intégral ; CASCADE purge le reste). */
     @Query("DELETE FROM devices")
     suspend fun deleteAll()
+
+    // Mode démo (captures d'écran, build debug) : appareils fictifs en plage documentaire.
+    @Query("SELECT COUNT(*) FROM devices WHERE ipAddress LIKE '203.0.113.%'")
+    suspend fun countDemoDevices(): Int
+
+    @Query("DELETE FROM devices WHERE ipAddress LIKE '203.0.113.%'")
+    suspend fun deleteDemoDevices()
 }

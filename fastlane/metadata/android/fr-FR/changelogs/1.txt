@@ -1,0 +1,1 @@
+Première version. Pilotage local des appareils Shelly Gen2+ : tableau et interrupteurs, minuteur « marche pour X », simulation de présence, sauvegarde/restauration JSON, journal de diagnostic et widget d'écran d'accueil.

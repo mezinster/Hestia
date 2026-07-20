@@ -123,6 +123,18 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Mode démo (build debug uniquement) : ajoute/retire des appareils fictifs pour les
+     * captures d'écran. Déclenché par un appui long sur le titre « Hestia ».
+     */
+    fun toggleDemo() {
+        val debuggable = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!debuggable) return
+        viewModelScope.launch {
+            if (repository.hasDemoDevices()) repository.removeDemoDevices() else repository.addDemoDevices()
+        }
+    }
+
     /** Relance la lecture d'un seul appareil (bouton « Réessayer » d'une tuile hors ligne). */
     fun retry(device: Device) {
         if (!permissionUsable) {

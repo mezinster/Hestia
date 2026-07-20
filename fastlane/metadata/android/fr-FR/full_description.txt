@@ -1,0 +1,19 @@
+Hestia pilote vos appareils domotiques Shelly (Gen2 et ultérieur) directement sur votre réseau local, en HTTP, via leur API embarquée. Aucun cloud, aucun compte, aucune télémétrie : rien ne quitte votre réseau.
+
+Fonctionnalités :
+
+* Tableau des canaux avec état et interrupteur, en un coup d'œil.
+* Minuteur « marche pour X » exécuté par l'appareil, en toute autonomie (le téléphone peut être éteint).
+* Simulation de présence : un script généré par l'application s'exécute sur l'appareil et allume/éteint dans une plage horaire, avec une marge aléatoire.
+* Sauvegarde et restauration de votre configuration au format JSON.
+* Widget d'écran d'accueil pour piloter un canal sans ouvrir l'application.
+
+Respect de la vie privée :
+
+* Communication uniquement avec les adresses que vous saisissez vous-même.
+* Aucune découverte réseau, aucune donnée envoyée à l'extérieur, aucun traçage.
+* Depuis Android 17, l'autorisation d'accès au réseau local est demandée au premier contact, précédée d'une explication claire.
+
+Langue : l'application est en français. Une version anglaise est prévue ; elle s'adaptera alors à la langue du système (anglais par défaut, français si l'appareil est en français).
+
+Indépendance : Hestia est un projet indépendant, sans aucun lien avec Shelly ni avec Allterco Robotics. Ce projet n'est ni commandité, ni sponsorisé, ni approuvé par Shelly. Aucune rémunération ni aucun matériel n'a été fourni ou prêté par la marque. Shelly est une marque déposée de son propriétaire respectif ; elle n'est citée qu'à titre de compatibilité technique.
