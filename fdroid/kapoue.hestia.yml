@@ -8,6 +8,8 @@ AuthorName: kapoue
 SourceCode: https://codeberg.org/kapoue/Hestia
 IssueTracker: https://codeberg.org/kapoue/Hestia/issues
 
+AutoName: Hestia
+
 RepoType: git
 Repo: https://codeberg.org/kapoue/Hestia.git
 
