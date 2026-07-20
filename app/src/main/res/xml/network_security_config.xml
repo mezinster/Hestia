@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Autorise le trafic HTTP en clair, indispensable pour joindre l'API RPC locale des appareils
+  Shelly (http://<ip>/rpc), qui n'expose pas de HTTPS sur le réseau local.
+
+  Android ne permet pas de restreindre le cleartext à une plage d'adresses (CIDR) dans ce
+  fichier : seuls des domaines/IP explicites sont acceptés, or les adresses sont saisies par
+  l'utilisateur et inconnues à la compilation. Le cleartext est donc autorisé au niveau global.
+
+  Garde-fou réel : l'application ne contacte QUE les adresses saisies par l'utilisateur
+  (vérifiable dans le code — aucun scan, aucune destination externe). Voir SPEC-V1 § 10.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

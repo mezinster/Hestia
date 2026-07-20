@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500" width="1024" height="500">
+  <rect width="1024" height="500" fill="#F4F3EF"/>
+  <rect width="1024" height="7" fill="#1B3AAB"/>
+
+  <g transform="translate(64,182)">
+    <rect width="136" height="136" rx="30" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <g transform="translate(68,68) scale(0.234) translate(-256,-256)">
+      <circle cx="256" cy="287" r="133" fill="none" stroke="#1B3AAB" stroke-width="44"/>
+      <rect x="230" y="92" width="52" height="169" rx="26" fill="#FCFBF8"/>
+      <rect x="233" y="102" width="46" height="148" rx="23" fill="#1B3AAB"/>
+      <circle cx="384" cy="133" r="38" fill="#E8622C"/>
+    </g>
+  </g>
+
+  <text x="228" y="228" fill="#14171A" font-size="60" font-weight="500" font-family="Helvetica, Arial, sans-serif">Hestia</text>
+  <text x="230" y="272" fill="#5A6167" font-size="22" font-family="Helvetica, Arial, sans-serif">Pilotage local, sans cloud ni compte</text>
+  <text x="230" y="308" fill="#1B3AAB" font-size="18" font-family="Courier, monospace">GPLv3 · Shelly Gen2+</text>
+
+  <g transform="translate(714,124)">
+    <rect x="0" y="0" width="122" height="106" rx="4" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <circle cx="103" cy="20" r="6" fill="#E8622C"/>
+    <rect x="15" y="43" width="56" height="8" rx="2" fill="#B9B5AB"/>
+    <rect x="15" y="63" width="38" height="8" rx="2" fill="#D2CEC4"/>
+    <rect x="80" y="68" width="27" height="16" rx="3" fill="#E4EFE7"/>
+    <rect x="95" y="70" width="11" height="11" rx="2" fill="#22B04B"/>
+
+    <rect x="140" y="0" width="122" height="106" rx="4" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <circle cx="243" cy="20" r="6" fill="#9AA0A8"/>
+    <rect x="155" y="43" width="48" height="8" rx="2" fill="#B9B5AB"/>
+    <rect x="155" y="63" width="34" height="8" rx="2" fill="#D2CEC4"/>
+    <rect x="220" y="68" width="27" height="16" rx="3" fill="#EDEBE5"/>
+    <rect x="223" y="70" width="11" height="11" rx="2" fill="#9AA0A8"/>
+
+    <rect x="0" y="126" width="122" height="106" rx="4" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <circle cx="103" cy="146" r="6" fill="#22B04B"/>
+    <rect x="15" y="169" width="52" height="8" rx="2" fill="#B9B5AB"/>
+    <rect x="15" y="189" width="36" height="8" rx="2" fill="#D2CEC4"/>
+    <rect x="80" y="194" width="27" height="16" rx="3" fill="#E4EFE7"/>
+    <rect x="95" y="196" width="11" height="11" rx="2" fill="#22B04B"/>
+
+    <rect x="140" y="126" width="122" height="106" rx="4" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <circle cx="243" cy="146" r="6" fill="#D8342A"/>
+    <rect x="155" y="169" width="44" height="8" rx="2" fill="#B9B5AB"/>
+    <rect x="155" y="189" width="40" height="8" rx="2" fill="#D2CEC4"/>
+    <rect x="220" y="194" width="27" height="16" rx="3" fill="#EDEBE5"/>
+    <rect x="223" y="196" width="11" height="11" rx="2" fill="#9AA0A8"/>
+  </g>
+</svg>

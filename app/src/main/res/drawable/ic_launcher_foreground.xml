@@ -1,0 +1,29 @@
+<!-- Placeholder lot 1 : symbole marche/arrêt (IEC 60417) bleu + voyant orange fixe.
+     Version finale (source SVG de assets/) convertie en VectorDrawable au lot 7. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Anneau ouvert en haut -->
+    <path
+        android:strokeColor="#1B3AAB"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M62,42 A24,24 0 1 1 46,42" />
+
+    <!-- Barre verticale -->
+    <path
+        android:strokeColor="#1B3AAB"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M54,34 L54,60" />
+
+    <!-- Voyant orange fixe (mise sous tension), élément décoratif non animé -->
+    <path
+        android:fillColor="#E8622C"
+        android:pathData="M80,36 m-7,0 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+</vector>

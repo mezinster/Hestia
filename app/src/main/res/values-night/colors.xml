@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Variantes sombres des couleurs du widget (voir values/colors.xml). -->
+    <color name="widget_surface">#1D212A</color>
+    <color name="widget_on_surface">#ECEAE4</color>
+    <color name="widget_active">#4ADE80</color>
+    <color name="widget_idle">#5A616B</color>
+    <color name="widget_offline">#F0716E</color>
+    <color name="widget_state_text">#FFFFFF</color>
+</resources>

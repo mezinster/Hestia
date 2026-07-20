@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sauvegarde/restauration système. La sauvegarde métier est gérée par l'export JSON
+     dédié (voir SPEC-V1 § 6, lot 5). -->
+<full-backup-content />

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Thème hôte de l'Activity. L'apparence réelle est portée par Compose (voir ui/theme).
+         On part d'un thème Material 3 sans barre d'action ; la couleur est gérée côté Compose. -->
+    <style name="Theme.Hestia" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

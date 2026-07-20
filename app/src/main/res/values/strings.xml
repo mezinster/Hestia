@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hestia</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Annuler</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Tableau</string>
+    <string name="nav_settings">Réglages</string>
+    <string name="nav_about">À propos</string>
+
+    <!-- Écrans placeholder (complétés aux lots suivants) -->
+    <string name="dashboard_placeholder">Le tableau des appareils arrive au prochain lot.</string>
+    <string name="about_placeholder">L\'écran À propos arrive dans un prochain lot.</string>
+
+    <!-- Réglages -->
+    <string name="settings_devices_title">Appareils</string>
+    <string name="settings_devices_empty">Aucun appareil pour l\'instant.\nAjoute ton premier appareil Shelly avec le bouton +.</string>
+    <string name="settings_add_device">Ajouter un appareil</string>
+    <string name="settings_device_channel">Canal %1$d</string>
+    <string name="settings_open_web">Ouvrir l\'interface web</string>
+    <string name="settings_edit_device">Modifier</string>
+    <string name="settings_delete_device">Supprimer</string>
+    <string name="settings_permission_section">Permission réseau local</string>
+    <string name="settings_permission_granted">Accordée</string>
+    <string name="settings_permission_denied">Refusée</string>
+    <string name="settings_permission_not_required">Non requise sur cette version d\'Android</string>
+    <string name="settings_permission_open_system">Ouvrir les réglages système de l\'application</string>
+    <string name="settings_appearance_section">Apparence</string>
+    <string name="settings_appearance_value">Suit le thème système</string>
+    <string name="settings_security_section">Sécurité</string>
+    <string name="settings_security_password_hint">Mot de passe de l\'appareil</string>
+    <string name="settings_security_coming_soon">Disponible prochainement</string>
+
+    <!-- Ajout / modification d'appareil -->
+    <string name="add_device_title">Nouvel appareil</string>
+    <string name="edit_device_title">Modifier l\'appareil</string>
+    <string name="add_device_name_label">Nom</string>
+    <string name="add_device_name_hint">Ex. : Prise scooter</string>
+    <string name="add_device_ip_label">Adresse IP</string>
+    <string name="add_device_ip_hint">Ex. : 192.168.1.96</string>
+    <string name="add_device_type_label">Type</string>
+    <string name="device_type_plug">Prise</string>
+    <string name="device_type_lamp">Lampe</string>
+    <string name="device_type_sensor">Capteur</string>
+    <string name="add_device_test_and_add">Tester la connexion et ajouter</string>
+    <string name="add_device_testing">Test de la connexion…</string>
+    <string name="add_device_save">Enregistrer</string>
+    <string name="add_device_cancel">Annuler</string>
+
+    <!-- Détection de canaux -->
+    <string name="add_device_channels_title">Canaux détectés</string>
+    <string name="add_device_channels_prompt">Cet appareil expose plusieurs canaux. Choisis ceux à ajouter : chacun apparaîtra comme une tuile distincte.</string>
+    <string name="add_device_channel_label">Canal %1$d</string>
+    <string name="add_device_add_selected">Ajouter la sélection</string>
+    <string name="add_device_model_detected">Modèle détecté : %1$s</string>
+
+    <!-- Validation -->
+    <string name="error_name_required">Donne un nom à l\'appareil.</string>
+    <string name="error_ip_invalid">Adresse IP invalide. Format attendu : 192.168.1.96</string>
+    <string name="error_ip_required">Saisis l\'adresse IP de l\'appareil.</string>
+    <string name="error_channel_required">Choisis au moins un canal.</string>
+    <string name="error_device_exists">Ce canal de cet appareil est déjà enregistré.</string>
+
+    <!-- Erreurs réseau / RPC (actionnables, pas techniques) -->
+    <string name="error_unreachable">Appareil injoignable. Vérifie qu\'il est allumé et sur le même réseau Wi-Fi.</string>
+    <string name="error_timeout">L\'appareil n\'a pas répondu à temps. Vérifie le réseau et réessaie.</string>
+    <string name="error_not_shelly">Cette adresse ne répond pas comme un appareil Shelly Gen2 ou ultérieur.</string>
+    <string name="error_gen1_unsupported">Cet appareil est un Shelly Gen1, non pris en charge. Seuls les Gen2 et ultérieurs le sont.</string>
+    <string name="error_rpc_generic">L\'appareil a renvoyé une erreur (code %1$d). Réessaie.</string>
+    <string name="error_permission_denied_action">La permission réseau local est nécessaire pour joindre l\'appareil. Tu peux la réactiver dans les réglages système.</string>
+    <string name="action_retry">Réessayer</string>
+
+    <!-- Confirmation de suppression -->
+    <string name="delete_device_title">Supprimer cet appareil ?</string>
+    <string name="delete_device_message">« %1$s » sera retiré de Hestia. Cela n\'affecte pas l\'appareil lui-même ni sa configuration.</string>
+    <string name="delete_device_confirm">Supprimer</string>
+    <string name="delete_device_cancel">Annuler</string>
+
+    <!-- Modifications non enregistrées -->
+    <string name="unsaved_changes_title">Modifications non enregistrées</string>
+    <string name="unsaved_changes_message">Des modifications n\'ont pas été enregistrées. Les abandonner ?</string>
+    <string name="unsaved_changes_discard">Abandonner</string>
+    <string name="unsaved_changes_keep">Continuer</string>
+
+    <!-- Écran d'explication de la permission réseau local -->
+    <string name="permission_explain_title">Autoriser l\'accès au réseau local</string>
+    <string name="permission_explain_body">Depuis Android 17, une application doit demander votre autorisation pour communiquer avec les appareils de votre réseau local. Hestia en a besoin pour parler à vos appareils.\n\nElle ne contacte que les adresses que vous avez saisies vous-même, n\'explore pas votre réseau et n\'envoie rien à l\'extérieur.</string>
+    <string name="permission_explain_continue">Continuer</string>
+    <string name="permission_explain_cancel">Plus tard</string>
+    <string name="permission_denied_banner">Permission réseau local refusée. Certaines actions ne pourront pas joindre vos appareils.</string>
+
+    <!-- Tableau -->
+    <string name="dashboard_empty_title">Aucun appareil</string>
+    <string name="dashboard_empty_body">Ajoute un appareil Shelly pour le piloter ici.</string>
+    <string name="dashboard_empty_action">Ajouter un appareil</string>
+
+    <!-- États d'une tuile -->
+    <string name="state_active">Actif</string>
+    <string name="state_idle">Repos</string>
+    <string name="state_timed">Minuté</string>
+    <string name="state_offline">Hors ligne</string>
+    <string name="state_loading">Lecture…</string>
+    <string name="state_permission_required">Permission requise</string>
+
+    <!-- Actions de tuile -->
+    <string name="tile_toggle">Interrupteur</string>
+    <string name="tile_grant_permission">Autoriser</string>
+    <string name="tile_number">%1$s</string>
+
+    <!-- Connectivité et ordre dans les Réglages -->
+    <string name="settings_connectivity_online">En ligne</string>
+    <string name="settings_connectivity_offline">Hors ligne</string>
+    <string name="settings_connectivity_checking">Vérification…</string>
+    <string name="settings_move_up">Monter</string>
+    <string name="settings_move_down">Descendre</string>
+
+    <!-- Écran Détail -->
+    <string name="detail_back">Retour</string>
+    <string name="detail_timer_section">Marche pour</string>
+    <string name="detail_timer_custom">Perso</string>
+    <string name="detail_timer_running">Minuteur en cours</string>
+    <string name="detail_timer_cancel">Annuler le minuteur</string>
+    <string name="detail_activity_section">Dernière activité</string>
+    <string name="detail_activity_empty">Aucune activité enregistrée pour l\'instant.</string>
+    <string name="detail_offline">Appareil injoignable pour le moment.</string>
+
+    <!-- Durées -->
+    <string name="duration_hours">%1$d h</string>
+    <string name="duration_minutes">%1$d min</string>
+    <string name="duration_hours_minutes">%1$d h %2$d min</string>
+
+    <!-- Sélecteur « Perso » -->
+    <string name="duration_picker_title">Durée personnalisée</string>
+    <string name="duration_picker_hours">Heures</string>
+    <string name="duration_picker_minutes">Minutes</string>
+    <string name="duration_picker_start">Démarrer</string>
+    <string name="duration_picker_min_error">La durée minimale est de 1 minute.</string>
+
+    <!-- Libellés du journal d'activité -->
+    <string name="activity_turned_on">Allumé</string>
+    <string name="activity_turned_off">Éteint</string>
+    <string name="activity_timer_started">Minuteur démarré</string>
+    <string name="activity_timer_cancelled">Minuteur annulé</string>
+    <string name="activity_presence_deployed">Simulation de présence déployée</string>
+    <string name="activity_presence_stopped">Simulation de présence arrêtée</string>
+
+    <!-- Simulation de présence (lot 4) -->
+    <string name="presence_section">Simulation de présence</string>
+    <string name="presence_configure">Configurer</string>
+    <string name="presence_state_active">Active</string>
+    <string name="presence_state_inactive">Inactive</string>
+    <string name="presence_screen_title">Simulation de présence</string>
+    <string name="presence_intro">Hestia génère un script qui allume et éteint l\'appareil dans la plage horaire choisie, avec une marge aléatoire. Une fois déployé, il s\'exécute seul sur l\'appareil, même téléphone éteint.</string>
+    <string name="presence_start_time">Heure de début</string>
+    <string name="presence_end_time">Heure de fin</string>
+    <string name="presence_margin">Marge aléatoire (minutes)</string>
+    <string name="presence_deploy">Déployer sur l\'appareil</string>
+    <string name="presence_stop">Arrêter la simulation</string>
+    <string name="presence_deploying">Déploiement…</string>
+    <string name="presence_deployed_confirm">Simulation active sur l\'appareil.</string>
+    <string name="presence_stopped_confirm">Simulation arrêtée.</string>
+    <string name="presence_error_end_before_start">L\'heure de fin doit être après l\'heure de début.</string>
+    <string name="presence_error_margin">Marge invalide (0 à 120 minutes).</string>
+    <string name="presence_clock_device_time">Heure de l\'appareil : %1$s</string>
+    <string name="presence_clock_warning">L\'horloge de l\'appareil est décalée d\'environ %1$s par rapport au téléphone. La simulation repose sur l\'heure de l\'appareil : vérifie qu\'il a une connexion réseau stable.</string>
+
+    <!-- Conflit minuteur / présence -->
+    <string name="conflict_title">Simulation de présence active</string>
+    <string name="conflict_message">La simulation de présence pourra reprendre la main sur l\'appareil pendant le minuteur. Que veux-tu faire ?</string>
+    <string name="conflict_launch_anyway">Lancer quand même</string>
+    <string name="conflict_stop_presence">Arrêter la simulation puis lancer</string>
+    <string name="conflict_cancel">Annuler</string>
+
+    <!-- Sauvegarde / restauration (lot 5) -->
+    <string name="settings_backup_section">Sauvegarde</string>
+    <string name="settings_backup_export">Exporter la configuration</string>
+    <string name="settings_backup_import">Importer une configuration</string>
+    <string name="backup_export_filename">hestia-sauvegarde.json</string>
+    <string name="backup_import_confirm_title">Remplacer la configuration ?</string>
+    <string name="backup_import_confirm_message">L\'import va remplacer tous vos appareils et réglages actuels. Cette action est irréversible.</string>
+    <string name="backup_import_confirm_ok">Remplacer</string>
+    <string name="backup_export_success">Configuration exportée.</string>
+    <string name="backup_export_error">Échec de l\'export.</string>
+    <string name="backup_import_success">Configuration restaurée.</string>
+    <string name="backup_import_invalid">Fichier invalide ou incompatible.</string>
+    <string name="backup_import_error">Échec de l\'import.</string>
+
+    <!-- Journal de diagnostic (lot 5) -->
+    <string name="diagnostic_title">Journal de diagnostic</string>
+    <string name="diagnostic_warning">Ce journal contient les adresses IP locales et les noms de vos appareils. Ne le partagez qu\'avec quelqu\'un de confiance.</string>
+    <string name="diagnostic_share">Partager</string>
+    <string name="diagnostic_share_chooser">Partager le journal</string>
+    <string name="diagnostic_subject">Journal de diagnostic Hestia</string>
+
+    <!-- Widget (lot 6) -->
+    <string name="widget_in_progress">…</string>
+    <string name="widget_deleted">Supprimé</string>
+    <string name="widget_config_title">Choisir le canal</string>
+    <string name="widget_config_empty">Ajoute d\'abord un appareil dans Hestia.</string>
+    <string name="widget_description">Piloter un canal Shelly depuis l\'écran d\'accueil.</string>
+</resources>

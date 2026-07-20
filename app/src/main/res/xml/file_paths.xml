@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Chemins exposés par le FileProvider pour partager le journal de diagnostic (.txt). -->
+<paths>
+    <cache-path name="diagnostic" path="." />
+</paths>
