@@ -3,7 +3,7 @@
 # Contrainte : KSP plafonne à 2.3.10 (il suit Kotlin), donc Kotlin est aligné sur 2.3.10.
 # Le SPEC visait Kotlin 2.3.21, mais aucun KSP correspondant n'est encore publié ;
 # on adoptera 2.3.21 quand KSP l'aura rattrapé.
-agp = "9.1.0"
+agp = "9.1.1"
 kotlin = "2.3.10"
 ksp = "2.3.10"
 hilt = "2.60.1"
