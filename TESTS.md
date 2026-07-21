@@ -89,6 +89,16 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Redémarrage de la prise (débrancher / rebrancher) : le script repart automatiquement
 - [ ] Lancer un minuteur alors que le script est actif : le dialogue d'avertissement apparaît
 - [ ] Les trois issues du dialogue se comportent comme prévu
+- [ ] **Tuile du Tableau** : « Mode présence » en orange, plage horaire en dessous, sur **une
+      seule ligne** (vérifier sur l'écran le plus étroit — Sony) pour ne pas casser l'alignement
+- [ ] Le voyant de la tuile reste **plein/creux** selon l'état réel pendant la simulation
+- [ ] **Appui sur l'interrupteur pendant une simulation** : le dialogue apparaît, avec la plage
+      horaire rappelée
+- [ ] `Arrêter la simulation` : le script est retiré de la prise, la bascule demandée s'applique,
+      la tuile repasse en « Actif » / « Repos » et **la prise ne se rallume plus toute seule**
+- [ ] `Annuler` : aucun effet, ni sur la prise ni sur le script
+- [ ] Après arrêt, les horaires sont toujours mémorisés (redéploiement possible sans les ressaisir)
+- [ ] Le Tableau ne ralentit pas malgré la lecture supplémentaire de l'état des scripts
 - [ ] Dérive d'horloge : l'avertissement apparaît si l'écart dépasse 2 minutes
       (testable en coupant l'accès réseau de la prise un temps prolongé)
 

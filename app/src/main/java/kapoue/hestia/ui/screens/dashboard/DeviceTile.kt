@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatCountdown
+import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.ui.components.BreakerSwitch
 import kapoue.hestia.ui.theme.StateColorSet
@@ -58,7 +59,7 @@ fun DeviceTile(
     onOpenDetail: () -> Unit,
 ) {
     val colors = MaterialTheme.stateColors
-    val visual = tile.status.toVisual(colors, elapsedNow)
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence)
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -162,7 +163,11 @@ private data class TileVisual(
 )
 
 @Composable
-private fun TileStatus.toVisual(colors: StateColorSet, elapsedNow: Long): TileVisual = when (this) {
+private fun TileStatus.toVisual(
+    colors: StateColorSet,
+    elapsedNow: Long,
+    presence: PresenceInfo?,
+): TileVisual = when (this) {
     // Lecture en cours : spinner plutôt que gris (qui se lirait « désactivé »).
     TileStatus.Loading -> TileVisual(
         ledColor = colors.idleLed,
@@ -180,6 +185,21 @@ private fun TileStatus.toVisual(colors: StateColorSet, elapsedNow: Long): TileVi
                 label = stringResource(R.string.state_timed),
                 countdown = formatCountdown(remaining),
                 ledStyle = LedStyle.FILLED,
+            )
+            // Même orange que la minuterie : dans les deux cas, un programme pilote le canal.
+            // Le voyant reste plein/creux selon l'état réel, car la simulation allume et éteint
+            // toute seule — l'interrupteur affiche ON/OFF en toutes lettres juste en dessous.
+            presence != null -> TileVisual(
+                ledColor = colors.timedLed,
+                textColor = colors.timedText,
+                label = stringResource(R.string.state_presence),
+                countdown = formatTimeRange(
+                    presence.startHour,
+                    presence.startMinute,
+                    presence.endHour,
+                    presence.endMinute,
+                ),
+                ledStyle = if (output) LedStyle.FILLED else LedStyle.HOLLOW,
             )
             output -> TileVisual(
                 ledColor = colors.activeLed,

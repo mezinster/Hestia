@@ -27,11 +27,24 @@ sealed interface TileStatus {
     data object PermissionRequired : TileStatus
 }
 
+/**
+ * Simulation de présence **réellement en cours** sur l'appareil : l'exécution du script est
+ * vérifiée via `Script.List` (jamais supposée), la plage horaire vient du cache local.
+ * Nul quand aucune simulation ne tourne.
+ */
+data class PresenceInfo(
+    val startHour: Int,
+    val startMinute: Int,
+    val endHour: Int,
+    val endMinute: Int,
+)
+
 /** Une tuile = un canal, avec son numéro d'affichage et son état courant. */
 data class TileUiState(
     val number: Int,
     val device: Device,
     val status: TileStatus,
+    val presence: PresenceInfo? = null,
 )
 
 data class DashboardUiState(

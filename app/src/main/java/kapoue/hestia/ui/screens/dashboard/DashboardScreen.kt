@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -17,11 +18,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
@@ -42,6 +45,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
+import kapoue.hestia.core.util.formatTimeRange
+import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.permission.PermissionExplanationDialog
 import kotlinx.coroutines.delay
@@ -59,6 +64,8 @@ fun DashboardScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var showPermissionDialog by remember { mutableStateOf(false) }
+    // Bascule demandée sur une prise pilotée par une simulation : en attente de confirmation.
+    var pendingToggle by remember { mutableStateOf<PendingToggle?>(null) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -148,7 +155,17 @@ fun DashboardScreen(
                             DeviceTile(
                                 tile = tile,
                                 elapsedNow = elapsedNow,
-                                onToggle = { turnOn -> viewModel.toggle(tile.device, turnOn) },
+                                onToggle = { turnOn ->
+                                    // Une simulation en cours reprendrait la main : on demande
+                                    // d'abord si l'on doit l'arrêter, plutôt que de laisser
+                                    // l'utilisateur croire à un interrupteur défaillant.
+                                    val running = tile.presence
+                                    if (running != null) {
+                                        pendingToggle = PendingToggle(tile.device, turnOn, running)
+                                    } else {
+                                        viewModel.toggle(tile.device, turnOn)
+                                    }
+                                },
                                 onRetry = { viewModel.retry(tile.device) },
                                 onGrantPermission = { showPermissionDialog = true },
                                 onOpenDetail = { onOpenDetail(tile.device.id) },
@@ -169,6 +186,67 @@ fun DashboardScreen(
             onDismiss = { showPermissionDialog = false },
         )
     }
+
+    pendingToggle?.let { pending ->
+        PresenceToggleDialog(
+            presence = pending.presence,
+            onStopSimulation = {
+                viewModel.stopPresenceThenToggle(pending.device, pending.turnOn)
+                pendingToggle = null
+            },
+            onDismiss = { pendingToggle = null },
+        )
+    }
+}
+
+/** Bascule demandée sur une prise pilotée par une simulation, en attente de confirmation. */
+private data class PendingToggle(
+    val device: Device,
+    val turnOn: Boolean,
+    val presence: PresenceInfo,
+)
+
+/**
+ * Prévient que la prise est pilotée par un programme avant d'agir sur l'interrupteur, et
+ * propose de l'arrêter. Deux issues seulement : arrêter la simulation puis basculer, ou
+ * renoncer — on ne propose pas de « basculer quand même », dont l'effet ne durerait que
+ * jusqu'à la prochaine action du script.
+ */
+@Composable
+private fun PresenceToggleDialog(
+    presence: PresenceInfo,
+    onStopSimulation: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.presence_toggle_title)) },
+        text = {
+            Column {
+                Text(
+                    text = formatTimeRange(
+                        presence.startHour,
+                        presence.startMinute,
+                        presence.endHour,
+                        presence.endMinute,
+                    ),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.presence_toggle_message))
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onStopSimulation) {
+                Text(stringResource(R.string.presence_toggle_stop))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.conflict_cancel))
+            }
+        },
+    )
 }
 
 @Composable

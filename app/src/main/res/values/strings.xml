@@ -118,7 +118,11 @@
     <!-- États d'une tuile -->
     <string name="state_active">Actif</string>
     <string name="state_idle">Repos</string>
-    <string name="state_timed">Minuté</string>
+    <string name="state_timed">Minuterie</string>
+    <!-- Étiquette courte : la tuile du Tableau ne tient pas « Simulation de présence » sur une
+         ligne (elle passe à la ligne sur les écrans étroits et casse l'alignement de la grille).
+         Le nom complet est conservé partout où la place le permet : détail, popup, réglages. -->
+    <string name="state_presence">Mode présence</string>
     <string name="state_offline">Hors ligne</string>
     <string name="state_loading">Lecture…</string>
     <string name="state_permission_required">Permission requise</string>
@@ -184,6 +188,11 @@
     <string name="presence_error_margin">Marge invalide (0 à 120 minutes).</string>
     <string name="presence_clock_device_time">Heure de l\'appareil : %1$s</string>
     <string name="presence_clock_warning">L\'horloge de l\'appareil est décalée d\'environ %1$s par rapport au téléphone. La simulation repose sur l\'heure de l\'appareil : vérifie qu\'il a une connexion réseau stable.</string>
+
+    <!-- Bascule manuelle pendant une simulation de présence (Tableau) -->
+    <string name="presence_toggle_title">Simulation de présence active</string>
+    <string name="presence_toggle_message">Agir sur l\'interrupteur n\'aura qu\'un effet passager : le programme reprendra la main sur la prise.</string>
+    <string name="presence_toggle_stop">Arrêter la simulation</string>
 
     <!-- Conflit minuteur / présence -->
     <string name="conflict_title">Simulation de présence active</string>

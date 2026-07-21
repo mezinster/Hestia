@@ -14,6 +14,11 @@ Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bu
   quitte après avoir changé les heures sans déployer (faibles enjeux).
 - **Distinguer l'extinction « fin de minuteur » de l'extinction manuelle** dans le journal
   (les deux apparaissent « Éteint »). Heuristique possible : minuteur actif au relevé précédent.
+- **Afficher la puissance instantanée sur la tuile**, à côté de l'icône en haut (ex. `12 W`).
+  `apower` est **déjà parsé** dans `SwitchStatusResult` et arrive à chaque rafraîchissement :
+  aucun appel réseau supplémentaire, c'est purement de l'affichage. À conditionner sur
+  `hasPowerMetering`. À trancher : format (W, arrondi, passage en kW ?), ce qu'on affiche quand
+  la prise est éteinte ou tire 0 W, et la place disponible à côté du numéro et de l'icône.
 - **Signaler la simulation de présence sur le Tableau.** Une prise pilotée par le script affiche
   « Repos » / « Actif » comme n'importe quelle autre : rien n'indique qu'un script la manœuvre,
   et les bascules spontanées peuvent passer pour un comportement fantôme. L'information n'existe

@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.rpc.RpcResult
+import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.repository.DeviceRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
@@ -33,18 +34,22 @@ class DashboardViewModel @Inject constructor(
     private val refreshing = MutableStateFlow(false)
     private val loaded = MutableStateFlow(false)
 
+    // Simulations de présence réellement en cours, relevées sur les appareils à chaque cycle.
+    private val presences = MutableStateFlow<Map<Long, PresenceInfo>>(emptyMap())
+
     // Renseigné par la couche UI (qui seule connaît le Context) à chaque reprise d'écran.
     @Volatile
     private var permissionUsable: Boolean = true
 
     val uiState: StateFlow<DashboardUiState> =
-        combine(repository.observeDevices(), statuses, refreshing, loaded) { devices, statusMap, isRefreshing, isLoaded ->
+        combine(repository.observeDevices(), statuses, refreshing, loaded, presences) { devices, statusMap, isRefreshing, isLoaded, presenceMap ->
             DashboardUiState(
                 tiles = devices.mapIndexed { index, device ->
                     TileUiState(
                         number = index + 1,
                         device = device,
                         status = statusMap[device.id] ?: TileStatus.Loading,
+                        presence = presenceMap[device.id],
                     )
                 },
                 isRefreshing = isRefreshing,
@@ -80,10 +85,22 @@ class DashboardViewModel @Inject constructor(
                 return@launch
             }
             val fetch = launch {
-                val results = devices.map { device ->
-                    async { device.id to repository.getStatus(device).toTileStatus() }
-                }.awaitAll()
-                statuses.value = results.toMap()
+                // États et simulations de présence sont relevés en parallèle : le temps total
+                // reste celui du plus lent, pas la somme des deux.
+                val statusResults = async {
+                    devices.map { device ->
+                        async { device.id to repository.getStatus(device).toTileStatus() }
+                    }.awaitAll()
+                }
+                val presenceResults = async {
+                    devices.filter { it.hasScripting }.map { device ->
+                        async { device.id to loadPresence(device) }
+                    }.awaitAll()
+                }
+                statuses.value = statusResults.await().toMap()
+                presences.value = presenceResults.await()
+                    .mapNotNull { (id, info) -> info?.let { id to it } }
+                    .toMap()
                 loaded.value = true
             }
             val indicator = if (userInitiated) {
@@ -104,15 +121,49 @@ class DashboardViewModel @Inject constructor(
     /** Bascule un canal, puis relit son état réel (jamais supposé). */
     fun toggle(device: Device, turnOn: Boolean) {
         if (!permissionUsable) return
+        viewModelScope.launch { applyToggle(device, turnOn) }
+    }
+
+    /**
+     * Arrête la simulation de présence **puis** applique la bascule demandée.
+     *
+     * Sans cela, éteindre une prise pilotée par le script n'aurait qu'un effet fugace : le
+     * programme la rallumerait quelques instants plus tard, donnant l'impression d'un
+     * interrupteur défaillant.
+     */
+    fun stopPresenceThenToggle(device: Device, turnOn: Boolean) {
+        if (!permissionUsable) return
         viewModelScope.launch {
-            when (repository.userToggle(device, turnOn)) {
+            when (repository.stopPresence(device)) {
                 is RpcResult.Success -> {
-                    logger.info(DiagnosticLogger.RPC, "Bascule ${device.ipAddress}#${device.switchId} → $turnOn")
-                    fetchOne(device)
+                    logger.info(DiagnosticLogger.RPC, "Simulation de présence arrêtée depuis le Tableau (${device.ipAddress})")
+                    presences.value = presences.value - device.id
+                    applyToggle(device, turnOn)
                 }
                 else -> setStatus(device.id, TileStatus.Offline)
             }
         }
+    }
+
+    private suspend fun applyToggle(device: Device, turnOn: Boolean) {
+        when (repository.userToggle(device, turnOn)) {
+            is RpcResult.Success -> {
+                logger.info(DiagnosticLogger.RPC, "Bascule ${device.ipAddress}#${device.switchId} → $turnOn")
+                fetchOne(device)
+            }
+            else -> setStatus(device.id, TileStatus.Offline)
+        }
+    }
+
+    /**
+     * Simulation de présence en cours sur cet appareil, ou null. L'exécution est vérifiée sur
+     * l'appareil ; les horaires viennent du cache local (ils n'ont d'intérêt qu'affichés).
+     */
+    private suspend fun loadPresence(device: Device): PresenceInfo? {
+        val state = repository.getPresenceState(device).getOrNull() ?: return null
+        if (!state.running) return null
+        val config = repository.getPresenceConfig(device.id) ?: return null
+        return PresenceInfo(config.startHour, config.startMinute, config.endHour, config.endMinute)
     }
 
     /**
