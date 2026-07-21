@@ -14,6 +14,11 @@ Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bu
   quitte après avoir changé les heures sans déployer (faibles enjeux).
 - **Distinguer l'extinction « fin de minuteur » de l'extinction manuelle** dans le journal
   (les deux apparaissent « Éteint »). Heuristique possible : minuteur actif au relevé précédent.
+- **Signaler la simulation de présence sur le Tableau.** Une prise pilotée par le script affiche
+  « Repos » / « Actif » comme n'importe quelle autre : rien n'indique qu'un script la manœuvre,
+  et les bascules spontanées peuvent passer pour un comportement fantôme. L'information n'existe
+  aujourd'hui que sur l'écran de détail. Prévoir un marqueur sur la tuile (picto + libellé texte,
+  jamais la couleur seule — cf. CLAUDE.md).
 
 ## Fonctionnalités futures (post-V1)
 
