@@ -20,13 +20,18 @@ plugins {
 //
 // Base à 2 (et non 1) pour éviter le versionCode 13 (cf. CLAUDE.md § Versionnement).
 // Indolore : le versionCode 1 n'a jamais été publié.
-val baseVersionCode = 2
 val abiVersionCodes = mapOf(
     "armeabi-v7a" to 1,
     "arm64-v8a" to 2,
     "x86" to 3,
     "x86_64" to 4,
 )
+
+// Le serveur F-Droid construit **un APK à la fois** : il refuse un dossier de sortie qui en
+// contient plusieurs. Chaque bloc de build de la recette passe donc -PabiFilter=<abi> pour
+// restreindre le découpage à une seule architecture. Sans la propriété (build local, Android
+// Studio), les quatre architectures sont produites comme avant.
+val abiFilter: String? = providers.gradleProperty("abiFilter").orNull
 
 android {
     namespace = "kapoue.hestia"
@@ -36,7 +41,9 @@ android {
         applicationId = "kapoue.hestia"
         minSdk = 30
         targetSdk = 37
-        versionCode = baseVersionCode
+        // Doit rester un littéral : fdroidserver lit ce fichier par expression régulière, il ne
+        // l'exécute pas. Une variable ici et checkupdates échoue sur « vercode=None ».
+        versionCode = 2
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -64,11 +71,13 @@ android {
     }
 
     // Un APK par architecture, pas d'APK universel (voir le commentaire en tête de fichier).
+    // Avec -PabiFilter=<abi>, une seule architecture est produite : c'est ce dont F-Droid a
+    // besoin pour ne trouver qu'un APK par build.
     splits {
         abi {
             isEnable = true
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            include(*(abiFilter?.let { arrayOf(it) } ?: abiVersionCodes.keys.toTypedArray()))
             isUniversalApk = false
         }
     }
@@ -87,7 +96,10 @@ androidComponents {
         variant.outputs.forEach { output ->
             val abi = output.filters.find { it.filterType == ABI }?.identifier
             abiVersionCodes[abi]?.let { rank ->
-                output.versionCode.set(10 * baseVersionCode + rank)
+                // La base est relue depuis defaultConfig : une seule source de vérité, et le
+                // littéral reste lisible par fdroidserver.
+                val base = output.versionCode.get() ?: 0
+                output.versionCode.set(10 * base + rank)
             }
         }
     }
