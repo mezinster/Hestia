@@ -1,3 +1,5 @@
+import com.android.build.api.variant.FilterConfiguration.FilterType.ABI
+
 plugins {
     alias(libs.plugins.android.application)
     // Support Kotlin fourni par AGP 9.0 (built-in Kotlin) : ne pas appliquer kotlin.android.
@@ -8,6 +10,24 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// Découpage par ABI (exigé par F-Droid) : Compose embarque une bibliothèque native
+// (libandroidx.graphics.path.so) compilée pour 4 architectures. Sans découpage, chaque
+// utilisateur téléchargerait 3 architectures qu'il n'utilisera jamais.
+//
+// F-Droid impose l'ordre armeabi-v7a < arm64-v8a < x86 < x86_64, avec le chiffre d'ABI
+// en DERNIÈRE position du versionCode → versionCode = 10 * base + rang.
+// Doit rester synchronisé avec le champ VercodeOperation de fdroid/kapoue.hestia.yml.
+//
+// Base à 2 (et non 1) pour éviter le versionCode 13 (cf. CLAUDE.md § Versionnement).
+// Indolore : le versionCode 1 n'a jamais été publié.
+val baseVersionCode = 2
+val abiVersionCodes = mapOf(
+    "armeabi-v7a" to 1,
+    "arm64-v8a" to 2,
+    "x86" to 3,
+    "x86_64" to 4,
+)
+
 android {
     namespace = "kapoue.hestia"
     compileSdk = 37
@@ -16,7 +36,7 @@ android {
         applicationId = "kapoue.hestia"
         minSdk = 30
         targetSdk = 37
-        versionCode = 1
+        versionCode = baseVersionCode
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -43,9 +63,33 @@ android {
         compose = true
     }
 
+    // Un APK par architecture, pas d'APK universel (voir le commentaire en tête de fichier).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
     // Le schéma Room est exporté pour permettre le suivi des migrations en revue.
     ksp {
         arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
+// Attribue à chaque APK d'ABI son propre versionCode (10 * base + rang), en miroir exact
+// du VercodeOperation de la recette F-Droid. Sans cela, les 4 APK porteraient le même
+// versionCode et F-Droid ne saurait pas lequel servir.
+androidComponents {
+    onVariants { variant ->
+        variant.outputs.forEach { output ->
+            val abi = output.filters.find { it.filterType == ABI }?.identifier
+            abiVersionCodes[abi]?.let { rank ->
+                output.versionCode.set(10 * baseVersionCode + rank)
+            }
+        }
     }
 }
 
