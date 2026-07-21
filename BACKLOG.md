@@ -14,6 +14,20 @@ Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bu
   quitte après avoir changé les heures sans déployer (faibles enjeux).
 - **Distinguer l'extinction « fin de minuteur » de l'extinction manuelle** dans le journal
   (les deux apparaissent « Éteint »). Heuristique possible : minuteur actif au relevé précédent.
+- **⚠️ Relire les horaires de présence depuis l'appareil** (défaut de correction, pas confort).
+  Les horaires ne sont stockés que dans la base locale du téléphone **qui a déployé** le script.
+  Un second téléphone affiche donc les valeurs par défaut et, pire, **peut redéployer un script
+  avec d'autres horaires en écrasant silencieusement les premiers**. Contraire au principe
+  « Hestia lit l'état réel, ne suppose jamais » (CLAUDE.md) — c'est aujourd'hui la seule fonction
+  qui l'enfreint. Deux pistes :
+  a) **marqueur lisible dans le script généré** (ex. `// hestia:{"startHour":17,…}` en tête),
+     relu via `Script.GetCode` : la configuration voyage avec le script, rien à stocker à côté,
+     impossible qu'elle se désynchronise ;
+  b) **KVS de l'appareil** (`KVS.Set` / `KVS.Get`), prévu pour ça mais ajoute une surface RPC.
+  Préférence pour (a). Prévoir le cas des scripts **déjà déployés sans marqueur** : afficher
+  « horaires inconnus » plutôt que des valeurs fausses, et proposer de redéployer.
+  À noter : le futur **Planning** n'aura pas ce défaut, puisqu'il s'appuiera sur le composant
+  `Schedule` natif, relisible directement via `Schedule.List`.
 - **Afficher la puissance instantanée sur la tuile**, à côté de l'icône en haut (ex. `12 W`).
   `apower` est **déjà parsé** dans `SwitchStatusResult` et arrive à chaque rafraîchissement :
   aucun appel réseau supplémentaire, c'est purement de l'affichage. À conditionner sur
