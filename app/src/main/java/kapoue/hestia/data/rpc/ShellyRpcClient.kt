@@ -55,28 +55,45 @@ class ShellyRpcClient @Inject constructor(
     suspend fun getSwitchStatus(ip: String, switchId: Int): RpcResult<SwitchStatusResult> =
         call(ip, "Switch.GetStatus", buildJsonObject { put("id", switchId) }, SwitchStatusResult.serializer())
 
-    /** Allume ou éteint un canal switch. */
-    suspend fun setSwitch(ip: String, switchId: Int, on: Boolean): RpcResult<SwitchSetResult> =
+    /**
+     * Allume ou éteint un canal switch.
+     *
+     * [toggleAfterSec] arme un minuteur **one-shot** tenu par l'appareil : il rebascule le canal
+     * après ce délai, puis oublie. C'est un compte à rebours volatil, il n'écrit **rien** dans la
+     * configuration de l'appareil — contrairement à `auto_off`, qui est une configuration
+     * persistante et s'appliquerait dès lors à *tous* les allumages suivants, y compris ceux
+     * déclenchés par le bouton physique ou l'interface web native.
+     *
+     * L'appareil renseigne quand même `timer_started_at` / `timer_duration` dans Switch.GetStatus,
+     * donc le compte à rebours reste lisible exactement comme avec auto_off.
+     */
+    suspend fun setSwitch(
+        ip: String,
+        switchId: Int,
+        on: Boolean,
+        toggleAfterSec: Int? = null,
+    ): RpcResult<SwitchSetResult> =
         call(
             ip,
             "Switch.Set",
             buildJsonObject {
                 put("id", switchId)
                 put("on", on)
+                if (toggleAfterSec != null) put("toggle_after", toggleAfterSec)
             },
             SwitchSetResult.serializer(),
         )
 
     /**
-     * Configure le minuteur natif auto_off d'un canal. [autoOffDelaySec] est requis quand
-     * [autoOff] est vrai. Le compte à rebours est ensuite géré par l'appareil en autonomie.
+     * Désarme le minuteur `auto_off` d'un canal.
+     *
+     * Hestia n'arme **jamais** `auto_off` : ses minuteurs passent par `toggle_after` (voir
+     * [setSwitch]). Cet appel ne sert qu'à neutraliser une configuration posée **hors** de
+     * l'application (interface web native, version antérieure), qui entrerait en conflit avec la
+     * simulation de présence. Il n'existe volontairement aucun moyen d'armer `auto_off` depuis
+     * ce client : c'est ce qui a causé le bug « l'interrupteur lance un minuteur ».
      */
-    suspend fun setSwitchConfig(
-        ip: String,
-        switchId: Int,
-        autoOff: Boolean,
-        autoOffDelaySec: Int? = null,
-    ): RpcResult<SetConfigResult> = call(
+    suspend fun clearAutoOff(ip: String, switchId: Int): RpcResult<SetConfigResult> = call(
         ip,
         "Switch.SetConfig",
         buildJsonObject {
@@ -84,8 +101,7 @@ class ShellyRpcClient @Inject constructor(
             put(
                 "config",
                 buildJsonObject {
-                    put("auto_off", autoOff)
-                    if (autoOff && autoOffDelaySec != null) put("auto_off_delay", autoOffDelaySec)
+                    put("auto_off", false)
                 },
             )
         },

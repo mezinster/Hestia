@@ -12,7 +12,7 @@ sealed interface TileStatus {
 
     /**
      * Canal joignable. [timerEndsAtElapsed] (référentiel SystemClock.elapsedRealtime, en ms)
-     * est non nul quand un minuteur auto_off est actif : le compte à rebours est décrémenté
+     * est non nul quand un minuteur est actif sur l'appareil : le compte à rebours est décrémenté
      * localement à la seconde et resynchronisé à chaque lecture.
      */
     data class Online(

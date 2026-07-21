@@ -79,37 +79,36 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
-     * Démarre le minuteur natif auto_off puis allume le canal. Autonome ensuite : l'appareil
-     * gère le compte à rebours, le téléphone peut être fermé. [detail] est journalisé (durée).
+     * Allume le canal en armant un minuteur **one-shot** sur l'appareil (`toggle_after`).
+     * Autonome ensuite : l'appareil gère le compte à rebours, le téléphone peut être fermé.
+     * [detail] est journalisé (durée).
+     *
+     * Un seul appel RPC, et surtout **aucune écriture dans la configuration de l'appareil** : le
+     * minuteur ne vaut que pour cet allumage-ci. C'est le correctif du bug où un minuteur arrivé
+     * à son terme laissait `auto_off` armé, si bien que tout allumage ultérieur — y compris via
+     * le bouton physique — se coupait tout seul.
      */
     suspend fun startTimer(device: Device, seconds: Int, detail: String?): RpcResult<Unit> =
-        when (val cfg = rpcClient.setSwitchConfig(device.ipAddress, device.switchId, autoOff = true, autoOffDelaySec = seconds)) {
-            is RpcResult.Success -> when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = true)) {
-                is RpcResult.Success -> {
-                    // Sortie commandée à ON (persistée) : la future extinction (fin de minuteur,
-                    // même appli fermée) sera détectée au relevé suivant et journalisée une fois.
-                    deviceDao.updateLastKnownOutput(device.id, true)
-                    logActivation(device.id, ActivationAction.TIMER_STARTED, detail)
-                    RpcResult.Success(Unit)
-                }
-                is RpcResult.RpcError -> set
-                is RpcResult.Failure -> set
+        when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = true, toggleAfterSec = seconds)) {
+            is RpcResult.Success -> {
+                // Sortie commandée à ON (persistée) : la future extinction (fin de minuteur,
+                // même appli fermée) sera détectée au relevé suivant et journalisée une fois.
+                deviceDao.updateLastKnownOutput(device.id, true)
+                logActivation(device.id, ActivationAction.TIMER_STARTED, detail)
+                RpcResult.Success(Unit)
             }
-            is RpcResult.RpcError -> cfg
-            is RpcResult.Failure -> cfg
+            is RpcResult.RpcError -> set
+            is RpcResult.Failure -> set
         }
 
     /**
-     * Annule le minuteur : retire l'auto_off **puis éteint le canal**. Annuler = ne plus laisser
-     * passer le courant (et éviter que l'auto_off se ré-arme au prochain allumage).
+     * Annule le minuteur en **éteignant le canal**. Annuler = ne plus laisser passer le courant.
+     *
+     * Un seul appel suffit : éteindre le canal annule d'office le `toggle_after` en cours, et il
+     * n'y a plus aucune configuration à défaire côté appareil.
      */
-    suspend fun cancelTimer(device: Device): RpcResult<Unit> {
-        when (val cfg = rpcClient.setSwitchConfig(device.ipAddress, device.switchId, autoOff = false)) {
-            is RpcResult.Success -> Unit
-            is RpcResult.RpcError -> return cfg
-            is RpcResult.Failure -> return cfg
-        }
-        return when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = false)) {
+    suspend fun cancelTimer(device: Device): RpcResult<Unit> =
+        when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = false)) {
             is RpcResult.Success -> {
                 deviceDao.updateLastKnownOutput(device.id, false)
                 logActivation(device.id, ActivationAction.TIMER_CANCELLED)
@@ -118,7 +117,6 @@ class DeviceRepository @Inject constructor(
             is RpcResult.RpcError -> set
             is RpcResult.Failure -> set
         }
-    }
 
     // --- Simulation de présence ---
 
@@ -150,9 +148,10 @@ class DeviceRepository @Inject constructor(
         }
 
     /**
-     * Génère, pousse et démarre le script de présence. Décision A : coupe d'abord l'`auto_off`
-     * pour que le script soit seul maître du relais. Réutilise un script `hestia_presence`
-     * existant, ne touche jamais un script d'un autre nom.
+     * Génère, pousse et démarre le script de présence. Décision A : neutralise d'abord un
+     * `auto_off` qui aurait été posé **hors d'Hestia**, pour que le script soit seul maître du
+     * relais. Réutilise un script `hestia_presence` existant, ne touche jamais un script d'un
+     * autre nom.
      */
     suspend fun deployPresence(
         device: Device,
@@ -163,8 +162,9 @@ class DeviceRepository @Inject constructor(
         marginMinutes: Int,
     ): RpcResult<Unit> {
         val ip = device.ipAddress
-        // 1. Couper l'auto_off éventuel (conflit minuteur).
-        rpcClient.setSwitchConfig(ip, device.switchId, autoOff = false).errorOrNull()?.let { return it }
+        // 1. Neutraliser un auto_off posé hors d'Hestia (interface web native, ancienne version) :
+        //    il rentrerait en conflit avec les allumages pilotés par le script.
+        rpcClient.clearAutoOff(ip, device.switchId).errorOrNull()?.let { return it }
 
         // 2. Réutiliser le script hestia_presence s'il existe, sinon le créer.
         val list = rpcClient.scriptList(ip)

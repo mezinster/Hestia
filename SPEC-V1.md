@@ -113,7 +113,27 @@ supporter des modèles sortis après l'application.
 
 ### Minuteur « marche pour X »
 
-Fonction native `auto_off` du firmware, exécutée par l'appareil en autonomie :
+> **Révision — `auto_off` abandonné au profit de `toggle_after`.** La conception initiale
+> (ci-dessous, conservée comme trace) passait par la **configuration persistante** `auto_off`.
+> C'était un piège : un minuteur arrivé à son terme laissait `auto_off` armé dans l'appareil, si
+> bien que **tout allumage ultérieur se coupait tout seul** — y compris depuis le bouton physique
+> de la prise ou son interface web. Seule une annulation explicite désarmait la configuration.
+>
+> Le minuteur passe désormais par le paramètre **`toggle_after` de `Switch.Set`** : un compte à
+> rebours **one-shot**, volatil, qui n'écrit rien dans la configuration. Validé sur la Plug M
+> Gen3 : `Switch.GetStatus` renseigne bien `timer_started_at` / `timer_duration`, et
+> `Switch.GetConfig` reste inchangé.
+>
+> ```json
+> {"id": 1, "method": "Switch.Set",
+>  "params": {"id": 0, "on": true, "toggle_after": 3600}}
+> ```
+>
+> Annuler : un simple `Switch.Set` à `false` (éteindre annule le compte à rebours en cours).
+> Hestia n'écrit plus jamais `auto_off` ; elle sait seulement le **désarmer** s'il a été posé
+> hors de l'application, avant de déployer la simulation de présence.
+
+Conception initiale (obsolète) — fonction native `auto_off` du firmware :
 
 ```json
 {"id": 1, "method": "Switch.SetConfig",

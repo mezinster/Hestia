@@ -130,8 +130,8 @@ data class SwitchStatusResult(
     val output: Boolean = false,
     /** Puissance active instantanée (W) si l'appareil mesure la puissance. */
     val apower: Double? = null,
-    /** Instant de démarrage du minuteur auto_off (epoch Unix, secondes). Absent si pas de minuteur. */
+    /** Instant de démarrage du minuteur (epoch Unix, secondes). Absent si pas de minuteur. */
     @SerialName("timer_started_at") val timerStartedAt: Double? = null,
-    /** Durée totale du minuteur auto_off (secondes). Absent si pas de minuteur. */
+    /** Durée totale du minuteur (secondes). Absent si pas de minuteur. */
     @SerialName("timer_duration") val timerDuration: Double? = null,
 )

@@ -66,8 +66,13 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] **Fermer complètement l'application** : la prise se coupe bien à l'échéance
 - [ ] **Éteindre le téléphone** pendant un minuteur : la prise se coupe bien à l'échéance
 - [ ] Le compte à rebours est correct après réouverture de l'application
-- [ ] Annulation d'un minuteur en cours : `auto_off` bien désactivé côté appareil
-      (vérifier dans l'interface web de la prise)
+- [ ] Annulation d'un minuteur en cours : la prise s'éteint et le compte à rebours disparaît
+- [ ] **Non-régression (bug du minuteur persistant)** : laisser un minuteur aller **jusqu'à son
+      terme**, puis rallumer la prise avec le simple interrupteur → elle doit **rester allumée**
+      indéfiniment, sans coupure automatique
+- [ ] Même vérification depuis le **bouton physique** de la prise après un minuteur terminé
+- [ ] `Switch.GetConfig` de la prise : `auto_off` doit rester à `false` après usage du minuteur
+      (`curl -s "http://<ip>/rpc/Switch.GetConfig?id=0"`)
 - [ ] Rouleaux « Perso » : sélection fluide, valeurs `0-23` et `0-59`
 - [ ] Durée de 0 minute refusée
 - [ ] Durée longue (ex. 12 h) acceptée et correcte
