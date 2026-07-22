@@ -123,8 +123,16 @@ fun AboutScreen() {
             Text(stringResource(R.string.about_license_link))
         }
 
-        // QR code de partage (fiche F-Droid)
+        // Partage : le QR code pointe vers la fiche F-Droid de l'application. Un titre et une
+        // phrase disent à quoi il sert ; la légende sous le code n'explique que le geste.
         Spacer(Modifier.height(16.dp))
+        Text(stringResource(R.string.about_share_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        Text(
+            text = stringResource(R.string.about_share),
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(12.dp))
         Surface(
             color = androidx.compose.ui.graphics.Color.White,
             shape = RoundedCornerShape(8.dp),

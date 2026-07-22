@@ -29,6 +29,8 @@
     <string name="about_license_title">Licence</string>
     <string name="about_license">Distribué sous licence GPLv3.</string>
     <string name="about_license_link">Lire le texte de la licence</string>
+    <string name="about_share_title">Partager Hestia</string>
+    <string name="about_share">Faites scanner ce code pour envoyer quelqu\'un vers la fiche de l\'application sur F-Droid.</string>
     <string name="about_qr_hint">Touchez le QR code pour éclairer l\'écran (facilite le scan).</string>
     <string name="gpl_url" translatable="false">https://www.gnu.org/licenses/gpl-3.0.html</string>
     <string name="fdroid_url" translatable="false">https://f-droid.org/packages/kapoue.hestia/</string>
