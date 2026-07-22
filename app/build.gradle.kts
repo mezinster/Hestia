@@ -32,7 +32,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 : indispensable ici, car material-icons-extended embarque plusieurs milliers
+            // d'icônes compilées en code alors que l'application en utilise quinze. Sans
+            // minification, l'APK atteint 47 Mo dont ~48 Mo de DEX décompressé.
+            // Les règles de conservation sont dans proguard-rules.pro (sérialisation surtout).
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
