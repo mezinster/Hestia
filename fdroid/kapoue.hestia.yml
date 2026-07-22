@@ -2,13 +2,8 @@
 # sous metadata/kapoue.hestia.yml, puis ouvrir une Merge Request.
 # (Ce fichier n'est ici qu'une référence versionnée ; il n'est pas utilisé par le build de l'app.)
 #
-# Découpage par ABI : l'application embarque une bibliothèque native tirée de Compose
-# (libandroidx.graphics.path.so). Un APK est produit par architecture, chacun avec son
-# propre versionCode = 10 * base + rang, la base valant 2 dans app/build.gradle.kts.
-# Ordre imposé par F-Droid : armeabi-v7a < arm64-v8a < x86 < x86_64.
-#
-# Chaque bloc passe -PabiFilter=<abi> : le serveur F-Droid n'accepte QU'UN seul APK par build
-# et échoue avec « More than one resulting apks found » si assembleRelease les produit tous.
+# Un seul APK universel : le découpage par ABI a été retiré à la demande du relecteur, la
+# bibliothèque native tirée de Compose ne pesant qu'une quarantaine de kilo-octets.
 Categories:
   - Connectivity
 License: GPL-3.0-or-later
@@ -23,47 +18,13 @@ Repo: https://codeberg.org/kapoue/Hestia.git
 
 Builds:
   - versionName: 1.0.0
-    versionCode: 21
-    commit: dcc92e9cfff94d1b8d87d4462fd5e4558156a6e3
+    versionCode: 30
+    commit: 2c3ec88f3c8748954d08d721d3f58ef2da1db5a2
     subdir: app
     gradle:
       - yes
-    gradleprops:
-      - abiFilter=armeabi-v7a
-
-  - versionName: 1.0.0
-    versionCode: 22
-    commit: dcc92e9cfff94d1b8d87d4462fd5e4558156a6e3
-    subdir: app
-    gradle:
-      - yes
-    gradleprops:
-      - abiFilter=arm64-v8a
-
-  - versionName: 1.0.0
-    versionCode: 23
-    commit: dcc92e9cfff94d1b8d87d4462fd5e4558156a6e3
-    subdir: app
-    gradle:
-      - yes
-    gradleprops:
-      - abiFilter=x86
-
-  - versionName: 1.0.0
-    versionCode: 24
-    commit: dcc92e9cfff94d1b8d87d4462fd5e4558156a6e3
-    subdir: app
-    gradle:
-      - yes
-    gradleprops:
-      - abiFilter=x86_64
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-VercodeOperation:
-  - 10 * %c + 1
-  - 10 * %c + 2
-  - 10 * %c + 3
-  - 10 * %c + 4
 CurrentVersion: 1.0.0
-CurrentVersionCode: 24
+CurrentVersionCode: 30
