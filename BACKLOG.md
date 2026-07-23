@@ -56,4 +56,8 @@ Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bu
 - **Audit des fonctions RPC de la prise non gérées** par Hestia (mesure d'énergie détaillée,
   planning, etc.).
 - **Traduction anglaise** (déjà prévue au CLAUDE.md) : adaptation à la langue du système
-  (anglais par défaut, français si l'appareil est en français).
+  (anglais par défaut, français si l'appareil est en français). Au-delà des `strings.xml`,
+  attention aux **formats codés « à la française »** qui ne se traduisent pas tout seuls :
+  `formatTimeRange` produit `9h00 - 11h00` (format horaire français en dur) → à localiser
+  (`9:00 AM` ou format régional). Les nombres, eux, sont déjà corrects : `formatPower` force le
+  point (choix produit) et `formatCountdown` est neutre.
