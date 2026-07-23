@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatCountdown
+import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.ui.components.BreakerSwitch
@@ -70,7 +71,10 @@ fun DeviceTile(
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp)),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text(
                     text = "%02d".format(tile.number),
                     fontFamily = FontFamily.Monospace,
@@ -85,6 +89,18 @@ fun DeviceTile(
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(18.dp),
                 )
+                // Puissance instantanée à droite, seulement si l'appareil la mesure et répond.
+                val powerWatts = (tile.status as? TileStatus.Online)
+                    ?.powerWatts?.takeIf { tile.device.hasPowerMetering }
+                if (powerWatts != null) {
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = formatPower(powerWatts),
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
 
             Spacer(Modifier.height(8.dp))

@@ -57,6 +57,9 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Avec deux appareils dont un hors ligne : l'autre reste pleinement pilotable
 - [ ] Couper le Wi-Fi du téléphone : message clair, pas de plantage
 - [ ] Bouton d'ouverture de l'interface web : le navigateur s'ouvre sur la bonne adresse
+- [ ] **Puissance instantanée** affichée en haut à droite de la tuile pour un appareil qui
+      mesure : `0,0 W` au repos, valeur réelle en charge, mise à jour à chaque relevé
+- [ ] Un appareil **sans mesure** n'affiche aucune puissance ; une prise **hors ligne** non plus
 
 ## 5. Minuteur
 

@@ -18,6 +18,8 @@ sealed interface TileStatus {
     data class Online(
         val output: Boolean,
         val timerEndsAtElapsed: Long?,
+        /** Puissance active instantanée en watts, si l'appareil la mesure. Null sinon. */
+        val powerWatts: Double?,
     ) : TileStatus
 
     /** Appareil injoignable (timeout, réseau, erreur RPC). */
@@ -58,6 +60,7 @@ internal fun RpcResult<SwitchStatusResult>.toTileStatus(): TileStatus = when (th
     is RpcResult.Success -> TileStatus.Online(
         output = value.output,
         timerEndsAtElapsed = timerEndsAtElapsed(value.timerStartedAt, value.timerDuration),
+        powerWatts = value.apower,
     )
     // Un appareil injoignable (ou en erreur) n'empêche pas d'utiliser les autres.
     is RpcResult.RpcError -> TileStatus.Offline

@@ -309,7 +309,9 @@ class DeviceRepository @Inject constructor(
                 ),
             )
             4 -> RpcResult.Failure(RpcFailure.UNREACHABLE)                                   // Hors ligne
-            else -> RpcResult.Success(SwitchStatusResult(id = device.switchId, output = true)) // Actif
+            else -> RpcResult.Success(                                                       // Actif
+                SwitchStatusResult(id = device.switchId, output = true, apower = 479.3),
+            )
         }
     }
 
