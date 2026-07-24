@@ -10,6 +10,7 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.domain.model.Planning
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -37,12 +38,18 @@ class DashboardViewModel @Inject constructor(
     // Simulations de présence réellement en cours, relevées sur les appareils à chaque cycle.
     private val presences = MutableStateFlow<Map<Long, PresenceInfo>>(emptyMap())
 
+    // Plannings présents sur chaque appareil (la tuile affiche celui en cours, le cas échéant).
+    private val plannings = MutableStateFlow<Map<Long, List<Planning>>>(emptyMap())
+
     // Renseigné par la couche UI (qui seule connaît le Context) à chaque reprise d'écran.
     @Volatile
     private var permissionUsable: Boolean = true
 
+    // combine plafonne à 5 flux typés : on regroupe présence + planning en un seul.
+    private val extras = combine(presences, plannings) { p, pl -> p to pl }
+
     val uiState: StateFlow<DashboardUiState> =
-        combine(repository.observeDevices(), statuses, refreshing, loaded, presences) { devices, statusMap, isRefreshing, isLoaded, presenceMap ->
+        combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, (presenceMap, planningMap) ->
             DashboardUiState(
                 tiles = devices.mapIndexed { index, device ->
                     TileUiState(
@@ -50,6 +57,7 @@ class DashboardViewModel @Inject constructor(
                         device = device,
                         status = statusMap[device.id] ?: TileStatus.Loading,
                         presence = presenceMap[device.id],
+                        plannings = planningMap[device.id].orEmpty(),
                     )
                 },
                 isRefreshing = isRefreshing,
@@ -85,8 +93,8 @@ class DashboardViewModel @Inject constructor(
                 return@launch
             }
             val fetch = launch {
-                // États et simulations de présence sont relevés en parallèle : le temps total
-                // reste celui du plus lent, pas la somme des deux.
+                // États, présences et plannings relevés en parallèle : le temps total reste celui
+                // du plus lent, pas la somme.
                 val statusResults = async {
                     devices.map { device ->
                         async { device.id to repository.getStatus(device).toTileStatus() }
@@ -97,10 +105,16 @@ class DashboardViewModel @Inject constructor(
                         async { device.id to loadPresence(device) }
                     }.awaitAll()
                 }
+                val planningResults = async {
+                    devices.filter { it.supportsSwitch }.map { device ->
+                        async { device.id to repository.getPlannings(device).getOrNull().orEmpty() }
+                    }.awaitAll()
+                }
                 statuses.value = statusResults.await().toMap()
                 presences.value = presenceResults.await()
                     .mapNotNull { (id, info) -> info?.let { id to it } }
                     .toMap()
+                plannings.value = planningResults.await().toMap()
                 loaded.value = true
             }
             val indicator = if (userInitiated) {

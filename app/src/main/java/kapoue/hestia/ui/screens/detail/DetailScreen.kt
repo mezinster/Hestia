@@ -65,12 +65,11 @@ import kapoue.hestia.domain.model.ActivationAction
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.components.StatusBadge
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.screens.dashboard.TileStatus
 import kotlinx.coroutines.delay
-import java.time.LocalDate
-import java.time.LocalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -174,7 +173,7 @@ fun DetailScreen(
                         viewModel.clearAddPlanningResult()
                         // Un planning en cours ne peut pas être édité (supprimerait l'extinction
                         // active) : on l'explique au lieu d'ouvrir le dialogue.
-                        if (isPlanningActiveNow(p)) blockedEditPlanning = p else editingPlanning = p
+                        if (p.isActiveNow()) blockedEditPlanning = p else editingPlanning = p
                     },
                     onAdd = {
                         viewModel.clearAddPlanningResult()
@@ -261,7 +260,7 @@ fun DetailScreen(
                         ),
                     )
                     // La suppression d'un planning en cours retire l'extinction : on prévient.
-                    if (isPlanningActiveNow(p)) {
+                    if (p.isActiveNow()) {
                         Text(
                             text = stringResource(R.string.planning_delete_active_warning),
                             style = MaterialTheme.typography.bodySmall,
@@ -285,14 +284,6 @@ fun DetailScreen(
     }
 }
 
-/** Vrai si l'heure actuelle (téléphone) tombe dans le créneau de CE planning, un jour actif. */
-private fun isPlanningActiveNow(planning: Planning): Boolean {
-    val now = LocalTime.now()
-    val nowMin = now.hour * 60 + now.minute
-    val dow = LocalDate.now().dayOfWeek.value // 1 = lundi … 7 = dimanche
-    val cronDay = if (dow == 7) 0 else dow // cron : 0 = dimanche … 6 = samedi
-    return cronDay in planning.days && nowMin >= planning.startMinutes && nowMin < planning.endMinutes
-}
 
 @Composable
 private fun PresenceSummary(active: Boolean, onConfigure: () -> Unit) {

@@ -24,6 +24,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,6 +40,8 @@ import kapoue.hestia.core.util.formatCountdown
 import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.components.BreakerSwitch
 import kapoue.hestia.ui.theme.StateColorSet
 import kapoue.hestia.ui.theme.stateColors
@@ -60,7 +63,10 @@ fun DeviceTile(
     onOpenDetail: () -> Unit,
 ) {
     val colors = MaterialTheme.stateColors
-    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence)
+    // elapsedNow (rafraîchi à la seconde par le parent) force le recalcul du planning en cours
+    // au fil du temps, sans attendre le prochain relevé réseau.
+    val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning)
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -183,6 +189,7 @@ private fun TileStatus.toVisual(
     colors: StateColorSet,
     elapsedNow: Long,
     presence: PresenceInfo?,
+    activePlanning: Planning?,
 ): TileVisual = when (this) {
     // Lecture en cours : spinner plutôt que gris (qui se lirait « désactivé »).
     TileStatus.Loading -> TileVisual(
@@ -214,6 +221,18 @@ private fun TileStatus.toVisual(
                     presence.startMinute,
                     presence.endHour,
                     presence.endMinute,
+                ),
+                ledStyle = if (output) LedStyle.FILLED else LedStyle.HOLLOW,
+            )
+            // Un planning est en cours (heure actuelle dans son créneau) : même orange. Deux
+            // plannings ne se chevauchant jamais, il n'y en a qu'un « en cours » à la fois.
+            activePlanning != null -> TileVisual(
+                ledColor = colors.timedLed,
+                textColor = colors.timedText,
+                label = stringResource(R.string.state_planning),
+                countdown = "%02d:%02d – %02d:%02d".format(
+                    activePlanning.startHour, activePlanning.startMinute,
+                    activePlanning.endHour, activePlanning.endMinute,
                 ),
                 ledStyle = if (output) LedStyle.FILLED else LedStyle.HOLLOW,
             )

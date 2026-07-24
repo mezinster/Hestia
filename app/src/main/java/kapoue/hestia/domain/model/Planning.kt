@@ -1,5 +1,8 @@
 package kapoue.hestia.domain.model
 
+import java.time.LocalDate
+import java.time.LocalTime
+
 /**
  * Un planning : une plage horaire récurrente pilotée par l'appareil (composant Schedule natif).
  * Concrètement, deux programmes cron dans l'appareil — allumage au début, extinction à la fin.
@@ -23,6 +26,18 @@ data class Planning(
     val startMinutes: Int get() = startHour * 60 + startMinute
     val endMinutes: Int get() = endHour * 60 + endMinute
     val everyDay: Boolean get() = days.size >= 7
+}
+
+/**
+ * Vrai si l'heure actuelle (téléphone) tombe dans le créneau de ce planning, un jour où il est
+ * actif. Comme les plannings ne se chevauchent jamais, au plus un seul est « en cours » à la fois.
+ * Le fuseau de la prise étant identique à celui du téléphone (vérifié), l'heure locale suffit.
+ */
+fun Planning.isActiveNow(): Boolean {
+    val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
+    val dow = LocalDate.now().dayOfWeek.value // 1 = lundi … 7 = dimanche
+    val cronDay = if (dow == 7) 0 else dow // cron : 0 = dimanche … 6 = samedi
+    return cronDay in days && nowMin >= startMinutes && nowMin < endMinutes
 }
 
 /** Issue d'une tentative de création de planning (contrôle de conflit inclus). */

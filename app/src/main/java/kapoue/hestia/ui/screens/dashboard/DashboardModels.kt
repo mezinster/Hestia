@@ -4,6 +4,7 @@ import android.os.SystemClock
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.model.SwitchStatusResult
+import kapoue.hestia.domain.model.Planning
 
 /** État visuel d'un canal sur le Tableau. */
 sealed interface TileStatus {
@@ -47,6 +48,8 @@ data class TileUiState(
     val device: Device,
     val status: TileStatus,
     val presence: PresenceInfo? = null,
+    /** Plannings présents sur l'appareil ; la tuile affiche celui **en cours** s'il y en a un. */
+    val plannings: List<Planning> = emptyList(),
 )
 
 data class DashboardUiState(

@@ -125,6 +125,7 @@
          ligne (elle passe à la ligne sur les écrans étroits et casse l'alignement de la grille).
          Le nom complet est conservé partout où la place le permet : détail, popup, réglages. -->
     <string name="state_presence">Mode présence</string>
+    <string name="state_planning">Planning</string>
     <string name="state_offline">Hors ligne</string>
     <string name="state_loading">Lecture…</string>
     <string name="state_permission_required">Permission requise</string>

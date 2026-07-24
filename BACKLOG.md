@@ -12,8 +12,13 @@ Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bu
   sélecteur d'heure.
 - **Confirmation « modifications non enregistrées »** sur l'écran de config présence si l'on
   quitte après avoir changé les heures sans déployer (faibles enjeux).
-- **Distinguer l'extinction « fin de minuteur » de l'extinction manuelle** dans le journal
-  (les deux apparaissent « Éteint »). Heuristique possible : minuteur actif au relevé précédent.
+- **Attribuer une cause à chaque allumage/extinction dans le journal** (manuel, minuteur,
+  planning, mode présence). Aujourd'hui « Allumé »/« Éteint » n'indiquent pas l'origine. Piège :
+  les bascules **autonomes** (planning, présence, fin de minuteur) ne sont pas observées à
+  l'instant où elles surviennent (appli fermée), seulement au relevé suivant → la cause doit être
+  **inférée** de l'état connu (créneau de planning actif, minuteur en cours, script déployé…).
+  Faisable mais mérite son propre lot. Englobe l'ancien point « distinguer fin de minuteur vs
+  extinction manuelle ».
 - **⚠️ Relire les horaires de présence depuis l'appareil** (défaut de correction, pas confort).
   Les horaires ne sont stockés que dans la base locale du téléphone **qui a déployé** le script.
   Un second téléphone affiche donc les valeurs par défaut et, pire, **peut redéployer un script

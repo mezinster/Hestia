@@ -225,12 +225,15 @@ class DeviceRepository @Inject constructor(
     // --- Planning (composant Schedule natif de l'appareil) ---
 
     /** Lit les plannings réellement présents sur l'appareil (jamais supposés). */
-    suspend fun getPlannings(device: Device): RpcResult<List<Planning>> =
-        when (val r = rpcClient.scheduleList(device.ipAddress)) {
+    suspend fun getPlannings(device: Device): RpcResult<List<Planning>> {
+        // Appareils démo : aucun réseau (évite un timeout par tuile fictive à chaque relevé).
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(emptyList())
+        return when (val r = rpcClient.scheduleList(device.ipAddress)) {
             is RpcResult.Success -> RpcResult.Success(reconstructPlannings(r.value.jobs, device.switchId))
             is RpcResult.RpcError -> r
             is RpcResult.Failure -> r
         }
+    }
 
     /**
      * Reconstruit les plannings à partir des programmes cron. On ne retient que les jobs
