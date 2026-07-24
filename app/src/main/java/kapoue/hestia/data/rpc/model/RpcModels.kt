@@ -104,6 +104,35 @@ data class ScriptEntry(
     val running: Boolean = false,
 )
 
+/** Réponse de Schedule.List : les programmes cron stockés dans l'appareil (plannings). */
+@Serializable
+data class ScheduleListResult(
+    val jobs: List<ScheduleJob> = emptyList(),
+)
+
+@Serializable
+data class ScheduleJob(
+    val id: Int,
+    val enable: Boolean = true,
+    val timespec: String = "",
+    val calls: List<ScheduleCall> = emptyList(),
+)
+
+/** Une action déclenchée par un programme. Les params dépendent de la méthode (gardés bruts). */
+@Serializable
+data class ScheduleCall(
+    val method: String = "",
+    val params: JsonObject? = null,
+)
+
+/** Réponse de Schedule.Create : identifiant du programme créé. */
+@Serializable
+data class ScheduleCreateResult(val id: Int, val rev: Int? = null)
+
+/** Réponse de Schedule.Delete (on n'exploite que la présence d'un résultat). */
+@Serializable
+data class ScheduleDeleteResult(val rev: Int? = null)
+
 /** Horloge de l'appareil, extraite de Shelly.GetStatus → sys (contrôle de dérive). */
 @Serializable
 data class ShellyFullStatus(

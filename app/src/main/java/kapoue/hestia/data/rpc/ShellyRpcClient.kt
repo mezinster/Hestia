@@ -5,6 +5,9 @@ import kapoue.hestia.data.rpc.model.ComponentsResult
 import kapoue.hestia.data.rpc.model.DeviceInfoResult
 import kapoue.hestia.data.rpc.model.RpcEnvelope
 import kapoue.hestia.data.rpc.model.RpcRequest
+import kapoue.hestia.data.rpc.model.ScheduleCreateResult
+import kapoue.hestia.data.rpc.model.ScheduleDeleteResult
+import kapoue.hestia.data.rpc.model.ScheduleListResult
 import kapoue.hestia.data.rpc.model.ScriptCreateResult
 import kapoue.hestia.data.rpc.model.ScriptListResult
 import kapoue.hestia.data.rpc.model.ScriptPutCodeResult
@@ -155,6 +158,51 @@ class ShellyRpcClient @Inject constructor(
 
     suspend fun scriptDelete(ip: String, id: Int): RpcResult<ScriptRunResult> =
         call(ip, "Script.Delete", buildJsonObject { put("id", id) }, ScriptRunResult.serializer())
+
+    // --- Schedule (planning natif de l'appareil) ---
+
+    suspend fun scheduleList(ip: String): RpcResult<ScheduleListResult> =
+        call(ip, "Schedule.List", null, ScheduleListResult.serializer())
+
+    /**
+     * Crée un programme cron : à [timespec], bascule le canal [switchId] sur [on]. Un seul appel
+     * Switch.Set par programme — c'est ce qui permet de reconstruire les plannings côté repository.
+     */
+    suspend fun scheduleCreate(
+        ip: String,
+        timespec: String,
+        switchId: Int,
+        on: Boolean,
+        enable: Boolean = true,
+    ): RpcResult<ScheduleCreateResult> = call(
+        ip,
+        "Schedule.Create",
+        buildJsonObject {
+            put("enable", enable)
+            put("timespec", timespec)
+            put(
+                "calls",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("method", "Switch.Set")
+                            put(
+                                "params",
+                                buildJsonObject {
+                                    put("id", switchId)
+                                    put("on", on)
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+        },
+        ScheduleCreateResult.serializer(),
+    )
+
+    suspend fun scheduleDelete(ip: String, id: Int): RpcResult<ScheduleDeleteResult> =
+        call(ip, "Schedule.Delete", buildJsonObject { put("id", id) }, ScheduleDeleteResult.serializer())
 
     /**
      * Interroge l'appareil pour déduire ses capacités. Rejette les Gen1.

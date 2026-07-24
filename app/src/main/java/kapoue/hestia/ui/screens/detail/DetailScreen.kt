@@ -1,6 +1,7 @@
 package kapoue.hestia.ui.screens.detail
 
 import android.os.SystemClock
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -11,23 +12,32 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,11 +62,15 @@ import kapoue.hestia.core.util.formatLogTimestamp
 import kapoue.hestia.data.local.entity.ActivationLog
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.domain.model.ActivationAction
+import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.ui.components.StatusBadge
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.screens.dashboard.TileStatus
 import kotlinx.coroutines.delay
+import java.time.LocalDate
+import java.time.LocalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,10 +83,28 @@ fun DetailScreen(
     val status by viewModel.status.collectAsStateWithLifecycle()
     val logs by viewModel.logs.collectAsStateWithLifecycle()
     val presenceActive by viewModel.presenceActive.collectAsStateWithLifecycle()
+    val plannings by viewModel.plannings.collectAsStateWithLifecycle()
+    val addPlanningResult by viewModel.addPlanningResult.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var showSheet by remember { mutableStateOf(false) }
+    var showAddPlanning by remember { mutableStateOf(false) }
+    // Planning en cours d'édition (dialogue pré-rempli), et planning dont l'édition est bloquée
+    // parce qu'il est en cours.
+    var editingPlanning by remember { mutableStateOf<Planning?>(null) }
+    var blockedEditPlanning by remember { mutableStateOf<Planning?>(null) }
+    // Planning en attente de confirmation de suppression.
+    var planningToDelete by remember { mutableStateOf<Planning?>(null) }
+
+    // Ferme le dialogue dès qu'un ajout/édition aboutit ; les conflits le laissent ouvert.
+    LaunchedEffect(addPlanningResult) {
+        if (addPlanningResult is CreatePlanningResult.Success) {
+            showAddPlanning = false
+            editingPlanning = null
+            viewModel.clearAddPlanningResult()
+        }
+    }
     // Minuteur en attente de résolution du conflit avec la simulation de présence.
     var pendingTimer by remember { mutableStateOf<Pair<Int, String>?>(null) }
 
@@ -134,6 +166,22 @@ fun DetailScreen(
                     onCustom = { showSheet = true },
                     onCancel = { viewModel.cancelTimer() },
                 )
+
+                HorizontalDivider()
+                PlanningSection(
+                    plannings = plannings,
+                    onEdit = { p ->
+                        viewModel.clearAddPlanningResult()
+                        // Un planning en cours ne peut pas être édité (supprimerait l'extinction
+                        // active) : on l'explique au lieu d'ouvrir le dialogue.
+                        if (isPlanningActiveNow(p)) blockedEditPlanning = p else editingPlanning = p
+                    },
+                    onAdd = {
+                        viewModel.clearAddPlanningResult()
+                        showAddPlanning = true
+                    },
+                    onDelete = { planningToDelete = it },
+                )
             }
 
             if (dev.hasScripting) {
@@ -169,6 +217,81 @@ fun DetailScreen(
             },
         )
     }
+
+    if (showAddPlanning || editingPlanning != null) {
+        AddPlanningDialog(
+            initial = editingPlanning,
+            result = addPlanningResult,
+            onValidate = { sh, sm, eh, em, days ->
+                val edit = editingPlanning
+                if (edit != null) viewModel.updatePlanning(edit, sh, sm, eh, em, days)
+                else viewModel.addPlanning(sh, sm, eh, em, days)
+            },
+            onDismiss = {
+                showAddPlanning = false
+                editingPlanning = null
+                viewModel.clearAddPlanningResult()
+            },
+        )
+    }
+
+    blockedEditPlanning?.let {
+        AlertDialog(
+            onDismissRequest = { blockedEditPlanning = null },
+            title = { Text(stringResource(R.string.planning_edit_blocked_title)) },
+            text = { Text(stringResource(R.string.planning_edit_blocked_message)) },
+            confirmButton = {
+                TextButton(onClick = { blockedEditPlanning = null }) {
+                    Text(stringResource(R.string.planning_ok))
+                }
+            },
+        )
+    }
+
+    planningToDelete?.let { p ->
+        AlertDialog(
+            onDismissRequest = { planningToDelete = null },
+            title = { Text(stringResource(R.string.planning_delete_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(
+                            R.string.planning_delete_message,
+                            "%02d:%02d – %02d:%02d".format(p.startHour, p.startMinute, p.endHour, p.endMinute),
+                        ),
+                    )
+                    // La suppression d'un planning en cours retire l'extinction : on prévient.
+                    if (isPlanningActiveNow(p)) {
+                        Text(
+                            text = stringResource(R.string.planning_delete_active_warning),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deletePlanning(p)
+                    planningToDelete = null
+                }) { Text(stringResource(R.string.planning_delete_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { planningToDelete = null }) {
+                    Text(stringResource(R.string.conflict_cancel))
+                }
+            },
+        )
+    }
+}
+
+/** Vrai si l'heure actuelle (téléphone) tombe dans le créneau de CE planning, un jour actif. */
+private fun isPlanningActiveNow(planning: Planning): Boolean {
+    val now = LocalTime.now()
+    val nowMin = now.hour * 60 + now.minute
+    val dow = LocalDate.now().dayOfWeek.value // 1 = lundi … 7 = dimanche
+    val cronDay = if (dow == 7) 0 else dow // cron : 0 = dimanche … 6 = samedi
+    return cronDay in planning.days && nowMin >= planning.startMinutes && nowMin < planning.endMinutes
 }
 
 @Composable
@@ -220,6 +343,225 @@ private fun ConflictDialog(
                 ) { Text(stringResource(R.string.conflict_cancel)) }
             }
         },
+    )
+}
+
+// Ordre d'affichage lundi → dimanche ; l'indice suit le cron Shelly (0 = dimanche).
+private val WEEK_DAYS = listOf(1, 2, 3, 4, 5, 6, 0)
+
+@Composable
+private fun PlanningSection(
+    plannings: List<Planning>,
+    onEdit: (Planning) -> Unit,
+    onAdd: () -> Unit,
+    onDelete: (Planning) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.planning_section),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        if (plannings.isEmpty()) {
+            Text(
+                text = stringResource(R.string.planning_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            plannings.forEach { p -> PlanningRow(p, onEdit = { onEdit(p) }, onDelete = { onDelete(p) }) }
+        }
+        val atLimit = plannings.size >= 10
+        OutlinedButton(onClick = onAdd, enabled = !atLimit) {
+            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.size(4.dp))
+            Text(stringResource(R.string.planning_add))
+        }
+        if (atLimit) {
+            Text(
+                text = stringResource(R.string.planning_limit_reached),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlanningRow(planning: Planning, onEdit: () -> Unit, onDelete: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        // Un tap sur les horaires ouvre l'édition (sauf si le planning est en cours).
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onEdit),
+        ) {
+            Text(
+                text = "%02d:%02d – %02d:%02d".format(
+                    planning.startHour, planning.startMinute, planning.endHour, planning.endMinute,
+                ),
+                style = MaterialTheme.typography.bodyLarge,
+                fontFamily = FontFamily.Monospace,
+            )
+            Text(
+                text = daysSummary(planning),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.planning_delete))
+        }
+    }
+}
+
+@Composable
+private fun daysSummary(planning: Planning): String {
+    if (planning.everyDay) return stringResource(R.string.planning_every_day)
+    // Libellés résolus ici (contexte composable), puis assemblés hors lambda composable.
+    val labels = mapOf(
+        1 to stringResource(R.string.planning_day_mon),
+        2 to stringResource(R.string.planning_day_tue),
+        3 to stringResource(R.string.planning_day_wed),
+        4 to stringResource(R.string.planning_day_thu),
+        5 to stringResource(R.string.planning_day_fri),
+        6 to stringResource(R.string.planning_day_sat),
+        0 to stringResource(R.string.planning_day_sun),
+    )
+    return WEEK_DAYS.filter { it in planning.days }.mapNotNull { labels[it] }.joinToString(", ")
+}
+
+@Composable
+private fun dayLabel(day: Int): String = stringResource(
+    when (day) {
+        1 -> R.string.planning_day_mon
+        2 -> R.string.planning_day_tue
+        3 -> R.string.planning_day_wed
+        4 -> R.string.planning_day_thu
+        5 -> R.string.planning_day_fri
+        6 -> R.string.planning_day_sat
+        else -> R.string.planning_day_sun
+    },
+)
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun AddPlanningDialog(
+    initial: Planning?,
+    result: CreatePlanningResult?,
+    onValidate: (Int, Int, Int, Int, Set<Int>) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var startH by remember { mutableStateOf(initial?.let { "%02d".format(it.startHour) } ?: "09") }
+    var startM by remember { mutableStateOf(initial?.let { "%02d".format(it.startMinute) } ?: "00") }
+    var endH by remember { mutableStateOf(initial?.let { "%02d".format(it.endHour) } ?: "17") }
+    var endM by remember { mutableStateOf(initial?.let { "%02d".format(it.endMinute) } ?: "00") }
+    // Deux modes exclusifs : « tous les jours » OU une sélection de jours précis. [everyDay]
+    // porte l'état propre du chip « Tous les jours » ; [days] les jours précis (mode contraire).
+    var everyDay by remember { mutableStateOf(initial?.everyDay ?: true) }
+    var days by remember { mutableStateOf(if (initial != null && !initial.everyDay) initial.days else emptySet()) }
+    val effectiveDays = if (everyDay) setOf(0, 1, 2, 3, 4, 5, 6) else days
+
+    val sh = startH.toIntOrNull()?.takeIf { it in 0..23 }
+    val sm = startM.toIntOrNull()?.takeIf { it in 0..59 }
+    val eh = endH.toIntOrNull()?.takeIf { it in 0..23 }
+    val em = endM.toIntOrNull()?.takeIf { it in 0..59 }
+    val startMin = if (sh != null && sm != null) sh * 60 + sm else null
+    val endMin = if (eh != null && em != null) eh * 60 + em else null
+    val valid = startMin != null && endMin != null && (everyDay || days.isNotEmpty()) && startMin < endMin
+
+    val errorText: String? = when {
+        result is CreatePlanningResult.Conflict -> stringResource(
+            R.string.planning_conflict,
+            "%02d:%02d – %02d:%02d".format(
+                result.existing.startHour, result.existing.startMinute,
+                result.existing.endHour, result.existing.endMinute,
+            ),
+        )
+        result is CreatePlanningResult.PresenceActive -> stringResource(R.string.planning_conflict_presence)
+        result is CreatePlanningResult.LimitReached -> stringResource(R.string.planning_limit_reached)
+        result is CreatePlanningResult.Error -> stringResource(R.string.planning_error_generic)
+        !everyDay && days.isEmpty() -> stringResource(R.string.planning_error_no_day)
+        startMin != null && endMin != null && startMin >= endMin -> stringResource(R.string.planning_error_range)
+        else -> null
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(stringResource(if (initial == null) R.string.planning_dialog_title else R.string.planning_edit_title))
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TimeInput(stringResource(R.string.planning_start), startH, startM, { startH = it }, { startM = it })
+                TimeInput(stringResource(R.string.planning_end), endH, endM, { endH = it }, { endM = it })
+
+                Text(stringResource(R.string.planning_days), style = MaterialTheme.typography.bodyMedium)
+                // Deux modes exclusifs. « Tous les jours » a son propre état : le taper l'active
+                // et vide la sélection précise ; taper un jour bascule en mode « jours précis »
+                // et éteint « Tous les jours ». Jamais les deux allumés en même temps.
+                FilterChip(
+                    selected = everyDay,
+                    onClick = {
+                        everyDay = true
+                        days = emptySet()
+                    },
+                    label = { Text(stringResource(R.string.planning_all_days)) },
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    WEEK_DAYS.forEach { d ->
+                        FilterChip(
+                            selected = !everyDay && d in days,
+                            onClick = {
+                                everyDay = false
+                                days = if (d in days) days - d else days + d
+                            },
+                            label = { Text(dayLabel(d)) },
+                        )
+                    }
+                }
+
+                errorText?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = valid,
+                onClick = { onValidate(sh!!, sm!!, eh!!, em!!, effectiveDays) },
+            ) { Text(stringResource(R.string.planning_validate)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.conflict_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun TimeInput(
+    label: String,
+    hour: String,
+    minute: String,
+    onHour: (String) -> Unit,
+    onMinute: (String) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, modifier = Modifier.width(56.dp), style = MaterialTheme.typography.bodyMedium)
+        NumberField(hour, onHour)
+        Text("  :  ", fontFamily = FontFamily.Monospace)
+        NumberField(minute, onMinute)
+    }
+}
+
+@Composable
+private fun NumberField(value: String, onValue: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = { new -> if (new.length <= 2 && new.all { it.isDigit() }) onValue(new) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.width(72.dp),
     )
 }
 
@@ -371,6 +713,9 @@ private fun activationLabel(action: ActivationAction): String = stringResource(
         ActivationAction.TIMER_CANCELLED -> R.string.activity_timer_cancelled
         ActivationAction.PRESENCE_DEPLOYED -> R.string.activity_presence_deployed
         ActivationAction.PRESENCE_STOPPED -> R.string.activity_presence_stopped
+        ActivationAction.PLANNING_ADDED -> R.string.activity_planning_added
+        ActivationAction.PLANNING_REMOVED -> R.string.activity_planning_removed
+        ActivationAction.PLANNING_MODIFIED -> R.string.activity_planning_modified
     },
 )
 

@@ -8,6 +8,8 @@ import kapoue.hestia.data.local.entity.ActivationLog
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.getOrNull
+import kapoue.hestia.domain.model.CreatePlanningResult
+import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.ui.navigation.StackedRoutes
 import kapoue.hestia.ui.screens.dashboard.TileStatus
 import kapoue.hestia.ui.screens.dashboard.toTileStatus
@@ -39,6 +41,14 @@ class DetailViewModel @Inject constructor(
     /** Simulation de présence réellement active (pour la gestion du conflit avec le minuteur). */
     private val _presenceActive = MutableStateFlow(false)
     val presenceActive: StateFlow<Boolean> = _presenceActive.asStateFlow()
+
+    /** Plannings réellement présents sur l'appareil, relus après chaque modification. */
+    private val _plannings = MutableStateFlow<List<Planning>>(emptyList())
+    val plannings: StateFlow<List<Planning>> = _plannings.asStateFlow()
+
+    /** Résultat de la dernière tentative d'ajout (conflit, limite…), consommé par l'UI. */
+    private val _addPlanningResult = MutableStateFlow<CreatePlanningResult?>(null)
+    val addPlanningResult: StateFlow<CreatePlanningResult?> = _addPlanningResult.asStateFlow()
 
     @Volatile
     private var permissionUsable: Boolean = true
@@ -83,11 +93,49 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /** Ajoute un planning ; le résultat (succès ou conflit) est publié pour l'UI. */
+    fun addPlanning(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int, days: Set<Int>) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            val result = repository.createPlanning(dev, startHour, startMinute, endHour, endMinute, days)
+            _addPlanningResult.value = result
+            if (result is CreatePlanningResult.Success) loadPlannings(dev)
+        }
+    }
+
+    /** Modifie un planning existant ; même canal de résultat que l'ajout. */
+    fun updatePlanning(old: Planning, startHour: Int, startMinute: Int, endHour: Int, endMinute: Int, days: Set<Int>) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            val result = repository.updatePlanning(dev, old, startHour, startMinute, endHour, endMinute, days)
+            _addPlanningResult.value = result
+            if (result is CreatePlanningResult.Success) loadPlannings(dev)
+        }
+    }
+
+    /** Réinitialise le résultat d'ajout (à l'ouverture/fermeture du dialogue). */
+    fun clearAddPlanningResult() {
+        _addPlanningResult.value = null
+    }
+
+    fun deletePlanning(planning: Planning) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            repository.deletePlanning(dev, planning)
+            loadPlannings(dev)
+        }
+    }
+
     private suspend fun fetch() {
         val dev = repository.getDevice(deviceId) ?: return
         _status.value = repository.getStatus(dev).toTileStatus()
         if (dev.hasScripting) {
             repository.getPresenceState(dev).getOrNull()?.let { _presenceActive.value = it.running }
         }
+        if (dev.supportsSwitch) loadPlannings(dev)
+    }
+
+    private suspend fun loadPlannings(dev: Device) {
+        repository.getPlannings(dev).getOrNull()?.let { _plannings.value = it }
     }
 }

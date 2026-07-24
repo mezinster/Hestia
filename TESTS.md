@@ -134,7 +134,32 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
       sont supprimées, la taille de l'application ne dérive pas
 - [ ] Aucun ralentissement perceptible de l'interface avec le journal actif
 
-## 9. Thèmes et affichage
+## 9. Planning (composant Schedule)
+
+- [ ] Section « Planning » visible sur le détail d'un appareil commutable, vide au départ
+- [ ] Ajouter un planning (ex. 09:00–17:00, tous les jours) : il apparaît dans la liste
+- [ ] Vérifier côté prise : `curl -s -X POST http://<ip>/rpc -H 'Content-Type: application/json'
+      -d '{"id":1,"method":"Schedule.List"}'` → **2 programmes** (allumage + extinction)
+- [ ] Fermer et rouvrir l'écran : le planning est **relu depuis la prise** (pas mémorisé localement)
+- [ ] Choix de jours précis (ex. Lun–Ven) : correctement affiché et relu
+- [ ] Fin avant début : bouton Valider désactivé, message d'erreur
+- [ ] Aucun jour sélectionné : refusé
+- [ ] **Conflit planning ↔ planning** : un créneau qui chevauche un existant est refusé avec message
+- [ ] **Conflit planning ↔ présence** : refusé si le mode présence est actif
+- [ ] Supprimer un planning : ses **deux** programmes disparaissent de la prise
+- [ ] **Éditer** un planning (tap sur ses horaires) hors créneau : dialogue pré-rempli,
+      la validation remplace les 2 programmes (vérifier au curl : nouveaux horaires, anciens partis)
+- [ ] **Édition bloquée** : taper un planning **en cours** (heure actuelle dans son créneau) →
+      message « Planning en cours », pas de dialogue
+- [ ] **Suppression d'un planning en cours** : le popup ajoute l'avertissement « la prise restera
+      allumée », et après suppression la prise **reste bien allumée**
+- [ ] Édition sans conflit avec soi-même : garder les mêmes horaires en éditant → accepté (pas de
+      faux conflit)
+- [ ] 10 plannings : le bouton d'ajout se grise
+- [ ] Le planning se déclenche réellement à l'heure dite (test avec un créneau proche), et
+      **survit à un débranchement/rebranchement** de la prise
+
+## 10. Thèmes et affichage
 
 - [ ] Thème clair : tous les textes lisibles, aucun contraste douteux
 - [ ] Thème sombre : idem
@@ -144,14 +169,14 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Rotation de l'écran sur tous les écrans : pas de perte d'état
 - [ ] Écran de petite taille (Sony) : grille lisible, boutons atteignables au pouce
 
-## 10. Navigation
+## 11. Navigation
 
 - [ ] Bouton retour système cohérent sur tous les écrans
 - [ ] Quitter un écran avec des modifications non enregistrées : dialogue de confirmation
 - [ ] « Abandonner » quitte sans enregistrer, « Continuer » revient à l'édition
 - [ ] Aucun écran ne peut être atteint sans possibilité de retour
 
-## 11. Avant publication
+## 12. Avant publication
 
 - [ ] `./gradlew lint` sans avertissement bloquant
 - [ ] `./gradlew testDebugUnitTest` au vert

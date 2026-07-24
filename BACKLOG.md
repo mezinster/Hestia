@@ -41,13 +41,29 @@ Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bu
 
 ## Fonctionnalités futures (post-V1)
 
-- **Programmation d'une plage horaire future** (ex. « 2 h de charge de 15 h à 17 h » alors qu'il
-  est 11 h). À faire via le composant **Schedule natif de Shelly** (cron), donc autonome sur
-  l'appareil — fidèle au principe « pas de scheduler côté Android ». Beau candidat pour un lot
-  post-V1 dédié.
-- **Notifications** : fin de minuterie, début/fin de programmation, « charge terminée » (bascule
-  vers une consommation faible, ex. Mac ou scooter). ⚠️ Hors V1 (CLAUDE.md : pas de notifications
-  en V1 ; nécessite la permission notifications + un mécanisme de veille).
+- **Planning — passage par-dessus minuit** (charge de nuit / heures creuses, ex. 22h → 6h). Le
+  planning de journée (fin après début) est fait en 1.1.0 via le composant **Schedule natif**.
+  Le créneau qui traverse minuit reste à traiter : propre pour « tous les jours », ambigu avec
+  des jours précis (la nuit du vendredi déborde sur le week-end) → à concevoir à part.
+- **Planning — indicateur sur la tuile du Tableau** (2ᵉ incrément) : « Planning » + horaires en
+  orange, comme le mode présence. Demande une lecture `Schedule.List` par appareil au relevé.
+- **Coupure automatique sur seuil de conso (« fin de charge »)** ⭐. Un **script déployé sur la
+  prise** (comme la simulation de présence) surveille `apower` et **coupe le relais** quand la
+  puissance reste sous un seuil réglable pendant N minutes. Scooter, vélo, Mac, téléphone : la
+  prise se coupe seule une fois la charge finie. **Fidèle à l'architecture** : autonome sur
+  l'appareil, aucun cloud, aucun composant Android en tâche de fond. Réutilise le mécanisme de
+  génération/déploiement de script déjà en place. Seuil + durée à saisir dans l'app, relus depuis
+  la prise. **Le meilleur candidat des idées « scripts ».**
+- **Notifications** quand la prise passe ON/OFF (fin de minuterie, planning, « charge terminée »).
+  ⚠️ **Tension architecturale à trancher AVANT de s'y lancer.** Hestia n'a **aucun composant en
+  tâche de fond** (WorkManager retiré exprès, cf. permissions F-Droid). Pour notifier un
+  changement d'état, le téléphone devrait **surveiller la prise en arrière-plan** → réintroduire
+  un poller (WorkManager/service au premier plan) + permission `POST_NOTIFICATIONS` + coût
+  batterie : contraire à « pas de scheduler Android, permissions minimales ». L'autre voie
+  (webhook sortant de la prise vers un service push type ntfy) **quitte le réseau local** →
+  contraire à « 100 % local ». C'est **la seule fonctionnalité demandée qui heurte les principes
+  du projet** : à assumer explicitement (opt-in, compromis documenté) ou à écarter. La coupure
+  auto ci-dessus fait déjà **l'action** de façon autonome ; seul le « prévenir » pose problème.
 - **Vérification du firmware de la prise** (via `Shelly.CheckForUpdate`) + notif si mise à jour
   dispo. ⚠️ Nuance à trancher : cette méthode fait **contacter le serveur de Shelly par
   l'appareil** — à confronter au principe « 100 % local » avant de l'implémenter.

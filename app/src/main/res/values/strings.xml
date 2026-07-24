@@ -170,6 +170,9 @@
     <string name="activity_timer_cancelled">Minuteur annulé</string>
     <string name="activity_presence_deployed">Simulation de présence déployée</string>
     <string name="activity_presence_stopped">Simulation de présence arrêtée</string>
+    <string name="activity_planning_added">Planning ajouté</string>
+    <string name="activity_planning_removed">Planning supprimé</string>
+    <string name="activity_planning_modified">Planning modifié</string>
 
     <!-- Simulation de présence (lot 4) -->
     <string name="presence_section">Simulation de présence</string>
@@ -202,6 +205,40 @@
     <string name="conflict_launch_anyway">Lancer quand même</string>
     <string name="conflict_stop_presence">Arrêter la simulation puis lancer</string>
     <string name="conflict_cancel">Annuler</string>
+
+    <!-- Planning (composant Schedule natif de l\'appareil) -->
+    <string name="planning_section">Planning</string>
+    <string name="planning_empty">Aucun planning.</string>
+    <string name="planning_add">Ajouter un planning</string>
+    <string name="planning_limit_reached">Maximum de 10 plannings atteint.</string>
+    <string name="planning_delete">Supprimer le planning</string>
+    <string name="planning_delete_title">Supprimer ce planning ?</string>
+    <string name="planning_delete_message">Le planning %1$s sera retiré de la prise.</string>
+    <string name="planning_delete_confirm">Supprimer</string>
+    <string name="planning_every_day">Tous les jours</string>
+    <string name="planning_dialog_title">Nouveau planning</string>
+    <string name="planning_edit_title">Modifier le planning</string>
+    <string name="planning_edit_blocked_title">Planning en cours</string>
+    <string name="planning_edit_blocked_message">Ce planning est en cours (il a allumé la prise). Modifie-le en dehors de son créneau, ou supprime-le.</string>
+    <string name="planning_delete_active_warning">Ce planning est en cours : la prise restera allumée après la suppression.</string>
+    <string name="planning_ok">Compris</string>
+    <string name="planning_start">Début</string>
+    <string name="planning_end">Fin</string>
+    <string name="planning_days">Jours</string>
+    <string name="planning_all_days">Tous les jours</string>
+    <string name="planning_validate">Valider</string>
+    <string name="planning_error_range">L\'heure de fin doit être après l\'heure de début.</string>
+    <string name="planning_error_no_day">Choisis au moins un jour.</string>
+    <string name="planning_conflict">Ce créneau chevauche un planning existant (%1$s). Modifie l\'un ou l\'autre.</string>
+    <string name="planning_conflict_presence">Le mode présence pilote déjà cette prise. Arrête-le avant d\'ajouter un planning.</string>
+    <string name="planning_error_generic">Impossible d\'enregistrer le planning. Vérifie que la prise répond.</string>
+    <string name="planning_day_mon">Lun</string>
+    <string name="planning_day_tue">Mar</string>
+    <string name="planning_day_wed">Mer</string>
+    <string name="planning_day_thu">Jeu</string>
+    <string name="planning_day_fri">Ven</string>
+    <string name="planning_day_sat">Sam</string>
+    <string name="planning_day_sun">Dim</string>
 
     <!-- Sauvegarde / restauration (lot 5) -->
     <string name="settings_backup_section">Sauvegarde</string>
