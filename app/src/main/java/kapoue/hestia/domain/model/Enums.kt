@@ -12,6 +12,13 @@ enum class DriverType {
     SHELLY_GEN2,
 }
 
+/** Choix de thème de l'application (préférence utilisateur). */
+enum class ThemeMode {
+    SYSTEM,
+    LIGHT,
+    DARK,
+}
+
 /** Nature d'une entrée du journal d'activité (ActivationLog). */
 enum class ActivationAction {
     TURNED_ON,

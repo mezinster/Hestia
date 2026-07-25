@@ -49,7 +49,9 @@
     <string name="settings_permission_not_required">Non requise sur cette version d\'Android</string>
     <string name="settings_permission_open_system">Ouvrir les réglages système de l\'application</string>
     <string name="settings_appearance_section">Apparence</string>
-    <string name="settings_appearance_value">Suit le thème système</string>
+    <string name="settings_theme_system">Suivre le thème système</string>
+    <string name="settings_theme_light">Thème clair</string>
+    <string name="settings_theme_dark">Thème foncé</string>
     <string name="settings_security_section">Sécurité</string>
     <string name="settings_security_password_hint">Mot de passe de l\'appareil</string>
     <string name="settings_security_coming_soon">Disponible prochainement</string>

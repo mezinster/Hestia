@@ -4,9 +4,14 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.core.log.LocalDiagnosticLogger
+import kapoue.hestia.data.prefs.AppPreferences
+import kapoue.hestia.domain.model.ThemeMode
 import kapoue.hestia.ui.HestiaApp
 import kapoue.hestia.ui.theme.HestiaTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -19,11 +24,20 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var diagnosticLogger: DiagnosticLogger
 
+    @Inject
+    lateinit var appPreferences: AppPreferences
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         setContent {
-            HestiaTheme {
+            val themeMode by appPreferences.themeMode.collectAsState()
+            val darkTheme = when (themeMode) {
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+            }
+            HestiaTheme(darkTheme = darkTheme) {
                 CompositionLocalProvider(LocalDiagnosticLogger provides diagnosticLogger) {
                     HestiaApp()
                 }

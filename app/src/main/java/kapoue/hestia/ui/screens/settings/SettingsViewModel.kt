@@ -9,8 +9,10 @@ import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.backup.BackupManager
 import kapoue.hestia.data.backup.ImportResult
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.RpcResult
+import kapoue.hestia.domain.model.ThemeMode
 import kapoue.hestia.ui.common.UserMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,11 +26,16 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val repository: DeviceRepository,
     private val backupManager: BackupManager,
+    private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
 ) : ViewModel() {
 
     val devices: StateFlow<List<Device>> = repository.observeDevices()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val themeMode: StateFlow<ThemeMode> = appPreferences.themeMode
+
+    fun setThemeMode(mode: ThemeMode) = appPreferences.setThemeMode(mode)
 
     /** Connectivité par appareil : null = en cours/inconnu, true = joignable, false = injoignable. */
     private val _connectivity = MutableStateFlow<Map<Long, Boolean?>>(emptyMap())
