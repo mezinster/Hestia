@@ -26,9 +26,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimeInput
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -48,6 +46,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
+import kapoue.hestia.ui.components.TimeWheelPicker
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -169,19 +168,20 @@ private fun TimeField(
         }
     }
     if (showDialog) {
-        val timeState = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = true)
+        var h by remember { mutableStateOf(hour) }
+        var m by remember { mutableStateOf(minute) }
         AlertDialog(
             onDismissRequest = { showDialog = false },
             confirmButton = {
                 TextButton(onClick = {
-                    onChange(timeState.hour, timeState.minute)
+                    onChange(h, m)
                     showDialog = false
                 }) { Text(stringResource(R.string.action_ok)) }
             },
             dismissButton = {
                 TextButton(onClick = { showDialog = false }) { Text(stringResource(R.string.action_cancel)) }
             },
-            text = { TimeInput(state = timeState) },
+            text = { TimeWheelPicker(h, m) { nh, nm -> h = nh; m = nm } },
         )
     }
 }

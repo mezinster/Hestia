@@ -24,7 +24,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -61,12 +65,23 @@ fun DeviceTile(
     onRetry: () -> Unit,
     onGrantPermission: () -> Unit,
     onOpenDetail: () -> Unit,
+    onPlanningWindowEnded: () -> Unit,
 ) {
     val colors = MaterialTheme.stateColors
     // elapsedNow (rafraîchi à la seconde par le parent) force le recalcul du planning en cours
     // au fil du temps, sans attendre le prochain relevé réseau.
     val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
     val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning)
+
+    // Fin de créneau : dès que le planning en cours cesse de l'être, on force un relevé pour
+    // confirmer l'extinction tout de suite (sinon la tuile afficherait le dernier état connu —
+    // « Actif » — pendant quelques secondes avant « Repos »).
+    val inPlanningWindow = activePlanning != null
+    var wasInWindow by remember { mutableStateOf(inPlanningWindow) }
+    LaunchedEffect(inPlanningWindow) {
+        if (wasInWindow && !inPlanningWindow) onPlanningWindowEnded()
+        wasInWindow = inPlanningWindow
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.surface,

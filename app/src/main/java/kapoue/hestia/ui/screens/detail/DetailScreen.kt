@@ -12,9 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,12 +30,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,6 +63,7 @@ import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.components.StatusBadge
+import kapoue.hestia.ui.components.TimeWheelPicker
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.screens.dashboard.TileStatus
 import kotlinx.coroutines.delay
@@ -443,23 +440,20 @@ private fun AddPlanningDialog(
     onValidate: (Int, Int, Int, Int, Set<Int>) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var startH by remember { mutableStateOf(initial?.let { "%02d".format(it.startHour) } ?: "09") }
-    var startM by remember { mutableStateOf(initial?.let { "%02d".format(it.startMinute) } ?: "00") }
-    var endH by remember { mutableStateOf(initial?.let { "%02d".format(it.endHour) } ?: "17") }
-    var endM by remember { mutableStateOf(initial?.let { "%02d".format(it.endMinute) } ?: "00") }
+    var startHour by remember { mutableStateOf(initial?.startHour ?: 9) }
+    var startMinute by remember { mutableStateOf(initial?.startMinute ?: 0) }
+    var endHour by remember { mutableStateOf(initial?.endHour ?: 17) }
+    var endMinute by remember { mutableStateOf(initial?.endMinute ?: 0) }
     // Deux modes exclusifs : « tous les jours » OU une sélection de jours précis. [everyDay]
     // porte l'état propre du chip « Tous les jours » ; [days] les jours précis (mode contraire).
     var everyDay by remember { mutableStateOf(initial?.everyDay ?: true) }
     var days by remember { mutableStateOf(if (initial != null && !initial.everyDay) initial.days else emptySet()) }
     val effectiveDays = if (everyDay) setOf(0, 1, 2, 3, 4, 5, 6) else days
 
-    val sh = startH.toIntOrNull()?.takeIf { it in 0..23 }
-    val sm = startM.toIntOrNull()?.takeIf { it in 0..59 }
-    val eh = endH.toIntOrNull()?.takeIf { it in 0..23 }
-    val em = endM.toIntOrNull()?.takeIf { it in 0..59 }
-    val startMin = if (sh != null && sm != null) sh * 60 + sm else null
-    val endMin = if (eh != null && em != null) eh * 60 + em else null
-    val valid = startMin != null && endMin != null && (everyDay || days.isNotEmpty()) && startMin < endMin
+    val startMin = startHour * 60 + startMinute
+    val endMin = endHour * 60 + endMinute
+    // Début == fin interdit (créneau nul ou de 24 h, ambigu) ; fin < début = créneau de nuit, OK.
+    val valid = (everyDay || days.isNotEmpty()) && startMin != endMin
 
     val errorText: String? = when {
         result is CreatePlanningResult.Conflict -> stringResource(
@@ -473,7 +467,7 @@ private fun AddPlanningDialog(
         result is CreatePlanningResult.LimitReached -> stringResource(R.string.planning_limit_reached)
         result is CreatePlanningResult.Error -> stringResource(R.string.planning_error_generic)
         !everyDay && days.isEmpty() -> stringResource(R.string.planning_error_no_day)
-        startMin != null && endMin != null && startMin >= endMin -> stringResource(R.string.planning_error_range)
+        startMin == endMin -> stringResource(R.string.planning_error_range)
         else -> null
     }
 
@@ -484,8 +478,19 @@ private fun AddPlanningDialog(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                TimeInput(stringResource(R.string.planning_start), startH, startM, { startH = it }, { startM = it })
-                TimeInput(stringResource(R.string.planning_end), endH, endM, { endH = it }, { endM = it })
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.planning_start), style = MaterialTheme.typography.bodyMedium)
+                        TimeWheelPicker(startHour, startMinute) { h, m -> startHour = h; startMinute = m }
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.planning_end), style = MaterialTheme.typography.bodyMedium)
+                        TimeWheelPicker(endHour, endMinute) { h, m -> endHour = h; endMinute = m }
+                    }
+                }
 
                 Text(stringResource(R.string.planning_days), style = MaterialTheme.typography.bodyMedium)
                 // Deux modes exclusifs. « Tous les jours » a son propre état : le taper l'active
@@ -520,39 +525,12 @@ private fun AddPlanningDialog(
         confirmButton = {
             TextButton(
                 enabled = valid,
-                onClick = { onValidate(sh!!, sm!!, eh!!, em!!, effectiveDays) },
+                onClick = { onValidate(startHour, startMinute, endHour, endMinute, effectiveDays) },
             ) { Text(stringResource(R.string.planning_validate)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.conflict_cancel)) }
         },
-    )
-}
-
-@Composable
-private fun TimeInput(
-    label: String,
-    hour: String,
-    minute: String,
-    onHour: (String) -> Unit,
-    onMinute: (String) -> Unit,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(label, modifier = Modifier.width(56.dp), style = MaterialTheme.typography.bodyMedium)
-        NumberField(hour, onHour)
-        Text("  :  ", fontFamily = FontFamily.Monospace)
-        NumberField(minute, onMinute)
-    }
-}
-
-@Composable
-private fun NumberField(value: String, onValue: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = { new -> if (new.length <= 2 && new.all { it.isDigit() }) onValue(new) },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-        modifier = Modifier.width(72.dp),
     )
 }
 

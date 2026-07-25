@@ -46,6 +46,10 @@ Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bu
 
 ## Fonctionnalités futures (post-V1)
 
+- **Authentification de l'appareil (mot de passe Shelly)** à saisir **lors de l'ajout d'un
+  appareil** (écran Nouvel appareil), pas dans Réglages où le champ n'avait pas sa place — il a
+  été retiré. À gérer côté client RPC (digest auth Shelly) + stockage sécurisé.
+
 - **Planning — passage par-dessus minuit** (charge de nuit / heures creuses, ex. 22h → 6h). Le
   planning de journée (fin après début) est fait en 1.1.0 via le composant **Schedule natif**.
   Le créneau qui traverse minuit reste à traiter : propre pour « tous les jours », ambigu avec

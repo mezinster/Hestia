@@ -169,6 +169,7 @@ fun DashboardScreen(
                                 onRetry = { viewModel.retry(tile.device) },
                                 onGrantPermission = { showPermissionDialog = true },
                                 onOpenDetail = { onOpenDetail(tile.device.id) },
+                                onPlanningWindowEnded = { viewModel.refresh(force = true) },
                             )
                         }
                     }

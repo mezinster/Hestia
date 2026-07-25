@@ -31,12 +31,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -103,11 +101,6 @@ fun SettingsScreen(
 
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_settings)) }) },
-        floatingActionButton = {
-            FloatingActionButton(onClick = onAddDevice) {
-                Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.settings_add_device))
-            }
-        },
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
@@ -142,6 +135,15 @@ fun SettingsScreen(
                 }
             }
 
+            // Ajout d'un appareil en fin de liste (comme « Exporter la config »), plutôt qu'un
+            // bouton flottant « + » qui n'avait pas sa place par-dessus le contenu.
+            item {
+                Button(onClick = onAddDevice, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    Text(stringResource(R.string.settings_add_device))
+                }
+            }
+
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { PermissionSection() }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
@@ -153,8 +155,6 @@ fun SettingsScreen(
             }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { AppearanceSection() }
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-            item { SecuritySection() }
         }
     }
 
@@ -336,26 +336,6 @@ private fun AppearanceSection() {
         Text(
             text = stringResource(R.string.settings_appearance_value),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun SecuritySection() {
-    Column {
-        SectionTitle(stringResource(R.string.settings_security_section))
-        // Champ présent mais désactivé : l'authentification appareil est prévue pour un lot ultérieur.
-        OutlinedTextField(
-            value = "",
-            onValueChange = {},
-            enabled = false,
-            label = { Text(stringResource(R.string.settings_security_password_hint)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = stringResource(R.string.settings_security_coming_soon),
-            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }

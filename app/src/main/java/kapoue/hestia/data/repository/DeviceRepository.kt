@@ -24,6 +24,7 @@ import kapoue.hestia.domain.model.ActivationAction
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.isActiveNow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
@@ -237,9 +238,12 @@ class DeviceRepository @Inject constructor(
 
     /**
      * Reconstruit les plannings à partir des programmes cron. On ne retient que les jobs
-     * « Switch.Set » du bon canal, puis on apparie allumage → extinction par jeu de jours
-     * identique. Comme les créneaux ne se chevauchent pas (garanti à la création), le k-ᵉ
-     * allumage d'un jeu de jours correspond au k-ᵉ extinction : l'appariement est sans ambiguïté.
+     * « Switch.Set » du bon canal, puis on apparie chaque allumage à son extinction :
+     * - **créneau de journée** : même jeu de jours, extinction plus tard dans la journée ;
+     * - **créneau de nuit** (passe minuit) : extinction le matin, sur les jours **décalés au
+     *   lendemain** (voir la création). On prend à chaque fois l'extinction la plus proche.
+     * Les créneaux ne se chevauchant pas (garanti à la création), l'appariement reste sans
+     * ambiguïté pour les plannings créés par Hestia.
      */
     private fun reconstructPlannings(jobs: List<ScheduleJob>, switchId: Int): List<Planning> {
         data class Ev(val jobId: Int, val minutes: Int, val on: Boolean, val days: Set<Int>)
@@ -252,17 +256,19 @@ class DeviceRepository @Inject constructor(
             val parsed = ScheduleCodec.parse(job.timespec) ?: return@mapNotNull null
             Ev(job.id, parsed.hour * 60 + parsed.minute, on, parsed.days)
         }
+        val ons = events.filter { it.on }.sortedBy { it.minutes }
+        val offs = events.filterNot { it.on }.toMutableList()
         val plannings = mutableListOf<Planning>()
-        events.groupBy { it.days }.forEach { (days, evs) ->
-            val ons = evs.filter { it.on }.sortedBy { it.minutes }
-            val offs = evs.filterNot { it.on }.sortedBy { it.minutes }
-            for (i in 0 until minOf(ons.size, offs.size)) {
-                plannings += Planning(
-                    startHour = ons[i].minutes / 60, startMinute = ons[i].minutes % 60,
-                    endHour = offs[i].minutes / 60, endMinute = offs[i].minutes % 60,
-                    days = days, onJobId = ons[i].jobId, offJobId = offs[i].jobId,
-                )
-            }
+        for (on in ons) {
+            val match = offs.filter { it.days == on.days && it.minutes > on.minutes }.minByOrNull { it.minutes }
+                ?: offs.filter { it.days == ScheduleCodec.nextDay(on.days) }.minByOrNull { it.minutes }
+                ?: continue
+            offs.remove(match)
+            plannings += Planning(
+                startHour = on.minutes / 60, startMinute = on.minutes % 60,
+                endHour = match.minutes / 60, endMinute = match.minutes % 60,
+                days = on.days, onJobId = on.jobId, offJobId = match.jobId,
+            )
         }
         return plannings.sortedWith(compareBy({ it.startMinutes }, { it.endMinutes }))
     }
@@ -288,19 +294,22 @@ class DeviceRepository @Inject constructor(
 
         val startMin = startHour * 60 + startMinute
         val endMin = endHour * 60 + endMinute
+        val newIntervals = ScheduleCodec.weeklyIntervals(startMin, endMin, days)
         existing.firstOrNull { p ->
-            p.days.intersect(days).isNotEmpty() && startMin < p.endMinutes && p.startMinutes < endMin
+            ScheduleCodec.intervalsOverlap(newIntervals, ScheduleCodec.weeklyIntervals(p.startMinutes, p.endMinutes, p.days))
         }?.let { return CreatePlanningResult.Conflict(it) }
 
         // Présence et planning pilotent tous deux le relais : exclusifs.
-        if (device.hasScripting && getPresenceState(device).getOrNull()?.running == true) {
+        if (device.hasScripting && getPresenceState(device).getOrNull()?.deployed == true) {
             return CreatePlanningResult.PresenceActive
         }
 
+        // Créneau de nuit (fin plus tôt que le début) : l'extinction tombe le lendemain.
+        val offDays = if (endMin < startMin) ScheduleCodec.nextDay(days) else days
         val ip = device.ipAddress
         val onId = rpcClient.scheduleCreate(ip, ScheduleCodec.timespec(startHour, startMinute, days), device.switchId, on = true)
             .getOrNull()?.id ?: return CreatePlanningResult.Error
-        val offId = rpcClient.scheduleCreate(ip, ScheduleCodec.timespec(endHour, endMinute, days), device.switchId, on = false)
+        val offId = rpcClient.scheduleCreate(ip, ScheduleCodec.timespec(endHour, endMinute, offDays), device.switchId, on = false)
             .getOrNull()?.id
         if (offId == null) {
             // Ne pas laisser un allumage orphelin si l'extinction échoue.
@@ -333,17 +342,21 @@ class DeviceRepository @Inject constructor(
         val startMin = startHour * 60 + startMinute
         val endMin = endHour * 60 + endMinute
         // Conflit avec les AUTRES plannings uniquement (on s'exclut soi-même).
+        val newIntervals = ScheduleCodec.weeklyIntervals(startMin, endMin, days)
         existing.filterNot { it.onJobId == old.onJobId && it.offJobId == old.offJobId }
-            .firstOrNull { p -> p.days.intersect(days).isNotEmpty() && startMin < p.endMinutes && p.startMinutes < endMin }
+            .firstOrNull { p ->
+                ScheduleCodec.intervalsOverlap(newIntervals, ScheduleCodec.weeklyIntervals(p.startMinutes, p.endMinutes, p.days))
+            }
             ?.let { return CreatePlanningResult.Conflict(it) }
-        if (device.hasScripting && getPresenceState(device).getOrNull()?.running == true) {
+        if (device.hasScripting && getPresenceState(device).getOrNull()?.deployed == true) {
             return CreatePlanningResult.PresenceActive
         }
 
+        val offDays = if (endMin < startMin) ScheduleCodec.nextDay(days) else days
         val ip = device.ipAddress
         val onId = rpcClient.scheduleCreate(ip, ScheduleCodec.timespec(startHour, startMinute, days), device.switchId, on = true)
             .getOrNull()?.id ?: return CreatePlanningResult.Error
-        val offId = rpcClient.scheduleCreate(ip, ScheduleCodec.timespec(endHour, endMinute, days), device.switchId, on = false)
+        val offId = rpcClient.scheduleCreate(ip, ScheduleCodec.timespec(endHour, endMinute, offDays), device.switchId, on = false)
             .getOrNull()?.id
         if (offId == null) {
             rpcClient.scheduleDelete(ip, onId)
@@ -356,11 +369,19 @@ class DeviceRepository @Inject constructor(
         return CreatePlanningResult.Success
     }
 
-    /** Supprime un planning = ses deux programmes cron. */
+    /**
+     * Supprime un planning = ses deux programmes cron. Si le planning est **en cours** (créneau
+     * actif), on **éteint** la prise dans la foulée : supprimer l'allumeur sans éteindre laisserait
+     * la prise allumée sans extinction prévue.
+     */
     suspend fun deletePlanning(device: Device, planning: Planning): RpcResult<Unit> {
         val ip = device.ipAddress
         rpcClient.scheduleDelete(ip, planning.onJobId).errorOrNull()?.let { return it }
         rpcClient.scheduleDelete(ip, planning.offJobId).errorOrNull()?.let { return it }
+        if (planning.isActiveNow()) {
+            rpcClient.setSwitch(ip, device.switchId, on = false)
+            deviceDao.updateLastKnownOutput(device.id, false)
+        }
         logActivation(
             device.id,
             ActivationAction.PLANNING_REMOVED,

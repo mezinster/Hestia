@@ -81,10 +81,13 @@ class DashboardViewModel @Inject constructor(
      * lecture se termine avant et aucun picto ne clignote ; quand ils ne répondent pas, le
      * picto s'affiche et joue son rôle de « recherche en cours ».
      */
-    fun refresh(userInitiated: Boolean = false) {
-        // Ne pas empiler les cycles de polling ; un tirage manuel relance en priorité.
-        if (!userInitiated && refreshJob?.isActive == true) return
-        if (userInitiated) refreshJob?.cancel()
+    fun refresh(userInitiated: Boolean = false, force: Boolean = false) {
+        // Ne pas empiler les cycles de polling ; un tirage manuel (ou un relevé forcé) relance
+        // en priorité. [force] sert p. ex. à confirmer vite l'extinction en fin de créneau de
+        // planning, sans afficher le spinner immédiatement (indicateur temporisé comme un cycle
+        // automatique).
+        if (!userInitiated && !force && refreshJob?.isActive == true) return
+        if (userInitiated || force) refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
             val devices = repository.getDevicesOnce()
             if (!permissionUsable) {

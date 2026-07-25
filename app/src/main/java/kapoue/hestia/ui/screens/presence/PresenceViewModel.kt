@@ -111,7 +111,8 @@ class PresenceViewModel @Inject constructor(
         val startTotal = s.startHour * 60 + s.startMinute
         val endTotal = s.endHour * 60 + s.endMinute
         when {
-            endTotal <= startTotal ->
+            // Début == fin interdit ; fin < début = plage de nuit (22h -> 6h), autorisée.
+            endTotal == startTotal ->
                 return _uiState.update { it.copy(error = UserMessage(R.string.presence_error_end_before_start)) }
             s.marginMinutes !in 0..120 ->
                 return _uiState.update { it.copy(error = UserMessage(R.string.presence_error_margin)) }
@@ -119,6 +120,11 @@ class PresenceViewModel @Inject constructor(
         _uiState.update { it.copy(isBusy = true, error = null) }
         viewModelScope.launch {
             val device = repository.getDevice(deviceId) ?: return@launch
+            // Présence et planning s'excluent : refuser si un planning existe déjà sur la prise.
+            if (repository.getPlannings(device).getOrNull().orEmpty().isNotEmpty()) {
+                _uiState.update { it.copy(isBusy = false, error = UserMessage(R.string.presence_error_planning_exists)) }
+                return@launch
+            }
             val result = repository.deployPresence(device, s.startHour, s.startMinute, s.endHour, s.endMinute, s.marginMinutes)
             if (result is RpcResult.Success) {
                 _uiState.update { it.copy(isBusy = false, deployed = true) }

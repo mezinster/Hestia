@@ -49,4 +49,30 @@ object ScheduleCodec {
     }
 
     data class Parsed(val hour: Int, val minute: Int, val days: Set<Int>)
+
+    /** Jours décalés au lendemain (pour l'extinction d'un créneau qui passe minuit). */
+    fun nextDay(days: Set<Int>): Set<Int> = days.map { (it + 1) % 7 }.toSet()
+
+    private const val WEEK = 7 * 1440 // minutes dans une semaine
+
+    /**
+     * Développe un créneau en intervalles [début, fin) sur une semaine (minutes 0..10080), un par
+     * jour actif. Un créneau qui passe minuit (fin < début) s'étend sur le jour suivant et est
+     * découpé à la frontière de la semaine. Permet un test de chevauchement uniforme jour/nuit.
+     */
+    fun weeklyIntervals(startMin: Int, endMin: Int, days: Set<Int>): List<Pair<Int, Int>> {
+        val overnight = endMin < startMin
+        val out = mutableListOf<Pair<Int, Int>>()
+        for (d in days) {
+            val base = d * 1440
+            val s = base + startMin
+            val e = if (overnight) base + 1440 + endMin else base + endMin
+            if (e <= WEEK) out += s to e else { out += s to WEEK; out += 0 to (e - WEEK) }
+        }
+        return out
+    }
+
+    /** Vrai si deux ensembles d'intervalles hebdomadaires se recouvrent. */
+    fun intervalsOverlap(a: List<Pair<Int, Int>>, b: List<Pair<Int, Int>>): Boolean =
+        a.any { (aStart, aEnd) -> b.any { (bStart, bEnd) -> aStart < bEnd && bStart < aEnd } }
 }

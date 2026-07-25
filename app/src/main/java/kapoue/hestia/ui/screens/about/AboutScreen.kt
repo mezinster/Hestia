@@ -115,23 +115,20 @@ fun AboutScreen() {
             textAlign = TextAlign.Center,
         )
 
-        // Licence
+        // Licence : le lien « (en savoir plus) » passe à la ligne, juste sous le texte.
         Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.about_license_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         Text(stringResource(R.string.about_license), style = MaterialTheme.typography.bodyMedium)
-        TextButton(onClick = { context.openUrl(gplUrl) }) {
-            Text(stringResource(R.string.about_license_link))
-        }
+        Text(
+            text = stringResource(R.string.about_license_link),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { context.openUrl(gplUrl) },
+        )
 
-        // Partage : le QR code pointe vers la fiche F-Droid de l'application. Un titre et une
-        // phrase disent à quoi il sert ; la légende sous le code n'explique que le geste.
+        // Partage : le QR code pointe vers la fiche F-Droid de l'application.
         Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.about_share_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-        Text(
-            text = stringResource(R.string.about_share),
-            style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center,
-        )
         Spacer(Modifier.height(12.dp))
         Surface(
             color = androidx.compose.ui.graphics.Color.White,
@@ -152,7 +149,7 @@ fun AboutScreen() {
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            text = stringResource(R.string.about_qr_hint),
+            text = stringResource(if (brightBoosted) R.string.about_qr_hint_max else R.string.about_qr_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

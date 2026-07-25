@@ -37,7 +37,16 @@ fun Planning.isActiveNow(): Boolean {
     val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
     val dow = LocalDate.now().dayOfWeek.value // 1 = lundi … 7 = dimanche
     val cronDay = if (dow == 7) 0 else dow // cron : 0 = dimanche … 6 = samedi
-    return cronDay in days && nowMin >= startMinutes && nowMin < endMinutes
+    return if (endMinutes > startMinutes) {
+        // Créneau de journée.
+        cronDay in days && nowMin >= startMinutes && nowMin < endMinutes
+    } else {
+        // Créneau à cheval sur minuit : la soirée (jour de début) ou le matin (lendemain).
+        val evening = cronDay in days && nowMin >= startMinutes
+        val yesterday = (cronDay + 6) % 7
+        val morning = yesterday in days && nowMin < endMinutes
+        evening || morning
+    }
 }
 
 /** Issue d'une tentative de création de planning (contrôle de conflit inclus). */

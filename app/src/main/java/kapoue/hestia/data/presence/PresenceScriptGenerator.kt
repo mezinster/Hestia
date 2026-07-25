@@ -26,6 +26,8 @@ object PresenceScriptGenerator {
             // Généré par Hestia — simulation de présence
             // Plage ${"%02d".format(startHour)}:${"%02d".format(startMinute)} -> ${"%02d".format(endHour)}:${"%02d".format(endMinute)}, marge aléatoire +/- $marginMinutes min
             let CFG = { startMin: $startMin, endMin: $endMin, marginMin: $marginMinutes, switchId: $switchId };
+            // Fenêtre à cheval sur minuit quand la fin est plus tôt que le début (ex. 22h -> 6h).
+            let overnight = CFG.startMin > CFG.endMin;
             let planned = { onAt: null, offAt: null, day: null };
 
             function rnd(m) { return Math.floor(Math.random() * (2 * m + 1)) - m; }
@@ -45,7 +47,9 @@ object PresenceScriptGenerator {
               if (planned.day !== day) planDay(day);
               let st = Shelly.getComponentStatus("switch", CFG.switchId);
               if (!st) return;
-              let inWindow = now >= planned.onAt && now < planned.offAt;
+              let inWindow = overnight
+                ? (now >= planned.onAt || now < planned.offAt)
+                : (now >= planned.onAt && now < planned.offAt);
               if (inWindow && !st.output) Shelly.call("Switch.Set", { id: CFG.switchId, on: true });
               if (!inWindow && st.output) Shelly.call("Switch.Set", { id: CFG.switchId, on: false });
             });
