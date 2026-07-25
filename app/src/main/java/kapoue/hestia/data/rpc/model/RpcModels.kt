@@ -96,6 +96,13 @@ data class ScriptListResult(
     val scripts: List<ScriptEntry> = emptyList(),
 )
 
+/** Réponse de Script.GetCode : le code source du script (pour relire la config embarquée). */
+@Serializable
+data class ScriptGetCodeResult(
+    val data: String = "",
+    val left: Int = 0,
+)
+
 @Serializable
 data class ScriptEntry(
     val id: Int,

@@ -11,6 +11,7 @@ import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.isActiveNow
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -177,10 +178,10 @@ class DashboardViewModel @Inject constructor(
      * l'appareil ; les horaires viennent du cache local (ils n'ont d'intérêt qu'affichés).
      */
     private suspend fun loadPresence(device: Device): PresenceInfo? {
-        val state = repository.getPresenceState(device).getOrNull() ?: return null
-        if (!state.running) return null
-        val config = repository.getPresenceConfig(device.id) ?: return null
-        return PresenceInfo(config.startHour, config.startMinute, config.endHour, config.endMinute)
+        // Plages lues depuis la prise (jamais supposées) ; on affiche celle en cours, s'il y en a.
+        val windows = repository.getPresenceWindows(device).getOrNull().orEmpty()
+        val active = windows.firstOrNull { it.isActiveNow() } ?: return null
+        return PresenceInfo(active.startHour, active.startMinute, active.endHour, active.endMinute)
     }
 
     /**

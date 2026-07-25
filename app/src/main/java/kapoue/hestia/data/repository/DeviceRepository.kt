@@ -24,6 +24,7 @@ import kapoue.hestia.domain.model.ActivationAction
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.PresenceWindow
 import kapoue.hestia.domain.model.isActiveNow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.booleanOrNull
@@ -155,26 +156,31 @@ class DeviceRepository @Inject constructor(
             is RpcResult.Failure -> r
         }
 
-    /**
-     * Génère, pousse et démarre le script de présence. Décision A : neutralise d'abord un
-     * `auto_off` qui aurait été posé **hors d'Hestia**, pour que le script soit seul maître du
-     * relais. Réutilise un script `hestia_presence` existant, ne touche jamais un script d'un
-     * autre nom.
-     */
-    suspend fun deployPresence(
-        device: Device,
-        startHour: Int,
-        startMinute: Int,
-        endHour: Int,
-        endMinute: Int,
-        marginMinutes: Int,
-    ): RpcResult<Unit> {
+    /** Lit les plages de présence réellement embarquées dans le script (jamais supposées). */
+    suspend fun getPresenceWindows(device: Device): RpcResult<List<PresenceWindow>> {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(emptyList())
         val ip = device.ipAddress
-        // 1. Neutraliser un auto_off posé hors d'Hestia (interface web native, ancienne version) :
-        //    il rentrerait en conflit avec les allumages pilotés par le script.
+        val list = rpcClient.scriptList(ip)
+        list.errorOrNull()?.let { return it }
+        val entry = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
+            ?: return RpcResult.Success(emptyList())
+        return when (val code = rpcClient.scriptGetCode(ip, entry.id)) {
+            is RpcResult.Success -> RpcResult.Success(PresenceScriptGenerator.parse(code.value.data).orEmpty())
+            is RpcResult.RpcError -> code
+            is RpcResult.Failure -> code
+        }
+    }
+
+    /**
+     * Déploie **l'ensemble des plages** de présence dans un unique script `hestia_presence`.
+     * Liste vide → arrête et supprime le script. Neutralise d'abord un `auto_off` posé hors
+     * d'Hestia. La configuration voyage dans le script (relisible), Hestia ne stocke rien.
+     */
+    suspend fun setPresenceWindows(device: Device, windows: List<PresenceWindow>): RpcResult<Unit> {
+        if (windows.isEmpty()) return stopPresence(device)
+        val ip = device.ipAddress
         rpcClient.clearAutoOff(ip, device.switchId).errorOrNull()?.let { return it }
 
-        // 2. Réutiliser le script hestia_presence s'il existe, sinon le créer.
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
         val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
@@ -184,24 +190,11 @@ class DeviceRepository @Inject constructor(
             create.getOrNull()!!.id
         }
 
-        // 3. Arrêter (au cas où) puis pousser le code, activer, démarrer.
         rpcClient.scriptStop(ip, scriptId)
-        val code = PresenceScriptGenerator.generate(startHour, startMinute, endHour, endMinute, marginMinutes, device.switchId)
+        val code = PresenceScriptGenerator.generate(windows, device.switchId)
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
         rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
-
-        // 4. Cache local + journal.
-        val existingConfig = presenceConfigDao.getForDevice(device.id)
-        presenceConfigDao.upsert(
-            (existingConfig ?: PresenceConfig(deviceId = device.id, startHour = startHour, startMinute = startMinute, endHour = endHour, endMinute = endMinute))
-                .copy(
-                    startHour = startHour, startMinute = startMinute,
-                    endHour = endHour, endMinute = endMinute,
-                    randomMarginMinutes = marginMinutes,
-                    shellyScriptId = scriptId, enabled = true,
-                ),
-        )
         logActivation(device.id, ActivationAction.PRESENCE_DEPLOYED)
         return RpcResult.Success(Unit)
     }
@@ -216,11 +209,23 @@ class DeviceRepository @Inject constructor(
             rpcClient.scriptStop(ip, entry.id)
             rpcClient.scriptDelete(ip, entry.id).errorOrNull()?.let { return it }
         }
-        presenceConfigDao.getForDevice(device.id)?.let {
-            presenceConfigDao.upsert(it.copy(enabled = false, shellyScriptId = null))
-        }
         logActivation(device.id, ActivationAction.PRESENCE_STOPPED)
         return RpcResult.Success(Unit)
+    }
+
+    /** Vrai si des intervalles hebdomadaires chevauchent une plage de présence de l'appareil. */
+    private suspend fun overlapsPresence(device: Device, intervals: List<Pair<Int, Int>>): Boolean {
+        val windows = getPresenceWindows(device).getOrNull().orEmpty()
+        return windows.any { w ->
+            ScheduleCodec.intervalsOverlap(intervals, ScheduleCodec.weeklyIntervals(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS))
+        }
+    }
+
+    /** Vrai si une plage de présence chevauche un planning existant (pour bloquer son ajout). */
+    suspend fun presenceConflictsWithPlanning(device: Device, window: PresenceWindow): Boolean {
+        val plannings = getPlannings(device).getOrNull().orEmpty()
+        val wIv = ScheduleCodec.weeklyIntervals(window.startMinutes, window.endMinutes, ScheduleCodec.ALL_DAYS)
+        return plannings.any { ScheduleCodec.intervalsOverlap(wIv, ScheduleCodec.weeklyIntervals(it.startMinutes, it.endMinutes, it.days)) }
     }
 
     // --- Planning (composant Schedule natif de l'appareil) ---
@@ -299,9 +304,10 @@ class DeviceRepository @Inject constructor(
             ScheduleCodec.intervalsOverlap(newIntervals, ScheduleCodec.weeklyIntervals(p.startMinutes, p.endMinutes, p.days))
         }?.let { return CreatePlanningResult.Conflict(it) }
 
-        // Présence et planning pilotent tous deux le relais : exclusifs.
-        if (device.hasScripting && getPresenceState(device).getOrNull()?.deployed == true) {
-            return CreatePlanningResult.PresenceActive
+        // Coexistence présence/planning autorisée, mais pas de chevauchement horaire (le planning,
+        // horaire fixe, ne doit pas être contredit par une plage de présence sur le même créneau).
+        if (device.hasScripting && overlapsPresence(device, newIntervals)) {
+            return CreatePlanningResult.PresenceOverlap
         }
 
         // Créneau de nuit (fin plus tôt que le début) : l'extinction tombe le lendemain.
@@ -348,8 +354,8 @@ class DeviceRepository @Inject constructor(
                 ScheduleCodec.intervalsOverlap(newIntervals, ScheduleCodec.weeklyIntervals(p.startMinutes, p.endMinutes, p.days))
             }
             ?.let { return CreatePlanningResult.Conflict(it) }
-        if (device.hasScripting && getPresenceState(device).getOrNull()?.deployed == true) {
-            return CreatePlanningResult.PresenceActive
+        if (device.hasScripting && overlapsPresence(device, newIntervals)) {
+            return CreatePlanningResult.PresenceOverlap
         }
 
         val offDays = if (endMin < startMin) ScheduleCodec.nextDay(days) else days

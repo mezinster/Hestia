@@ -7,9 +7,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kapoue.hestia.data.local.entity.ActivationLog
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.PresenceOpResult
+import kapoue.hestia.domain.model.PresenceWindow
+import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.navigation.StackedRoutes
 import kapoue.hestia.ui.screens.dashboard.TileStatus
 import kapoue.hestia.ui.screens.dashboard.toTileStatus
@@ -41,6 +45,14 @@ class DetailViewModel @Inject constructor(
     /** Simulation de présence réellement active (pour la gestion du conflit avec le minuteur). */
     private val _presenceActive = MutableStateFlow(false)
     val presenceActive: StateFlow<Boolean> = _presenceActive.asStateFlow()
+
+    /** Plages de présence réellement embarquées dans le script, relues après chaque modification. */
+    private val _presenceWindows = MutableStateFlow<List<PresenceWindow>>(emptyList())
+    val presenceWindows: StateFlow<List<PresenceWindow>> = _presenceWindows.asStateFlow()
+
+    /** Résultat de la dernière tentative d'ajout/édition de plage présence (conflit…). */
+    private val _addPresenceResult = MutableStateFlow<PresenceOpResult?>(null)
+    val addPresenceResult: StateFlow<PresenceOpResult?> = _addPresenceResult.asStateFlow()
 
     /** Plannings réellement présents sur l'appareil, relus après chaque modification. */
     private val _plannings = MutableStateFlow<List<Planning>>(emptyList())
@@ -88,6 +100,7 @@ class DetailViewModel @Inject constructor(
             val dev = repository.getDevice(deviceId) ?: return@launch
             repository.stopPresence(dev)
             _presenceActive.value = false
+            _presenceWindows.value = emptyList()
             repository.startTimer(dev, seconds, detail)
             fetch()
         }
@@ -126,16 +139,64 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /** Ajoute une plage de présence ; refusée si elle chevauche un planning. */
+    fun addPresenceWindow(window: PresenceWindow) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            if (repository.presenceConflictsWithPlanning(dev, window)) {
+                _addPresenceResult.value = PresenceOpResult.PlanningOverlap
+                return@launch
+            }
+            applyPresence(dev, _presenceWindows.value + window)
+        }
+    }
+
+    fun updatePresenceWindow(old: PresenceWindow, new: PresenceWindow) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            if (repository.presenceConflictsWithPlanning(dev, new)) {
+                _addPresenceResult.value = PresenceOpResult.PlanningOverlap
+                return@launch
+            }
+            applyPresence(dev, _presenceWindows.value.map { if (it == old) new else it })
+        }
+    }
+
+    private suspend fun applyPresence(dev: Device, windows: List<PresenceWindow>) {
+        val result = repository.setPresenceWindows(dev, windows)
+        _addPresenceResult.value = if (result is RpcResult.Success) PresenceOpResult.Success else PresenceOpResult.Error
+        if (result is RpcResult.Success) loadPresence(dev)
+    }
+
+    fun clearAddPresenceResult() {
+        _addPresenceResult.value = null
+    }
+
+    /** Supprime une plage ; si elle est en cours, éteint la prise dans la foulée. */
+    fun deletePresenceWindow(window: PresenceWindow) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            repository.setPresenceWindows(dev, _presenceWindows.value - window)
+            if (window.isActiveNow()) repository.userToggle(dev, false)
+            loadPresence(dev)
+            fetch()
+        }
+    }
+
     private suspend fun fetch() {
         val dev = repository.getDevice(deviceId) ?: return
         _status.value = repository.getStatus(dev).toTileStatus()
-        if (dev.hasScripting) {
-            repository.getPresenceState(dev).getOrNull()?.let { _presenceActive.value = it.running }
-        }
+        if (dev.hasScripting) loadPresence(dev)
         if (dev.supportsSwitch) loadPlannings(dev)
     }
 
     private suspend fun loadPlannings(dev: Device) {
         repository.getPlannings(dev).getOrNull()?.let { _plannings.value = it }
+    }
+
+    private suspend fun loadPresence(dev: Device) {
+        val windows = repository.getPresenceWindows(dev).getOrNull().orEmpty()
+        _presenceWindows.value = windows
+        _presenceActive.value = windows.isNotEmpty()
     }
 }

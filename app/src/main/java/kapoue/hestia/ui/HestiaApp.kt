@@ -28,7 +28,6 @@ import kapoue.hestia.ui.screens.about.AboutScreen
 import kapoue.hestia.ui.screens.dashboard.DashboardScreen
 import kapoue.hestia.ui.screens.detail.DetailScreen
 import kapoue.hestia.ui.screens.device.AddEditDeviceScreen
-import kapoue.hestia.ui.screens.presence.PresenceScreen
 import kapoue.hestia.ui.screens.settings.SettingsScreen
 
 /** Coquille de l'application : barre de navigation basse à 3 onglets + graphe de navigation. */
@@ -125,21 +124,10 @@ fun HestiaApp() {
                 arguments = listOf(
                     navArgument(StackedRoutes.DETAIL_ARG_ID) { type = NavType.LongType },
                 ),
-            ) { entry ->
-                val deviceId = entry.arguments?.getLong(StackedRoutes.DETAIL_ARG_ID) ?: 0L
+            ) {
                 DetailScreen(
                     onBack = { navController.popBackStack() },
-                    onOpenPresence = { navController.navigate(StackedRoutes.presence(deviceId)) },
                 )
-            }
-
-            composable(
-                route = StackedRoutes.PRESENCE_PATTERN,
-                arguments = listOf(
-                    navArgument(StackedRoutes.PRESENCE_ARG_ID) { type = NavType.LongType },
-                ),
-            ) {
-                PresenceScreen(onBack = { navController.popBackStack() })
             }
         }
     }

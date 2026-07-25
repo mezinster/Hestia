@@ -179,6 +179,17 @@
 
     <!-- Simulation de présence (lot 4) -->
     <string name="presence_section">Simulation de présence</string>
+    <string name="presence_add">Ajouter une plage</string>
+    <string name="presence_empty">Aucune plage.</string>
+    <string name="presence_delete">Supprimer la plage</string>
+    <string name="presence_dialog_title">Nouvelle plage</string>
+    <string name="presence_edit_title">Modifier la plage</string>
+    <string name="presence_margin">Marge aléatoire</string>
+    <string name="presence_margin_value">± %1$d min</string>
+    <string name="presence_conflict_planning">Ce créneau chevauche un planning. Choisis un autre horaire.</string>
+    <string name="presence_delete_title">Supprimer cette plage ?</string>
+    <string name="presence_delete_message">La plage %1$s sera retirée.</string>
+    <string name="presence_delete_active_warning">Cette plage est en cours : sa suppression éteindra la prise.</string>
     <string name="presence_configure">Configurer</string>
     <string name="presence_state_active">Active</string>
     <string name="presence_state_inactive">Inactive</string>
@@ -186,7 +197,6 @@
     <string name="presence_intro">Hestia génère un script qui allume et éteint l\'appareil dans la plage horaire choisie, avec une marge aléatoire. Une fois déployé, il s\'exécute seul sur l\'appareil, même téléphone éteint.</string>
     <string name="presence_start_time">Heure de début</string>
     <string name="presence_end_time">Heure de fin</string>
-    <string name="presence_margin">Marge aléatoire (minutes)</string>
     <string name="presence_deploy">Déployer sur l\'appareil</string>
     <string name="presence_stop">Arrêter la simulation</string>
     <string name="presence_deploying">Déploiement…</string>
@@ -234,7 +244,7 @@
     <string name="planning_error_range">Le début et la fin doivent être différents.</string>
     <string name="planning_error_no_day">Choisis au moins un jour.</string>
     <string name="planning_conflict">Ce créneau chevauche un planning existant (%1$s). Modifie l\'un ou l\'autre.</string>
-    <string name="planning_conflict_presence">Le mode Présence pilote déjà cette prise. Arrête-le avant d\'ajouter un planning.</string>
+    <string name="planning_conflict_presence">Ce créneau chevauche une plage de simulation de présence. Choisis un autre horaire.</string>
     <string name="planning_error_generic">Impossible d\'enregistrer le planning. Vérifie que la prise répond.</string>
     <string name="planning_day_mon">Lun</string>
     <string name="planning_day_tue">Mar</string>

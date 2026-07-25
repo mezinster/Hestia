@@ -56,8 +56,8 @@ sealed interface CreatePlanningResult {
     /** Chevauche un planning existant, dont on renvoie les bornes pour le message. */
     data class Conflict(val existing: Planning) : CreatePlanningResult
 
-    /** Une simulation de présence pilote déjà le relais (exclusive avec un planning). */
-    data object PresenceActive : CreatePlanningResult
+    /** Le créneau chevauche une plage de simulation de présence. */
+    data object PresenceOverlap : CreatePlanningResult
 
     /** Le nombre maximum de plannings par appareil est atteint. */
     data object LimitReached : CreatePlanningResult

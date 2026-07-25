@@ -9,6 +9,7 @@ import kapoue.hestia.data.rpc.model.ScheduleCreateResult
 import kapoue.hestia.data.rpc.model.ScheduleDeleteResult
 import kapoue.hestia.data.rpc.model.ScheduleListResult
 import kapoue.hestia.data.rpc.model.ScriptCreateResult
+import kapoue.hestia.data.rpc.model.ScriptGetCodeResult
 import kapoue.hestia.data.rpc.model.ScriptListResult
 import kapoue.hestia.data.rpc.model.ScriptPutCodeResult
 import kapoue.hestia.data.rpc.model.ScriptRunResult
@@ -126,6 +127,9 @@ class ShellyRpcClient @Inject constructor(
 
     suspend fun scriptCreate(ip: String, name: String): RpcResult<ScriptCreateResult> =
         call(ip, "Script.Create", buildJsonObject { put("name", name) }, ScriptCreateResult.serializer())
+
+    suspend fun scriptGetCode(ip: String, id: Int): RpcResult<ScriptGetCodeResult> =
+        call(ip, "Script.GetCode", buildJsonObject { put("id", id) }, ScriptGetCodeResult.serializer())
 
     suspend fun scriptPutCode(ip: String, id: Int, code: String): RpcResult<ScriptPutCodeResult> =
         call(
