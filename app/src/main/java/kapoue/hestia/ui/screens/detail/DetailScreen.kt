@@ -115,10 +115,11 @@ fun DetailScreen(
         }
     }
     // Minuteur en attente de résolution du conflit avec la simulation de présence.
-    var pendingTimer by remember { mutableStateOf<Pair<Int, String>?>(null) }
+    var pendingTimer by remember { mutableStateOf<PendingTimer?>(null) }
 
-    fun requestStartTimer(seconds: Int, label: String) {
-        if (presenceActive) pendingTimer = seconds to label else viewModel.startTimer(seconds, label)
+    fun requestStartTimer(seconds: Int, label: String, thresholdW: Int? = null) {
+        if (presenceActive) pendingTimer = PendingTimer(seconds, label, thresholdW)
+        else viewModel.startTimer(seconds, label, thresholdW)
     }
 
     var elapsedNow by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
@@ -213,23 +214,24 @@ fun DetailScreen(
 
     if (showSheet) {
         DurationPickerSheet(
+            hasPowerMetering = device?.hasPowerMetering ?: false,
             onDismiss = { showSheet = false },
-            onConfirm = { seconds, label ->
+            onConfirm = { seconds, label, thresholdW ->
                 showSheet = false
-                requestStartTimer(seconds, label)
+                requestStartTimer(seconds, label, thresholdW)
             },
         )
     }
 
-    pendingTimer?.let { (seconds, label) ->
+    pendingTimer?.let { pt ->
         ConflictDialog(
             onCancel = { pendingTimer = null },
             onLaunchAnyway = {
-                viewModel.startTimer(seconds, label)
+                viewModel.startTimer(pt.seconds, pt.label, pt.thresholdW)
                 pendingTimer = null
             },
             onStopPresence = {
-                viewModel.stopPresenceThenStartTimer(seconds, label)
+                viewModel.stopPresenceThenStartTimer(pt.seconds, pt.label, pt.thresholdW)
                 pendingTimer = null
             },
         )
@@ -477,6 +479,9 @@ private fun AddPresenceDialog(
         },
     )
 }
+
+/** Minuteur en attente de résolution du conflit présence (durée, libellé, seuil de coupure). */
+private data class PendingTimer(val seconds: Int, val label: String, val thresholdW: Int?)
 
 @Composable
 private fun ConflictDialog(

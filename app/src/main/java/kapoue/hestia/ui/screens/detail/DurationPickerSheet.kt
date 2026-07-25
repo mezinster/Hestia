@@ -1,14 +1,19 @@
 package kapoue.hestia.ui.screens.detail
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -16,27 +21,33 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
 import kapoue.hestia.ui.components.TimeWheelPicker
 
 /**
- * Sélecteur de durée « Perso » en bottom sheet (version simple : deux champs heures/minutes).
- * La métaphore des rouleaux crantés viendra en finition ; ici on valide le fonctionnement.
+ * Sélecteur de durée « Perso » en bottom sheet : molette heures/minutes. La durée n'est plus
+ * répétée en texte (on la lit dans la molette). Sur les prises qui mesurent la consommation, une
+ * option de **coupure sur seuil** permet d'arrêter avant la fin si la conso reste basse.
  * Durée minimale : 1 minute.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DurationPickerSheet(
+    hasPowerMetering: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: (seconds: Int, label: String) -> Unit,
+    onConfirm: (seconds: Int, label: String, thresholdW: Int?) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
     var hours by remember { mutableStateOf(0) }
     var minutes by remember { mutableStateOf(30) }
     var showError by remember { mutableStateOf(false) }
+    var cutoffEnabled by remember { mutableStateOf(false) }
+    var thresholdText by remember { mutableStateOf("5") }
 
     val totalSeconds = hours * 3600 + minutes * 60
     val label = durationLabel(totalSeconds)
@@ -57,12 +68,35 @@ fun DurationPickerSheet(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 TimeWheelPicker(hours, minutes) { h, m -> hours = h; minutes = m; showError = false }
             }
-            // Durée résultante affichée en monospace.
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleLarge,
-                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
-            )
+
+            // Coupure sur seuil de consommation (uniquement si la prise mesure la puissance).
+            if (hasPowerMetering) {
+                // Toute la ligne (case + texte) bascule la coche.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { cutoffEnabled = !cutoffEnabled },
+                ) {
+                    Checkbox(checked = cutoffEnabled, onCheckedChange = null)
+                    Text(stringResource(R.string.timer_cutoff_label), style = MaterialTheme.typography.bodyMedium)
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(start = 12.dp),
+                ) {
+                    OutlinedTextField(
+                        value = thresholdText,
+                        onValueChange = { thresholdText = it.filter(Char::isDigit).take(4) },
+                        enabled = cutoffEnabled,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.width(100.dp),
+                    )
+                    Text(" Watts", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+
             if (showError) {
                 Text(
                     text = stringResource(R.string.duration_picker_min_error),
@@ -72,7 +106,12 @@ fun DurationPickerSheet(
             }
             Button(
                 onClick = {
-                    if (totalSeconds < 60) showError = true else onConfirm(totalSeconds, label)
+                    if (totalSeconds < 60) {
+                        showError = true
+                    } else {
+                        val thresholdW = if (cutoffEnabled) (thresholdText.toIntOrNull()?.coerceAtLeast(1) ?: 5) else null
+                        onConfirm(totalSeconds, label, thresholdW)
+                    }
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {

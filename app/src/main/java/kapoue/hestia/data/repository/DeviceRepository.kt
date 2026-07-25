@@ -7,6 +7,7 @@ import kapoue.hestia.data.local.dao.PresenceConfigDao
 import kapoue.hestia.data.local.entity.ActivationLog
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PresenceConfig
+import kapoue.hestia.data.presence.ChargeScriptGenerator
 import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
 import kapoue.hestia.data.presence.PresenceState
@@ -111,13 +112,46 @@ class DeviceRepository @Inject constructor(
         }
 
     /**
-     * Annule le minuteur en **éteignant le canal**. Annuler = ne plus laisser passer le courant.
-     *
-     * Un seul appel suffit : éteindre le canal annule d'office le `toggle_after` en cours, et il
-     * n'y a plus aucune configuration à défaire côté appareil.
+     * Comme [startTimer] (minuteur natif + compte à rebours), mais déploie en plus un script de
+     * **coupure sur seuil de consommation** : la prise se coupe avant la fin si `apower` reste sous
+     * [thresholdW] pendant 60 s. Réservé aux prises qui mesurent la puissance.
      */
-    suspend fun cancelTimer(device: Device): RpcResult<Unit> =
-        when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = false)) {
+    suspend fun startChargeTimer(device: Device, seconds: Int, thresholdW: Int, detail: String?): RpcResult<Unit> {
+        val ip = device.ipAddress
+        // 1. Minuteur natif (durée max + compte à rebours).
+        rpcClient.setSwitch(ip, device.switchId, on = true, toggleAfterSec = seconds).errorOrNull()?.let { return it }
+
+        // 2. Script de coupure conso, réutilisé ou créé.
+        val list = rpcClient.scriptList(ip)
+        list.errorOrNull()?.let { return it }
+        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }
+        val scriptId = existing?.id ?: run {
+            val create = rpcClient.scriptCreate(ip, ChargeScriptGenerator.SCRIPT_NAME)
+            create.errorOrNull()?.let { return it }
+            create.getOrNull()!!.id
+        }
+        rpcClient.scriptStop(ip, scriptId)
+        val code = ChargeScriptGenerator.generate(device.switchId, thresholdW, belowSec = 60, selfId = scriptId)
+        rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
+        rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
+        rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
+
+        deviceDao.updateLastKnownOutput(device.id, true)
+        logActivation(device.id, ActivationAction.TIMER_STARTED, detail)
+        return RpcResult.Success(Unit)
+    }
+
+    /**
+     * Annule le minuteur en **éteignant le canal** (ce qui annule le `toggle_after`), et supprime
+     * un éventuel script de coupure conso resté actif.
+     */
+    suspend fun cancelTimer(device: Device): RpcResult<Unit> {
+        val ip = device.ipAddress
+        rpcClient.scriptList(ip).getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }?.let {
+            rpcClient.scriptStop(ip, it.id)
+            rpcClient.scriptDelete(ip, it.id)
+        }
+        return when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = false)) {
             is RpcResult.Success -> {
                 deviceDao.updateLastKnownOutput(device.id, false)
                 logActivation(device.id, ActivationAction.TIMER_CANCELLED)
@@ -126,6 +160,7 @@ class DeviceRepository @Inject constructor(
             is RpcResult.RpcError -> set
             is RpcResult.Failure -> set
         }
+    }
 
     // --- Simulation de présence ---
 

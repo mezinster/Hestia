@@ -77,11 +77,15 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch { fetch() }
     }
 
-    /** Démarre le minuteur natif (autonome sur l'appareil), puis relit l'état réel. */
-    fun startTimer(seconds: Int, detail: String) {
+    /**
+     * Démarre le minuteur (autonome sur l'appareil), puis relit l'état réel. Si [thresholdW] est
+     * fourni, ajoute la coupure sur seuil de consommation.
+     */
+    fun startTimer(seconds: Int, detail: String, thresholdW: Int? = null) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            repository.startTimer(dev, seconds, detail)
+            if (thresholdW != null) repository.startChargeTimer(dev, seconds, thresholdW, detail)
+            else repository.startTimer(dev, seconds, detail)
             fetch()
         }
     }
@@ -95,13 +99,14 @@ class DetailViewModel @Inject constructor(
     }
 
     /** Résolution du conflit : arrête la simulation de présence puis lance le minuteur. */
-    fun stopPresenceThenStartTimer(seconds: Int, detail: String) {
+    fun stopPresenceThenStartTimer(seconds: Int, detail: String, thresholdW: Int? = null) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
             repository.stopPresence(dev)
             _presenceActive.value = false
             _presenceWindows.value = emptyList()
-            repository.startTimer(dev, seconds, detail)
+            if (thresholdW != null) repository.startChargeTimer(dev, seconds, thresholdW, detail)
+            else repository.startTimer(dev, seconds, detail)
             fetch()
         }
     }

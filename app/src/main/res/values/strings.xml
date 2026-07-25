@@ -146,7 +146,7 @@
 
     <!-- Écran Détail -->
     <string name="detail_back">Retour</string>
-    <string name="detail_timer_section">Marche pour</string>
+    <string name="detail_timer_section">Active pour</string>
     <string name="detail_timer_custom">Perso</string>
     <string name="detail_timer_running">Minuteur en cours</string>
     <string name="detail_timer_cancel">Annuler le minuteur</string>
@@ -164,6 +164,7 @@
     <string name="duration_picker_hours">Heures</string>
     <string name="duration_picker_minutes">Minutes</string>
     <string name="duration_picker_start">Démarrer</string>
+    <string name="timer_cutoff_label">Couper si la consommation passe sous</string>
     <string name="duration_picker_min_error">La durée minimale est de 1 minute.</string>
 
     <!-- Libellés du journal d'activité -->
