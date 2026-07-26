@@ -7,6 +7,8 @@ import kapoue.hestia.data.local.dao.PresenceConfigDao
 import kapoue.hestia.data.local.entity.ActivationLog
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PresenceConfig
+import kapoue.hestia.data.notifications.PendingTimer
+import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.presence.ChargeScriptGenerator
 import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
@@ -41,6 +43,7 @@ class DeviceRepository @Inject constructor(
     private val activationLogDao: ActivationLogDao,
     private val presenceConfigDao: PresenceConfigDao,
     private val rpcClient: ShellyRpcClient,
+    private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
 ) {
     fun observeDevices(): Flow<List<Device>> = deviceDao.observeAll()
@@ -84,6 +87,8 @@ class DeviceRepository @Inject constructor(
             // Persister l'état commandé : évite de re-journaliser ce changement au prochain relevé.
             deviceDao.updateLastKnownOutput(device.id, on)
             logActivation(device.id, if (on) ActivationAction.TURNED_ON else ActivationAction.TURNED_OFF)
+            // Extinction manuelle : un éventuel minuteur en attente est interrompu → pas de notif de fin.
+            if (!on) appPreferences.removePendingTimer(device.id)
         }
         return result
     }
@@ -105,6 +110,7 @@ class DeviceRepository @Inject constructor(
                 // même appli fermée) sera détectée au relevé suivant et journalisée une fois.
                 deviceDao.updateLastKnownOutput(device.id, true)
                 logActivation(device.id, ActivationAction.TIMER_STARTED, detail)
+                rememberPendingTimer(device.id, seconds, detail, cutoff = false)
                 RpcResult.Success(Unit)
             }
             is RpcResult.RpcError -> set
@@ -138,7 +144,26 @@ class DeviceRepository @Inject constructor(
 
         deviceDao.updateLastKnownOutput(device.id, true)
         logActivation(device.id, ActivationAction.TIMER_STARTED, detail)
+        rememberPendingTimer(device.id, seconds, detail, cutoff = true)
         return RpcResult.Success(Unit)
+    }
+
+    /** Mémorise un minuteur en attente pour la notification de fin (voir [PendingTimer]). */
+    private fun rememberPendingTimer(deviceId: Long, seconds: Int, detail: String?, cutoff: Boolean) {
+        appPreferences.putPendingTimer(
+            PendingTimer(deviceId, System.currentTimeMillis() + seconds * 1000L, detail.orEmpty(), cutoff),
+        )
+    }
+
+    /**
+     * Vrai si le script de coupure sur seuil a **effectivement coupé** : il est encore présent mais
+     * s'est auto-arrêté (`enable:false` + `Script.Stop`). Distingue une vraie coupure sur seuil
+     * d'une extinction manuelle ou par le bouton physique (où le script tournerait encore).
+     */
+    suspend fun cutoffScriptFired(device: Device): Boolean {
+        val entry = rpcClient.scriptList(device.ipAddress).getOrNull()?.scripts
+            ?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }
+        return entry != null && !entry.running
     }
 
     /**
@@ -155,6 +180,7 @@ class DeviceRepository @Inject constructor(
             is RpcResult.Success -> {
                 deviceDao.updateLastKnownOutput(device.id, false)
                 logActivation(device.id, ActivationAction.TIMER_CANCELLED)
+                appPreferences.removePendingTimer(device.id)
                 RpcResult.Success(Unit)
             }
             is RpcResult.RpcError -> set

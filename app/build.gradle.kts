@@ -89,6 +89,12 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.kotlinx.coroutines.android)
 
+    // WorkManager : réveils périodiques (~15 min) pour les notifications de bornes de
+    // programmation. Aucun scheduler ne pilote l'appareil (interdit) — il ne fait que LIRE
+    // l'état et notifier. Le worker récupère ses dépendances Hilt via EntryPointAccessors,
+    // ce qui évite hilt-work et toute modification de l'Application/manifest.
+    implementation(libs.androidx.work.runtime)
+
     // Génération locale du QR code (Apache 2.0, sans service Google — F-Droid OK).
     implementation(libs.zxing.core)
 

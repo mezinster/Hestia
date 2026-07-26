@@ -1,14 +1,17 @@
 package kapoue.hestia.ui.screens.settings
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.R
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.backup.BackupManager
 import kapoue.hestia.data.backup.ImportResult
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.notifications.NotificationScheduler
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.RpcResult
@@ -24,6 +27,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val repository: DeviceRepository,
     private val backupManager: BackupManager,
     private val appPreferences: AppPreferences,
@@ -36,6 +40,28 @@ class SettingsViewModel @Inject constructor(
     val themeMode: StateFlow<ThemeMode> = appPreferences.themeMode
 
     fun setThemeMode(mode: ThemeMode) = appPreferences.setThemeMode(mode)
+
+    val notificationsEnabled: StateFlow<Boolean> = appPreferences.notificationsEnabled
+
+    /**
+     * Active/désactive les notifications de bornes de programmation : mémorise la préférence et
+     * programme (ou annule) le worker périodique. L'autorisation `POST_NOTIFICATIONS` est demandée
+     * en amont côté écran ; ici on suppose qu'elle est accordée quand [enabled] vaut vrai.
+     */
+    fun setNotificationsEnabled(enabled: Boolean) {
+        appPreferences.setNotificationsEnabled(enabled)
+        if (enabled) NotificationScheduler.schedule(appContext) else NotificationScheduler.cancel(appContext)
+        logger.info(DiagnosticLogger.UI, "Notifications de programmation ${if (enabled) "activées" else "désactivées"}")
+    }
+
+    /**
+     * Réconcilie l'état de l'interrupteur avec l'autorisation système : si les notifications sont
+     * marquées actives alors que l'autorisation n'est plus accordée (révoquée à la fermeture, ou
+     * coupée depuis les réglages Android), on repasse à OFF pour éviter un interrupteur menteur.
+     */
+    fun reconcileNotifications(canPost: Boolean) {
+        if (notificationsEnabled.value && !canPost) setNotificationsEnabled(false)
+    }
 
     /** Connectivité par appareil : null = en cours/inconnu, true = joignable, false = injoignable. */
     private val _connectivity = MutableStateFlow<Map<Long, Boolean?>>(emptyMap())

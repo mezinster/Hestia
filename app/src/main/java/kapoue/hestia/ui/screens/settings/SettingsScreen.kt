@@ -1,10 +1,14 @@
 package kapoue.hestia.ui.screens.settings
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +44,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -62,6 +67,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.notifications.ProgrammationNotifier
 import kapoue.hestia.domain.model.ThemeMode
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.permission.LocalNetworkPermissionStatus
@@ -78,14 +84,18 @@ fun SettingsScreen(
     val connectivity by viewModel.connectivity.collectAsStateWithLifecycle()
     val backupMessage by viewModel.backupMessage.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var deviceToDelete by remember { mutableStateOf<Device?>(null) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
 
-    // À chaque reprise, revérifier la connectivité (si la permission le permet).
+    // À chaque reprise, revérifier la connectivité (si la permission le permet) et réconcilier
+    // l'interrupteur Notifications avec l'autorisation système : si elle a été retirée (révocation
+    // à la fermeture, ou désactivation depuis les réglages Android), l'interrupteur repasse à OFF.
     LaunchedEffectOnResume(lifecycleOwner) {
         viewModel.checkConnectivity(LocalNetworkPermission.isUsable(context))
+        viewModel.reconcileNotifications(ProgrammationNotifier.canPost(context))
     }
 
     // Sélecteurs de fichier (Storage Access Framework — aucune permission de stockage).
@@ -96,6 +106,34 @@ fun SettingsScreen(
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
     ) { uri -> uri?.let { pendingImportUri = it } }
+
+    // Demande de l'autorisation POST_NOTIFICATIONS (Android 13+), déclenchée uniquement à
+    // l'activation des notifications. Refus : on laisse l'interrupteur éteint et on explique.
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (granted) {
+            viewModel.setNotificationsEnabled(true)
+        } else {
+            Toast.makeText(context, context.getString(R.string.settings_notifications_denied), Toast.LENGTH_LONG).show()
+        }
+    }
+    val onToggleNotifications: (Boolean) -> Unit = { enabled ->
+        when {
+            // OFF : on coupe les notifications (worker annulé + garde-fou). On ne révoque PAS
+            // l'autorisation système : Android ne le fait proprement que de façon différée (état
+            // « Toujours demander » bancal, qui casse silencieusement l'envoi). Elle reste dormante,
+            // inoffensive tant que c'est OFF. La réconciliation à la reprise gère le cas où
+            // l'utilisateur la retire lui-même depuis les réglages Android.
+            !enabled -> viewModel.setNotificationsEnabled(false)
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ->
+                viewModel.setNotificationsEnabled(true)
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+                PackageManager.PERMISSION_GRANTED ->
+                viewModel.setNotificationsEnabled(true)
+            else -> notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // Retour utilisateur (export/import) en Toast.
     LaunchedEffect(backupMessage) {
@@ -161,6 +199,8 @@ fun SettingsScreen(
             }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { AppearanceSection(themeMode, viewModel::setThemeMode) }
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+            item { NotificationsSection(notificationsEnabled, onToggleNotifications) }
         }
     }
 
@@ -358,6 +398,38 @@ private fun themeModeLabel(mode: ThemeMode): Int = when (mode) {
     ThemeMode.SYSTEM -> R.string.settings_theme_system
     ThemeMode.LIGHT -> R.string.settings_theme_light
     ThemeMode.DARK -> R.string.settings_theme_dark
+}
+
+/**
+ * Interrupteur des notifications de bornes de programmation. Opt-in : à l'activation, l'écran
+ * demande l'autorisation système avant d'appeler le ViewModel. Le libellé rappelle le délai
+ * inhérent (le worker passe ~toutes les 15 min : notification différée, pas instantanée).
+ */
+@Composable
+private fun NotificationsSection(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    Column {
+        SectionTitle(stringResource(R.string.settings_notifications_section))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.settings_notifications_label),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Text(
+                    text = stringResource(R.string.settings_notifications_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.size(12.dp))
+            Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+    }
 }
 
 @Composable

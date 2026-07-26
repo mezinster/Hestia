@@ -6,6 +6,9 @@
     <!-- Permission runtime obligatoire depuis Android 17 pour tout trafic vers le réseau local.
          Sur Android 11-16 elle est ignorée : aucun popup, le trafic local passe directement. -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!-- Notifications de bornes de programmation (Android 13+). Demandée uniquement quand
+         l'utilisateur active les notifications dans les Réglages, jamais au lancement. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".HestiaApplication"

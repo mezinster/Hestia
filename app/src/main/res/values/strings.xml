@@ -52,6 +52,23 @@
     <string name="settings_theme_system">Suivre le thème système</string>
     <string name="settings_theme_light">Thème clair</string>
     <string name="settings_theme_dark">Thème foncé</string>
+
+    <!-- Notifications de bornes de programmation -->
+    <string name="settings_notifications_section">Notifications</string>
+    <string name="settings_notifications_label">Notifications de programmation</string>
+    <string name="settings_notifications_desc">Prévient au début et à la fin des plannings et des plages de présence. Vérifié en arrière-plan toutes les 15 min environ : l\'alerte peut arriver avec un léger décalage.</string>
+    <string name="settings_notifications_denied">Autorisation refusée. Pour recevoir les notifications, active-les pour Hestia dans les réglages Android.</string>
+
+    <!-- Canal et contenus des notifications -->
+    <string name="notif_channel_name">Programmations</string>
+    <string name="notif_channel_desc">Début et fin des plannings et des plages de présence</string>
+    <string name="notif_planning_started">Planning de %1$s à %2$s lancé</string>
+    <string name="notif_planning_ended">Planning de %1$s à %2$s terminé</string>
+    <string name="notif_presence_started">Présence de %1$s à %2$s lancée</string>
+    <string name="notif_presence_ended">Présence de %1$s à %2$s terminée</string>
+    <string name="notif_timer_ended">Active pour %1$s terminé</string>
+    <string name="notif_cutoff_triggered">Prise coupée (consommation sous le seuil)</string>
+
     <string name="settings_security_section">Sécurité</string>
     <string name="settings_security_password_hint">Mot de passe de l\'appareil</string>
     <string name="settings_security_coming_soon">Disponible prochainement</string>
