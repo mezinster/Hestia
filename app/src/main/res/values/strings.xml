@@ -238,6 +238,11 @@
     <string name="conflict_stop_presence">Arrêter la simulation puis lancer</string>
     <string name="conflict_cancel">Annuler</string>
 
+    <!-- Minuteur lancé pendant un planning en cours : avertissement, pas un blocage -->
+    <string name="timer_planning_active_title">Planning en cours</string>
+    <string name="timer_planning_active_message">Un planning occupe ce créneau jusqu\'à %1$s. À la fin du minuteur, la prise s\'éteindra même si le planning n\'est pas terminé. Le planning reprendra la main à sa prochaine occurrence.</string>
+    <string name="timer_planning_active_confirm">Lancer quand même</string>
+
     <!-- Planning (composant Schedule natif de l\'appareil) -->
     <string name="planning_section">Planning</string>
     <string name="planning_empty">Aucun planning.</string>

@@ -116,10 +116,19 @@ fun DetailScreen(
     }
     // Minuteur en attente de résolution du conflit avec la simulation de présence.
     var pendingTimer by remember { mutableStateOf<PendingTimer?>(null) }
+    // Minuteur lancé pendant un planning en cours : simple avertissement (le planning n'est pas
+    // un conflit, il reprendra la main à sa prochaine occurrence).
+    var planningWarning by remember { mutableStateOf<Pair<PendingTimer, Planning>?>(null) }
 
     fun requestStartTimer(seconds: Int, label: String, thresholdW: Int? = null) {
-        if (presenceActive) pendingTimer = PendingTimer(seconds, label, thresholdW)
-        else viewModel.startTimer(seconds, label, thresholdW)
+        val activePlanning = plannings.firstOrNull { it.isActiveNow() }
+        when {
+            // La présence est un vrai conflit (elle pilote la prise en continu) : on la traite d'abord.
+            presenceActive -> pendingTimer = PendingTimer(seconds, label, thresholdW)
+            activePlanning != null ->
+                planningWarning = PendingTimer(seconds, label, thresholdW) to activePlanning
+            else -> viewModel.startTimer(seconds, label, thresholdW)
+        }
     }
 
     var elapsedNow by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
@@ -233,6 +242,17 @@ fun DetailScreen(
             onStopPresence = {
                 viewModel.stopPresenceThenStartTimer(pt.seconds, pt.label, pt.thresholdW)
                 pendingTimer = null
+            },
+        )
+    }
+
+    planningWarning?.let { (pt, planning) ->
+        PlanningInProgressDialog(
+            planning = planning,
+            onCancel = { planningWarning = null },
+            onConfirm = {
+                viewModel.startTimer(pt.seconds, pt.label, pt.thresholdW)
+                planningWarning = null
             },
         )
     }
@@ -509,6 +529,31 @@ private fun ConflictDialog(
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(stringResource(R.string.conflict_cancel)) }
             }
+        },
+    )
+}
+
+/**
+ * Avertissement (et non blocage) quand un minuteur est lancé alors qu'un planning est en cours :
+ * les deux coexistent, mais la fin du minuteur éteindra la prise avant la fin du créneau. Le
+ * planning n'est pas modifié et reprendra la main à sa prochaine occurrence.
+ */
+@Composable
+private fun PlanningInProgressDialog(
+    planning: Planning,
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val end = "%02d:%02d".format(planning.endHour, planning.endMinute)
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(stringResource(R.string.timer_planning_active_title)) },
+        text = { Text(stringResource(R.string.timer_planning_active_message, end)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.timer_planning_active_confirm)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.action_cancel)) }
         },
     )
 }
