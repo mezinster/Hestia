@@ -45,8 +45,12 @@ Conséquences de conception :
 Ce que Hestia stocke en propre, et rien d'autre :
 - la liste des appareils connus (nom, adresse IP, type, canal)
 - un cache de confort des paramètres de simulation de présence
-- un journal d'activité local
 - les préférences de l'application
+
+Le journal d'activité par appareil (« Dernière activité ») a existé puis a été **retiré le
+2026-07-27** : sans tâche de fond permanente, il manquait trop d'événements survenus application
+fermée pour rester fiable (voir BACKLOG.md § Écarté). Le journal de diagnostic (§ 7 ci-dessous)
+est un mécanisme différent et reste en place.
 
 ## Stack technique
 

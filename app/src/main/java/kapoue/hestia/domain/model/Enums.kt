@@ -18,16 +18,3 @@ enum class ThemeMode {
     LIGHT,
     DARK,
 }
-
-/** Nature d'une entrée du journal d'activité (ActivationLog). */
-enum class ActivationAction {
-    TURNED_ON,
-    TURNED_OFF,
-    TIMER_STARTED,
-    TIMER_CANCELLED,
-    PRESENCE_DEPLOYED,
-    PRESENCE_STOPPED,
-    PLANNING_ADDED,
-    PLANNING_REMOVED,
-    PLANNING_MODIFIED,
-}

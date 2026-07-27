@@ -167,8 +167,6 @@
     <string name="detail_timer_custom">Perso</string>
     <string name="detail_timer_running">Minuteur en cours</string>
     <string name="detail_timer_cancel">Annuler le minuteur</string>
-    <string name="detail_activity_section">Dernière activité</string>
-    <string name="detail_activity_empty">Aucune activité enregistrée pour l\'instant.</string>
     <string name="detail_offline">Appareil injoignable pour le moment.</string>
 
     <!-- Durées -->
@@ -198,17 +196,6 @@
     <string name="firmware_install_confirm_ok">Installer</string>
     <string name="firmware_install_started">Installation lancée. L\'appareil va redémarrer.</string>
     <string name="firmware_install_error">Échec du lancement de l\'installation. Réessaie.</string>
-
-    <!-- Libellés du journal d'activité -->
-    <string name="activity_turned_on">Allumé</string>
-    <string name="activity_turned_off">Éteint</string>
-    <string name="activity_timer_started">Minuteur démarré</string>
-    <string name="activity_timer_cancelled">Minuteur annulé</string>
-    <string name="activity_presence_deployed">Simulation de présence déployée</string>
-    <string name="activity_presence_stopped">Simulation de présence arrêtée</string>
-    <string name="activity_planning_added">Planning ajouté</string>
-    <string name="activity_planning_removed">Planning supprimé</string>
-    <string name="activity_planning_modified">Planning modifié</string>
 
     <!-- Simulation de présence (lot 4) -->
     <string name="presence_section">Simulation de présence</string>

@@ -30,14 +30,6 @@ interface DeviceDao {
     @Query("SELECT COALESCE(MAX(position), -1) FROM devices")
     suspend fun maxPosition(): Int
 
-    /** Met à jour uniquement le dernier état de sortie observé. */
-    @Query("UPDATE devices SET lastKnownOutput = :output WHERE id = :id")
-    suspend fun updateLastKnownOutput(id: Long, output: Boolean)
-
-    /** Lit l'état de sortie persisté (source de vérité pour la détection de changement). */
-    @Query("SELECT lastKnownOutput FROM devices WHERE id = :id")
-    suspend fun getLastKnownOutput(id: Long): Boolean?
-
     /** Insertion échouant explicitement en cas de doublon (ipAddress, switchId). */
     @Insert
     suspend fun insert(device: Device): Long

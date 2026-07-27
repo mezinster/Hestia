@@ -45,8 +45,10 @@ data class Device(
     val position: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
     /**
-     * Dernier état de sortie observé, **persisté** pour détecter une extinction survenue pendant
-     * que l'application était fermée ou hors réseau (ex. fin de minuteur). Null = jamais observé.
+     * Vestige du journal d'activité (retiré le 2026-07-27) : servait à détecter un changement
+     * d'état survenu application fermée. Plus lu ni écrit. Colonne conservée telle quelle plutôt
+     * que supprimée par migration — `DROP COLUMN` n'est pas garanti sur toutes les versions de
+     * SQLite embarquées par Android 11+ (minSdk 30), un risque disproportionné pour ce nettoyage.
      */
     val lastKnownOutput: Boolean? = null,
 )

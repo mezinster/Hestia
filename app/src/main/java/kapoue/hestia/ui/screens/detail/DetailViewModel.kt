@@ -5,7 +5,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kapoue.hestia.R
-import kapoue.hestia.data.local.entity.ActivationLog
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.RpcResult
@@ -38,9 +37,6 @@ class DetailViewModel @Inject constructor(
 
     val device: StateFlow<Device?> = repository.observeDevice(deviceId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
-
-    val logs: StateFlow<List<ActivationLog>> = repository.observeRecentLogs(deviceId)
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _status = MutableStateFlow<TileStatus>(TileStatus.Loading)
     val status: StateFlow<TileStatus> = _status.asStateFlow()

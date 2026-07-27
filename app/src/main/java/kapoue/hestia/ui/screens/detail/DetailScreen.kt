@@ -56,10 +56,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatCountdown
-import kapoue.hestia.core.util.formatLogTimestamp
-import kapoue.hestia.data.local.entity.ActivationLog
 import kapoue.hestia.data.local.entity.Device
-import kapoue.hestia.domain.model.ActivationAction
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.FirmwareCheckResult
@@ -81,7 +78,6 @@ fun DetailScreen(
 ) {
     val device by viewModel.device.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
-    val logs by viewModel.logs.collectAsStateWithLifecycle()
     val presenceActive by viewModel.presenceActive.collectAsStateWithLifecycle()
     val presenceWindows by viewModel.presenceWindows.collectAsStateWithLifecycle()
     val addPresenceResult by viewModel.addPresenceResult.collectAsStateWithLifecycle()
@@ -241,9 +237,6 @@ fun DetailScreen(
                 onCheck = { viewModel.checkFirmwareUpdate() },
                 onInstall = { showFirmwareInstallConfirm = true },
             )
-
-            HorizontalDivider()
-            ActivitySection(logs)
         }
     }
 
@@ -958,49 +951,6 @@ private fun FirmwareInstallConfirmDialog(onConfirm: () -> Unit, onDismiss: () ->
     )
 }
 
-@Composable
-private fun ActivitySection(logs: List<ActivationLog>) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.detail_activity_section),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        if (logs.isEmpty()) {
-            Text(
-                text = stringResource(R.string.detail_activity_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            logs.forEach { log -> ActivityRow(log) }
-        }
-    }
-}
-
-@Composable
-private fun ActivityRow(log: ActivationLog) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = formatLogTimestamp(log.timestamp),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontFamily = FontFamily.Monospace,
-        )
-        Spacer(Modifier.size(12.dp))
-        Column {
-            Text(activationLabel(log.action), style = MaterialTheme.typography.bodyMedium)
-            log.detail?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
 /** Libellé d'une durée en secondes (« 1 h », « 2 h 30 min », « 45 min »). */
 @Composable
 fun durationLabel(totalSeconds: Int): String {
@@ -1012,21 +962,6 @@ fun durationLabel(totalSeconds: Int): String {
         else -> stringResource(R.string.duration_minutes, m)
     }
 }
-
-@Composable
-private fun activationLabel(action: ActivationAction): String = stringResource(
-    when (action) {
-        ActivationAction.TURNED_ON -> R.string.activity_turned_on
-        ActivationAction.TURNED_OFF -> R.string.activity_turned_off
-        ActivationAction.TIMER_STARTED -> R.string.activity_timer_started
-        ActivationAction.TIMER_CANCELLED -> R.string.activity_timer_cancelled
-        ActivationAction.PRESENCE_DEPLOYED -> R.string.activity_presence_deployed
-        ActivationAction.PRESENCE_STOPPED -> R.string.activity_presence_stopped
-        ActivationAction.PLANNING_ADDED -> R.string.activity_planning_added
-        ActivationAction.PLANNING_REMOVED -> R.string.activity_planning_removed
-        ActivationAction.PLANNING_MODIFIED -> R.string.activity_planning_modified
-    },
-)
 
 private fun iconFor(type: DeviceType): ImageVector = when (type) {
     DeviceType.PLUG -> Icons.Filled.Power

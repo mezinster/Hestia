@@ -14,7 +14,6 @@ import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.data.rpc.getOrNull
-import java.time.Instant
 import java.time.ZoneId
 import java.util.Objects
 
@@ -46,8 +45,6 @@ class NotificationWorker(
         fun logger(): DiagnosticLogger
     }
 
-    private enum class Boundary { START, END }
-
     override suspend fun doWork(): Result {
         val ctx = applicationContext
         val deps = EntryPointAccessors.fromApplication(ctx, Deps::class.java)
@@ -69,12 +66,12 @@ class NotificationWorker(
         for (device in devices) {
             if (device.supportsSwitch) {
                 for (p in repository.getPlannings(device).getOrNull().orEmpty()) {
-                    boundaryHit(p.startMinutes, p.endMinutes, p.days, Boundary.START, from, now, zone)?.let { t ->
+                    ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.START, from, now, zone)?.let { t ->
                         post(ctx, device.id, "pl-start", t, device.name,
                             ctx.getString(R.string.notif_planning_started, frTime(p.startMinutes), frTime(p.endMinutes)))
                         posted++
                     }
-                    boundaryHit(p.startMinutes, p.endMinutes, p.days, Boundary.END, from, now, zone)?.let { t ->
+                    ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.END, from, now, zone)?.let { t ->
                         post(ctx, device.id, "pl-end", t, device.name,
                             ctx.getString(R.string.notif_planning_ended, frTime(p.startMinutes), frTime(p.endMinutes)))
                         posted++
@@ -83,12 +80,12 @@ class NotificationWorker(
             }
             if (device.hasScripting) {
                 for (w in repository.getPresenceWindows(device).getOrNull().orEmpty()) {
-                    boundaryHit(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS, Boundary.START, from, now, zone)?.let { t ->
+                    ScheduleCodec.boundaryInstant(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS, ScheduleCodec.Boundary.START, from, now, zone)?.let { t ->
                         post(ctx, device.id, "pr-start", t, device.name,
                             ctx.getString(R.string.notif_presence_started, frTime(w.startMinutes), frTime(w.endMinutes)))
                         posted++
                     }
-                    boundaryHit(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS, Boundary.END, from, now, zone)?.let { t ->
+                    ScheduleCodec.boundaryInstant(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS, ScheduleCodec.Boundary.END, from, now, zone)?.let { t ->
                         post(ctx, device.id, "pr-end", t, device.name,
                             ctx.getString(R.string.notif_presence_ended, frTime(w.startMinutes), frTime(w.endMinutes)))
                         posted++
@@ -161,40 +158,6 @@ class NotificationWorker(
         // deux passages remplace sa notif au lieu d'en créer une seconde.
         val id = Objects.hash(deviceId, kind, instant) and 0x7FFFFFFF
         ProgrammationNotifier.post(ctx, id, title, text)
-    }
-
-    /**
-     * Instant (ms) auquel la borne [which] de la fenêtre (début → début+durée) tombe dans
-     * l'intervalle `(from, to]`, ou `null` si aucune occurrence. Gère les créneaux de nuit : la fin
-     * est calculée comme début + durée, donc elle bascule naturellement au lendemain.
-     *
-     * [activeDays] : jours d'activation du **début** (0 = dimanche … 6 = samedi). Renvoie la
-     * première occurrence trouvée (pas de déluge si l'intervalle couvre plusieurs jours).
-     */
-    private fun boundaryHit(
-        startMinute: Int,
-        endMinute: Int,
-        activeDays: Set<Int>,
-        which: Boundary,
-        from: Long,
-        to: Long,
-        zone: ZoneId,
-    ): Long? {
-        // Durée 1..1440 (jamais 0) : gère le passage minuit sans jour décalé explicite.
-        val durationMin = ((endMinute - startMinute + 1440 - 1) % 1440) + 1
-        var day = Instant.ofEpochMilli(from).atZone(zone).toLocalDate().minusDays(1)
-        val lastDay = Instant.ofEpochMilli(to).atZone(zone).toLocalDate()
-        while (!day.isAfter(lastDay)) {
-            val cronDay = day.dayOfWeek.value % 7 // lundi=1 … dimanche=7 → 0
-            if (cronDay in activeDays) {
-                val startAbs = day.atTime(startMinute / 60, startMinute % 60)
-                    .atZone(zone).toInstant().toEpochMilli()
-                val t = if (which == Boundary.START) startAbs else startAbs + durationMin * 60_000L
-                if (t > from && t <= to) return t
-            }
-            day = day.plusDays(1)
-        }
-        return null
     }
 
     /** Heure « à la française » : 8h, 8h30, 22h05. */

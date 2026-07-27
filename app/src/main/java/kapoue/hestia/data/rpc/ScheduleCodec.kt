@@ -1,5 +1,8 @@
 package kapoue.hestia.data.rpc
 
+import java.time.Instant
+import java.time.ZoneId
+
 /**
  * Encodage/décodage des programmes cron Shelly pour les plannings.
  *
@@ -75,4 +78,40 @@ object ScheduleCodec {
     /** Vrai si deux ensembles d'intervalles hebdomadaires se recouvrent. */
     fun intervalsOverlap(a: List<Pair<Int, Int>>, b: List<Pair<Int, Int>>): Boolean =
         a.any { (aStart, aEnd) -> b.any { (bStart, bEnd) -> aStart < bEnd && bStart < aEnd } }
+
+    enum class Boundary { START, END }
+
+    /**
+     * Instant (ms) auquel la borne [which] d'une fenêtre récurrente (début → début+durée) tombe
+     * dans l'intervalle `(from, to]`, ou `null` si aucune occurrence. Gère les créneaux de nuit :
+     * la fin est calculée comme début + durée, donc elle bascule naturellement au lendemain sans
+     * qu'il faille décaler [activeDays] séparément (comme le fait [nextDay] pour Schedule natif).
+     *
+     * [activeDays] : jours d'activation du **début** (0 = dimanche … 6 = samedi). Renvoie la
+     * première occurrence trouvée. Partagé entre le worker de notifications (bornes franchies
+     * depuis son dernier passage) et le journal d'activité (déduction de la cause d'une bascule).
+     */
+    fun boundaryInstant(
+        startMinute: Int,
+        endMinute: Int,
+        activeDays: Set<Int>,
+        which: Boundary,
+        from: Long,
+        to: Long,
+        zone: ZoneId = ZoneId.systemDefault(),
+    ): Long? {
+        val durationMin = ((endMinute - startMinute + 1440 - 1) % 1440) + 1
+        var day = Instant.ofEpochMilli(from).atZone(zone).toLocalDate().minusDays(1)
+        val lastDay = Instant.ofEpochMilli(to).atZone(zone).toLocalDate()
+        while (!day.isAfter(lastDay)) {
+            val cronDay = day.dayOfWeek.value % 7 // lundi=1 … dimanche=7 → 0
+            if (cronDay in activeDays) {
+                val startAbs = day.atTime(startMinute / 60, startMinute % 60).atZone(zone).toInstant().toEpochMilli()
+                val t = if (which == Boundary.START) startAbs else startAbs + durationMin * 60_000L
+                if (t > from && t <= to) return t
+            }
+            day = day.plusDays(1)
+        }
+        return null
+    }
 }

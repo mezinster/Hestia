@@ -80,7 +80,6 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Rouleaux « Perso » : sélection fluide, valeurs `0-23` et `0-59`
 - [ ] Durée de 0 minute refusée
 - [ ] Durée longue (ex. 12 h) acceptée et correcte
-- [ ] Le journal d'activité enregistre bien les démarrages et annulations
 
 ## 6. Simulation de présence
 
@@ -115,7 +114,6 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Import alors que des appareils différents existent : ils sont bien tous remplacés
 - [ ] Import d'un fichier corrompu ou d'un JSON quelconque : refus propre avec message
 - [ ] Import sur une installation vierge : état complet restitué
-- [ ] Le journal d'activité n'est pas présent dans le fichier exporté
 
 ## 8. Journal de diagnostic
 

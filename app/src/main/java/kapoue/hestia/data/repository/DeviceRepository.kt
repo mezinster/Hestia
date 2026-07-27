@@ -1,10 +1,8 @@
 package kapoue.hestia.data.repository
 
 import kapoue.hestia.core.log.DiagnosticLogger
-import kapoue.hestia.data.local.dao.ActivationLogDao
 import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.dao.PresenceConfigDao
-import kapoue.hestia.data.local.entity.ActivationLog
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PresenceConfig
 import kapoue.hestia.data.notifications.PendingTimer
@@ -23,7 +21,6 @@ import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.rpc.model.ScheduleJob
 import kapoue.hestia.data.rpc.model.SwitchSetResult
 import kapoue.hestia.data.rpc.model.SwitchStatusResult
-import kapoue.hestia.domain.model.ActivationAction
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.FirmwareCheckResult
@@ -37,11 +34,10 @@ import kotlinx.serialization.json.jsonPrimitive
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Point d'accès unique aux appareils : persistance locale, interrogation réseau, journal. */
+/** Point d'accès unique aux appareils : persistance locale, interrogation réseau. */
 @Singleton
 class DeviceRepository @Inject constructor(
     private val deviceDao: DeviceDao,
-    private val activationLogDao: ActivationLogDao,
     private val presenceConfigDao: PresenceConfigDao,
     private val rpcClient: ShellyRpcClient,
     private val appPreferences: AppPreferences,
@@ -51,43 +47,22 @@ class DeviceRepository @Inject constructor(
 
     fun observeDevice(id: Long): Flow<Device?> = deviceDao.observeById(id)
 
-    fun observeRecentLogs(id: Long): Flow<List<ActivationLog>> = activationLogDao.observeRecent(id)
-
     suspend fun getDevicesOnce(): List<Device> = deviceDao.getAllOnce()
 
     suspend fun getDevice(id: Long): Device? = deviceDao.getById(id)
 
-    /**
-     * Lit l'état courant d'un canal (allumé/éteint, minuteur) et **journalise tout changement
-     * d'état observé** non déclenché par l'application (fin de minuteur, interface web).
-     */
+    /** Lit l'état courant d'un canal (allumé/éteint, minuteur, puissance). */
     suspend fun getStatus(device: Device): RpcResult<SwitchStatusResult> {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return demoStatus(device)
-        val result = rpcClient.getSwitchStatus(device.ipAddress, device.switchId)
-        if (result is RpcResult.Success) {
-            val output = result.value.output
-            // Comparer à l'état persisté en base (et non à l'objet reçu, qui peut être périmé).
-            val previous = deviceDao.getLastKnownOutput(device.id)
-            if (previous != output) {
-                // Ne journaliser qu'à partir d'un état de référence connu (pas au tout 1er relevé).
-                if (previous != null) {
-                    logActivation(device.id, if (output) ActivationAction.TURNED_ON else ActivationAction.TURNED_OFF)
-                }
-                deviceDao.updateLastKnownOutput(device.id, output)
-            }
-        }
-        return result
+        return rpcClient.getSwitchStatus(device.ipAddress, device.switchId)
     }
 
-    /** Bascule d'un canal déclenchée par l'utilisateur (journalisée). */
+    /** Bascule d'un canal déclenchée par l'utilisateur. */
     suspend fun userToggle(device: Device, on: Boolean): RpcResult<SwitchSetResult> {
         // Appareils démo : succès sans réseau (l'état affiché reste piloté par demoStatus).
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(SwitchSetResult())
         val result = rpcClient.setSwitch(device.ipAddress, device.switchId, on)
         if (result is RpcResult.Success) {
-            // Persister l'état commandé : évite de re-journaliser ce changement au prochain relevé.
-            deviceDao.updateLastKnownOutput(device.id, on)
-            logActivation(device.id, if (on) ActivationAction.TURNED_ON else ActivationAction.TURNED_OFF)
             // Extinction manuelle : un éventuel minuteur en attente est interrompu → pas de notif de fin.
             if (!on) appPreferences.removePendingTimer(device.id)
         }
@@ -97,7 +72,6 @@ class DeviceRepository @Inject constructor(
     /**
      * Allume le canal en armant un minuteur **one-shot** sur l'appareil (`toggle_after`).
      * Autonome ensuite : l'appareil gère le compte à rebours, le téléphone peut être fermé.
-     * [detail] est journalisé (durée).
      *
      * Un seul appel RPC, et surtout **aucune écriture dans la configuration de l'appareil** : le
      * minuteur ne vaut que pour cet allumage-ci. C'est le correctif du bug où un minuteur arrivé
@@ -107,10 +81,6 @@ class DeviceRepository @Inject constructor(
     suspend fun startTimer(device: Device, seconds: Int, detail: String?): RpcResult<Unit> =
         when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = true, toggleAfterSec = seconds)) {
             is RpcResult.Success -> {
-                // Sortie commandée à ON (persistée) : la future extinction (fin de minuteur,
-                // même appli fermée) sera détectée au relevé suivant et journalisée une fois.
-                deviceDao.updateLastKnownOutput(device.id, true)
-                logActivation(device.id, ActivationAction.TIMER_STARTED, detail)
                 rememberPendingTimer(device.id, seconds, detail, cutoff = false)
                 RpcResult.Success(Unit)
             }
@@ -143,8 +113,6 @@ class DeviceRepository @Inject constructor(
         rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
         rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
 
-        deviceDao.updateLastKnownOutput(device.id, true)
-        logActivation(device.id, ActivationAction.TIMER_STARTED, detail)
         rememberPendingTimer(device.id, seconds, detail, cutoff = true)
         return RpcResult.Success(Unit)
     }
@@ -179,8 +147,6 @@ class DeviceRepository @Inject constructor(
         }
         return when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = false)) {
             is RpcResult.Success -> {
-                deviceDao.updateLastKnownOutput(device.id, false)
-                logActivation(device.id, ActivationAction.TIMER_CANCELLED)
                 appPreferences.removePendingTimer(device.id)
                 RpcResult.Success(Unit)
             }
@@ -257,7 +223,6 @@ class DeviceRepository @Inject constructor(
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
         rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
-        logActivation(device.id, ActivationAction.PRESENCE_DEPLOYED)
         return RpcResult.Success(Unit)
     }
 
@@ -271,7 +236,6 @@ class DeviceRepository @Inject constructor(
             rpcClient.scriptStop(ip, entry.id)
             rpcClient.scriptDelete(ip, entry.id).errorOrNull()?.let { return it }
         }
-        logActivation(device.id, ActivationAction.PRESENCE_STOPPED)
         return RpcResult.Success(Unit)
     }
 
@@ -384,7 +348,6 @@ class DeviceRepository @Inject constructor(
             rpcClient.scheduleDelete(ip, onId)
             return CreatePlanningResult.Error
         }
-        logActivation(device.id, ActivationAction.PLANNING_ADDED, planningDetail(startHour, startMinute, endHour, endMinute))
         return CreatePlanningResult.Success
     }
 
@@ -433,7 +396,6 @@ class DeviceRepository @Inject constructor(
         // Nouveaux programmes en place : retirer les anciens.
         rpcClient.scheduleDelete(ip, old.onJobId)
         rpcClient.scheduleDelete(ip, old.offJobId)
-        logActivation(device.id, ActivationAction.PLANNING_MODIFIED, planningDetail(startHour, startMinute, endHour, endMinute))
         return CreatePlanningResult.Success
     }
 
@@ -448,18 +410,9 @@ class DeviceRepository @Inject constructor(
         rpcClient.scheduleDelete(ip, planning.offJobId).errorOrNull()?.let { return it }
         if (planning.isActiveNow()) {
             rpcClient.setSwitch(ip, device.switchId, on = false)
-            deviceDao.updateLastKnownOutput(device.id, false)
         }
-        logActivation(
-            device.id,
-            ActivationAction.PLANNING_REMOVED,
-            planningDetail(planning.startHour, planning.startMinute, planning.endHour, planning.endMinute),
-        )
         return RpcResult.Success(Unit)
     }
-
-    private fun planningDetail(sh: Int, sm: Int, eh: Int, em: Int): String =
-        "%02d:%02d – %02d:%02d".format(sh, sm, eh, em)
 
     /** Teste la connexion et déduit les capacités de l'appareil (rejette les Gen1). */
     suspend fun probe(ip: String): RpcResult<DeviceCapabilities> = rpcClient.probe(ip)
@@ -594,19 +547,7 @@ class DeviceRepository @Inject constructor(
         }
     }
 
-    /**
-     * Écrit une entrée de journal d'activité, sans jamais faire échouer l'action en cours,
-     * et purge les entrées de plus de 30 jours.
-     */
-    private suspend fun logActivation(deviceId: Long, action: ActivationAction, detail: String? = null) {
-        runCatching {
-            activationLogDao.insert(ActivationLog(deviceId = deviceId, action = action, detail = detail))
-            activationLogDao.purgeOlderThan(System.currentTimeMillis() - THIRTY_DAYS_MS)
-        }
-    }
-
     private companion object {
-        const val THIRTY_DAYS_MS = 30L * 24 * 60 * 60 * 1000
         const val DEMO_IP_PREFIX = "203.0.113." // RFC 5737 TEST-NET-3, jamais routable
         // Chaque planning = 2 programmes cron ; la prise en tient ~20, on plafonne à 10 plannings.
         const val MAX_PLANNINGS = 10

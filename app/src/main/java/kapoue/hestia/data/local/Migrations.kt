@@ -44,3 +44,25 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         )
     }
 }
+
+/**
+ * v4 → v5 : origine d'une bascule ON/OFF observée (journal d'activité). Colonne nullable :
+ * aucune valeur par défaut nécessaire, les entrées déjà en base restent sans cause connue.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE activation_logs ADD COLUMN cause TEXT")
+    }
+}
+
+/**
+ * v5 → v6 : suppression du journal d'activité. Sans tâche de fond permanente, il ratait trop
+ * d'événements survenus application fermée pour rester fiable (voir discussion 2026-07-27) —
+ * retiré plutôt que maintenu à moitié fonctionnel. Aucune configuration perdue : ce journal
+ * n'était que consultatif, les appareils et leurs réglages ne sont pas concernés.
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS activation_logs")
+    }
+}

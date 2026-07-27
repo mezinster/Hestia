@@ -1,19 +1,7 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-07-27 (après le lot Coupure sur seuil, roulette de valeurs).
-
-## Finitions (petits polissages)
-
-- **Attribuer une cause à chaque allumage/extinction dans le journal** (manuel, minuteur,
-  planning, mode présence). Aujourd'hui « Allumé »/« Éteint » n'indiquent pas l'origine. Piège :
-  les bascules **autonomes** (planning, présence, fin de minuteur) ne sont pas observées à
-  l'instant où elles surviennent (appli fermée), seulement au relevé suivant → la cause doit être
-  **inférée** de l'état connu (créneau de planning actif, minuteur en cours, script déployé…).
-  Faisable mais mérite son propre lot. Englobe l'ancien point « distinguer fin de minuteur vs
-  extinction manuelle ». À noter : le worker de notifications sait déjà faire une partie de cette
-  inférence (mémo `PendingTimer`, vérification du script de seuil) — il y a de la logique à
-  mutualiser.
+Dernière mise à jour : 2026-07-27 (retrait du journal d'activité).
 
 ## Écarté
 
@@ -27,6 +15,20 @@ Dernière mise à jour : 2026-07-27 (après le lot Coupure sur seuil, roulette d
   peu fiable sur les icônes à courbes (Wifi, Sensors, Lightbulb), et un rendu cassé ne serait pas
   détectable sans capture d'écran après build. À reconsidérer seulement si le poids redevient un
   problème réel.
+- **Journal d'activité par appareil (« Dernière activité »).** Retiré intégralement le
+  2026-07-27 : entité `ActivationLog`, DAO, section d'écran, formatage. Tenté d'y attribuer une
+  cause fiable (bouton, minuteur, planning, présence) via le champ `source` de l'appareil —
+  fonctionnait bien app ouverte, mais un test délibéré (app tuée pendant tout le cycle) a confirmé
+  la limite de fond : sans tâche de fond permanente, aucune observation n'a lieu, et si l'état
+  final rejoint l'état de départ pendant l'absence, même le passage du worker de notifications
+  (~15 min, lui-même limité aux utilisateurs ayant activé les notifications) ne voit rien à
+  journaliser. Storer l'historique **sur la prise** (KVS) a été envisagé puis écarté : ne
+  couvrirait que les bascules déclenchées par les scripts Hestia (présence, coupure sur seuil),
+  jamais le planning natif (`Schedule`) ni le bouton physique — une complexité réelle pour une
+  couverture qui resterait partielle. La colonne `cause` ajoutée à la table (migration v4→v5) est
+  retirée avec la table entière (migration v5→v6, `DROP TABLE`) ; la colonne vestige
+  `lastKnownOutput` sur `devices` reste en base (retrait par `DROP COLUMN` jugé trop risqué sur
+  les versions de SQLite embarquées par Android 11, minSdk du projet) mais n'est plus utilisée.
 
 ## Fonctionnalités futures
 
