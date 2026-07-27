@@ -8,7 +8,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.R
 import kapoue.hestia.data.local.dao.DiagnosticLogDao
+import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.domain.model.DeviceType
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,15 +30,21 @@ class DiagnosticViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val diagnosticLogDao: DiagnosticLogDao,
     private val deviceRepository: DeviceRepository,
+    private val appPreferences: AppPreferences,
 ) : ViewModel() {
 
     private val _report = MutableStateFlow("")
     val report: StateFlow<String> = _report.asStateFlow()
 
     /**
-     * Construit le rapport partageable : en-tête de contexte + entrées horodatées (ISO 8601,
-     * de la plus récente à la plus ancienne). [themeLabel] et [permissionLabel] proviennent de
-     * l'UI (thème et libellé de permission traduits).
+     * Construit le rapport partageable : en-tête de contexte + liste des appareils (avec
+     * version de firmware lue **en direct**, en parallèle) + entrées horodatées (ISO 8601, de la
+     * plus récente à la plus ancienne). [themeLabel] et [permissionLabel] proviennent de l'UI
+     * (thème et libellé de permission traduits).
+     *
+     * Contrairement au reste de l'écran, la lecture du firmware sort du pur local (appel RPC vers
+     * chaque appareil, jamais vers Shelly) : un appareil injoignable au moment précis de
+     * l'ouverture n'empêche pas le reste du rapport, il affiche juste « injoignable ».
      */
     fun load(themeLabel: String, permissionLabel: String) {
         viewModelScope.launch {
@@ -42,7 +54,11 @@ class DiagnosticViewModel @Inject constructor(
 
     private suspend fun buildReport(themeLabel: String, permissionLabel: String): String {
         val entries = diagnosticLogDao.getAll()
-        val deviceCount = deviceRepository.getDevicesOnce().size
+        val devices = deviceRepository.getDevicesOnce()
+        val notificationsLabel = context.getString(
+            if (appPreferences.notificationsEnabled.value) R.string.diagnostic_report_enabled else R.string.diagnostic_report_disabled,
+        )
+
         val sb = StringBuilder()
         sb.appendLine(context.getString(R.string.diagnostic_report_header))
         sb.appendLine(context.getString(R.string.diagnostic_report_app, appVersion()))
@@ -51,7 +67,14 @@ class DiagnosticViewModel @Inject constructor(
         sb.appendLine(context.getString(R.string.diagnostic_report_language, Locale.getDefault().toString()))
         sb.appendLine(context.getString(R.string.diagnostic_report_theme, themeLabel))
         sb.appendLine(context.getString(R.string.diagnostic_report_permission, permissionLabel))
-        sb.appendLine(context.getString(R.string.diagnostic_report_device_count, deviceCount))
+        sb.appendLine(context.getString(R.string.diagnostic_report_device_count, devices.size))
+        sb.appendLine(context.getString(R.string.diagnostic_report_notifications, notificationsLabel))
+
+        if (devices.isNotEmpty()) {
+            sb.appendLine(context.getString(R.string.diagnostic_report_devices_header))
+            for (line in deviceLines(devices)) sb.appendLine(line)
+        }
+
         sb.appendLine("----")
         for (entry in entries) {
             sb.append(ISO.format(Instant.ofEpochMilli(entry.timestamp)))
@@ -60,6 +83,29 @@ class DiagnosticViewModel @Inject constructor(
             sb.append(" ").appendLine(entry.message)
         }
         return sb.toString()
+    }
+
+    /** Une ligne par appareil, firmware relu **en parallèle** (pas séquentiellement). */
+    private suspend fun deviceLines(devices: List<Device>): List<String> = coroutineScope {
+        devices.map { device ->
+            async {
+                val firmware = deviceRepository.getInstalledFirmwareVersion(device)
+                    ?: context.getString(R.string.diagnostic_report_firmware_unreachable)
+                context.getString(
+                    R.string.diagnostic_report_device_line,
+                    device.name,
+                    device.ipAddress,
+                    context.getString(deviceTypeLabelRes(device.type)),
+                    firmware,
+                )
+            }
+        }.awaitAll()
+    }
+
+    private fun deviceTypeLabelRes(type: DeviceType): Int = when (type) {
+        DeviceType.PLUG -> R.string.device_type_plug
+        DeviceType.LAMP -> R.string.device_type_lamp
+        DeviceType.SENSOR -> R.string.device_type_sensor
     }
 
     private fun appVersion(): String = runCatching {

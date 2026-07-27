@@ -105,7 +105,6 @@ fun AboutScreen() {
         Section(R.string.about_positioning_title, R.string.about_positioning)
         Section(R.string.about_permission_title, R.string.about_permission_body)
         Section(R.string.about_independence_title, R.string.about_independence)
-        Section(R.string.about_language_title, R.string.about_language)
 
         Spacer(Modifier.height(16.dp))
         Text(

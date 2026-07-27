@@ -24,8 +24,6 @@
     <string name="about_independence_title">Independence</string>
     <string name="about_independence">Hestia is an independent project, with no affiliation to Shelly or Allterco Robotics. It is neither commissioned, nor sponsored, nor endorsed by Shelly. No payment or hardware has been provided or lent by the brand. Shelly is a registered trademark of its respective owner; it is mentioned only for technical compatibility.</string>
     <string name="about_compat">Compatible with Shelly Gen2 and later. Support for other brands is planned for future versions.</string>
-    <string name="about_language_title">Language</string>
-    <string name="about_language">The app follows your system language: English by default, French if your device is set to French.</string>
     <string name="about_license_title">License</string>
     <string name="about_license">Distributed under the GPLv3 license.</string>
     <string name="about_license_link">(learn more)</string>
@@ -320,4 +318,10 @@
     <string name="diagnostic_report_theme">Theme: %1$s</string>
     <string name="diagnostic_report_permission">Local network permission: %1$s</string>
     <string name="diagnostic_report_device_count">Configured devices: %1$d</string>
+    <string name="diagnostic_report_notifications">Notifications: %1$s</string>
+    <string name="diagnostic_report_enabled">enabled</string>
+    <string name="diagnostic_report_disabled">disabled</string>
+    <string name="diagnostic_report_devices_header">Devices:</string>
+    <string name="diagnostic_report_device_line">- %1$s (%2$s, %3$s) — firmware %4$s</string>
+    <string name="diagnostic_report_firmware_unreachable">unreachable</string>
 </resources>

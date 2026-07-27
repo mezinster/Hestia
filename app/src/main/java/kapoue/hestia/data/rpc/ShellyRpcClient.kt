@@ -335,7 +335,13 @@ class ShellyRpcClient @Inject constructor(
                         return@withContext RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE)
                     }
 
-                logger.info(DiagnosticLogger.RPC, "$method @ $ip → ${response.code} (${elapsed}ms)")
+                // Switch.GetStatus est relevé toutes les ~5 s par appareil pendant que le Tableau ou
+                // le détail est ouvert : le journaliser en succès noierait le tampon circulaire de
+                // routine, au détriment des entrées vraiment utiles à un diagnostic. Les échecs
+                // (avertissements ci-dessus/ci-dessous) restent journalisés, eux, dans tous les cas.
+                if (method != "Switch.GetStatus") {
+                    logger.info(DiagnosticLogger.RPC, "$method @ $ip → ${response.code} (${elapsed}ms)")
+                }
                 RpcResult.Success(decoded)
             }
         } catch (e: SocketTimeoutException) {

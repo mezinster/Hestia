@@ -424,6 +424,16 @@ class DeviceRepository @Inject constructor(
      * installée (`Shelly.GetDeviceInfo`) et les versions publiées (`Shelly.CheckForUpdate`).
      * Ne propose jamais l'installation d'une bêta (voir [FirmwareCheckResult.BetaOnly]).
      */
+    /**
+     * Version de firmware installée, lue **localement** (`Shelly.GetDeviceInfo` uniquement — pas
+     * `Shelly.CheckForUpdate`, qui contacte les serveurs Shelly). Pour le journal de diagnostic :
+     * null si l'appareil est injoignable, jamais une exception qui bloquerait le rapport.
+     */
+    suspend fun getInstalledFirmwareVersion(device: Device): String? {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return null
+        return rpcClient.getDeviceInfo(device.ipAddress).getOrNull()?.ver
+    }
+
     suspend fun checkFirmwareUpdate(device: Device): FirmwareCheckResult {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return FirmwareCheckResult.UpToDate("démo")
         val ip = device.ipAddress
