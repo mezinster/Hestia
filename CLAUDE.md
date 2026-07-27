@@ -11,8 +11,18 @@ sur le réseau local avec les appareils, via leur API RPC embarquée.
 - Package / applicationId : `kapoue.hestia`
 - Distribution cible : **F-Droid** (build reproductible, aucune dépendance propriétaire,
   aucun service Google, aucune bibliothèque de tracking)
-- Langue V1 : **français uniquement** (l'anglais est prévu dans un lot ultérieur —
-  structurer les `strings.xml` proprement dès maintenant, aucune chaîne en dur dans le code)
+- Langue : **bilingue depuis le 2026-07-27**. `values/strings.xml` (défaut, sans qualificatif)
+  contient l'**anglais** — c'est la langue prioritaire, utilisée pour tout appareil dont la
+  langue système n'est ni le français ni l'anglais. `values-fr/strings.xml` contient le
+  **français**, utilisé uniquement si la langue système de l'appareil est le français. Android
+  choisit automatiquement entre les deux (aucun code de sélection à écrire).
+  **Règle permanente à partir de maintenant : toute chaîne visible par l'utilisateur, nouvelle
+  ou modifiée, doit être ajoutée dans les DEUX fichiers, systématiquement, dans la même
+  livraison — jamais une chaîne anglaise sans son équivalent français ou l'inverse.** Aucune
+  chaîne en dur dans le code (`stringResource`/`getString` uniquement). Les mêmes clés doivent
+  porter les mêmes espaces de format (`%1$s`, `%2$d`…) dans les deux fichiers.
+  Les captures d'écran F-Droid restent en français pour l'instant (voir `fastlane/metadata/`,
+  déjà bilingue côté texte depuis la revue linsui — non retouché ici).
 
 ## Indépendance vis-à-vis de Shelly
 

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kapoue.hestia.R
 import kapoue.hestia.data.local.dao.DiagnosticLogDao
 import kapoue.hestia.data.repository.DeviceRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,14 +44,14 @@ class DiagnosticViewModel @Inject constructor(
         val entries = diagnosticLogDao.getAll()
         val deviceCount = deviceRepository.getDevicesOnce().size
         val sb = StringBuilder()
-        sb.appendLine("Hestia — journal de diagnostic")
-        sb.appendLine("Application : ${appVersion()}")
-        sb.appendLine("Android : ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-        sb.appendLine("Appareil : ${Build.MANUFACTURER} ${Build.MODEL}")
-        sb.appendLine("Langue : ${Locale.getDefault()}")
-        sb.appendLine("Thème : $themeLabel")
-        sb.appendLine("Permission réseau local : $permissionLabel")
-        sb.appendLine("Appareils configurés : $deviceCount")
+        sb.appendLine(context.getString(R.string.diagnostic_report_header))
+        sb.appendLine(context.getString(R.string.diagnostic_report_app, appVersion()))
+        sb.appendLine(context.getString(R.string.diagnostic_report_android, Build.VERSION.RELEASE, Build.VERSION.SDK_INT))
+        sb.appendLine(context.getString(R.string.diagnostic_report_device, Build.MANUFACTURER, Build.MODEL))
+        sb.appendLine(context.getString(R.string.diagnostic_report_language, Locale.getDefault().toString()))
+        sb.appendLine(context.getString(R.string.diagnostic_report_theme, themeLabel))
+        sb.appendLine(context.getString(R.string.diagnostic_report_permission, permissionLabel))
+        sb.appendLine(context.getString(R.string.diagnostic_report_device_count, deviceCount))
         sb.appendLine("----")
         for (entry in entries) {
             sb.append(ISO.format(Instant.ofEpochMilli(entry.timestamp)))

@@ -1,7 +1,24 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-07-27 (retrait du journal d'activité).
+Dernière mise à jour : 2026-07-27 (redémarrage manuel + traduction anglaise).
+
+## Fait — en cours (à surveiller)
+
+- **Traduction anglaise** : `values/strings.xml` (défaut) est désormais l'anglais, `values-fr/`
+  porte le français — Android choisit tout seul selon la langue système. Deux formats horaires
+  codés « à la française » corrigés au passage (`formatTimeRange`, les horaires des
+  notifications) via un nouveau `formatClockTime()` locale-aware (`DateTimeFormatter.
+  ofLocalizedTime`). Les étiquettes fixes du rapport de diagnostic (« Application :, Android :,
+  Thème : »…) déplacées en ressources au passage — elles ne l'étaient pas.
+  **Scope volontairement laissé de côté** : les messages individuels écrits via
+  `DiagnosticLogger.info/warn/error(...)` (une quinzaine de points d'appel, ex. "Bascule
+  192.168.1.96#0 → true") restent en français uniquement. Ce journal est accessible en
+  production (5 appuis sur le titre du Tableau) et partageable — un utilisateur anglophone qui
+  le partagerait verrait donc des lignes de log en français au milieu d'un rapport sinon
+  traduit. Accepté pour l'instant vu le volume de points d'appel dispersés ; à traiter si ça
+  pose un problème réel en usage. Les données de démo (noms des appareils fictifs, "Démo" comme
+  modèle) restent aussi en français, pour ne pas casser les captures d'écran F-Droid actuelles.
 
 ## Écarté
 
@@ -32,12 +49,6 @@ Dernière mise à jour : 2026-07-27 (retrait du journal d'activité).
 
 ## Fonctionnalités futures
 
-- **Traduction anglaise** (déjà prévue au CLAUDE.md) : adaptation à la langue du système
-  (anglais par défaut, français si l'appareil est en français). Au-delà des `strings.xml`,
-  attention aux **formats codés « à la française »** qui ne se traduisent pas tout seuls :
-  `formatTimeRange` produit `9h00 - 11h00` (format horaire français en dur) et le worker de
-  notifications formate ses heures en `8h30` → à localiser. Les nombres, eux, sont déjà corrects :
-  `formatPower` force le point (choix produit) et `formatCountdown` est neutre.
 - **Audit des fonctions RPC de la prise non gérées** par Hestia (mesure d'énergie détaillée,
   métriques cumulées, etc.).
 
@@ -76,3 +87,8 @@ Points sortis du backlog, avec ce qui a été tranché :
   défaut, même style que Notifications), et saisie libre du seuil remplacée par une roulette sur
   des valeurs prédéfinies (5, 10, 20, 30, 40, 50 W, défaut 10) via le nouveau `ValueWheelPicker`,
   qui généralise `TimeWheelPicker` à une liste de valeurs arbitraire.
+- **Redémarrage manuel de l'appareil** (dépannage) : bouton sous la section firmware
+  (`Shelly.Reboot`), gated sur `DriverType.SHELLY_GEN2` plutôt qu'affiché sans condition — n'a
+  pas d'équivalent générique si une autre marque est gérée un jour. Jamais bloqué par un
+  minuteur en cours (peut justement servir à débloquer une prise plantée). Confirmation
+  obligatoire avant déclenchement.

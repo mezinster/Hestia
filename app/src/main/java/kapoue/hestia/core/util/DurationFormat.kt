@@ -1,5 +1,9 @@
 package kapoue.hestia.core.util
 
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+
 /**
  * Formate une puissance en watts avec une décimale : « 0.0 W », « 479.3 W ».
  * Séparateur décimal **toujours un point** (Locale.US), en français comme en anglais : choix
@@ -7,9 +11,19 @@ package kapoue.hestia.core.util
  */
 fun formatPower(watts: Double): String = String.format(java.util.Locale.US, "%.1f W", watts)
 
-/** Formate une plage horaire pour l'affichage : « 9h00 - 11h00 ». */
+/**
+ * Formate une heure selon la locale de l'appareil (« 09:00 » en français, « 9:00 AM » en
+ * anglais) plutôt qu'un format français codé en dur — nécessaire pour la traduction anglaise.
+ */
+fun formatClockTime(hour: Int, minute: Int): String =
+    LocalTime.of(hour, minute).format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT))
+
+/** Variante à partir des minutes depuis minuit (0..1439), format déjà utilisé par les bornes. */
+fun formatClockTime(totalMinutes: Int): String = formatClockTime(totalMinutes / 60, totalMinutes % 60)
+
+/** Formate une plage horaire pour l'affichage : « 9:00 AM - 11:00 AM » (selon la locale). */
 fun formatTimeRange(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int): String =
-    "%dh%02d - %dh%02d".format(startHour, startMinute, endHour, endMinute)
+    "${formatClockTime(startHour, startMinute)} - ${formatClockTime(endHour, endMinute)}"
 
 /** Formate une durée en secondes pour un compte à rebours : « M:SS » ou « H:MM:SS ». */
 fun formatCountdown(totalSeconds: Long): String {

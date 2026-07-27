@@ -9,6 +9,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import kapoue.hestia.R
 import kapoue.hestia.core.log.DiagnosticLogger
+import kapoue.hestia.core.util.formatClockTime
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
@@ -68,12 +69,12 @@ class NotificationWorker(
                 for (p in repository.getPlannings(device).getOrNull().orEmpty()) {
                     ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.START, from, now, zone)?.let { t ->
                         post(ctx, device.id, "pl-start", t, device.name,
-                            ctx.getString(R.string.notif_planning_started, frTime(p.startMinutes), frTime(p.endMinutes)))
+                            ctx.getString(R.string.notif_planning_started, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))
                         posted++
                     }
                     ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.END, from, now, zone)?.let { t ->
                         post(ctx, device.id, "pl-end", t, device.name,
-                            ctx.getString(R.string.notif_planning_ended, frTime(p.startMinutes), frTime(p.endMinutes)))
+                            ctx.getString(R.string.notif_planning_ended, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))
                         posted++
                     }
                 }
@@ -82,12 +83,12 @@ class NotificationWorker(
                 for (w in repository.getPresenceWindows(device).getOrNull().orEmpty()) {
                     ScheduleCodec.boundaryInstant(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS, ScheduleCodec.Boundary.START, from, now, zone)?.let { t ->
                         post(ctx, device.id, "pr-start", t, device.name,
-                            ctx.getString(R.string.notif_presence_started, frTime(w.startMinutes), frTime(w.endMinutes)))
+                            ctx.getString(R.string.notif_presence_started, formatClockTime(w.startMinutes), formatClockTime(w.endMinutes)))
                         posted++
                     }
                     ScheduleCodec.boundaryInstant(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS, ScheduleCodec.Boundary.END, from, now, zone)?.let { t ->
                         post(ctx, device.id, "pr-end", t, device.name,
-                            ctx.getString(R.string.notif_presence_ended, frTime(w.startMinutes), frTime(w.endMinutes)))
+                            ctx.getString(R.string.notif_presence_ended, formatClockTime(w.startMinutes), formatClockTime(w.endMinutes)))
                         posted++
                     }
                 }
@@ -158,13 +159,6 @@ class NotificationWorker(
         // deux passages remplace sa notif au lieu d'en créer une seconde.
         val id = Objects.hash(deviceId, kind, instant) and 0x7FFFFFFF
         ProgrammationNotifier.post(ctx, id, title, text)
-    }
-
-    /** Heure « à la française » : 8h, 8h30, 22h05. */
-    private fun frTime(minutes: Int): String {
-        val h = minutes / 60
-        val m = minutes % 60
-        return if (m == 0) "${h}h" else "%dh%02d".format(h, m)
     }
 
     private companion object {

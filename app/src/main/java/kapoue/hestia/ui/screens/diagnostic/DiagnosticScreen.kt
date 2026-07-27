@@ -50,7 +50,7 @@ fun DiagnosticScreen(
     val context = LocalContext.current
     val isDark = LocalIsDarkTheme.current
 
-    val themeLabel = if (isDark) "sombre" else "clair"
+    val themeLabel = stringResource(if (isDark) R.string.diagnostic_theme_dark else R.string.diagnostic_theme_light)
     val permissionLabel = stringResource(
         when (LocalNetworkPermission.status(context)) {
             LocalNetworkPermissionStatus.GRANTED -> R.string.settings_permission_granted

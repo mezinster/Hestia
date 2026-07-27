@@ -1,0 +1,318 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Hestia</string>
+    <string name="action_ok">OK</string>
+    <string name="action_cancel">Annuler</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Tableau</string>
+    <string name="nav_settings">Réglages</string>
+    <string name="nav_about">À propos</string>
+
+    <!-- Écrans placeholder (complétés aux lots suivants) -->
+    <string name="dashboard_placeholder">Le tableau des appareils arrive au prochain lot.</string>
+    <string name="about_placeholder">L\'écran À propos arrive dans un prochain lot.</string>
+
+    <!-- Écran À propos (lot 7) -->
+    <string name="about_version">Version %1$s</string>
+    <string name="about_name_origin_title">Origine du nom</string>
+    <string name="about_name_origin">Hestia est, dans la mythologie grecque, la déesse du foyer et du feu domestique. Elle veille sur la maison, discrètement et sans jamais la quitter.</string>
+    <string name="about_positioning_title">Pilotage 100 % local</string>
+    <string name="about_positioning">Hestia pilote vos appareils entièrement en local. Aucune donnée ne quitte votre réseau, aucun compte, aucun traçage.</string>
+    <string name="about_permission_title">Permission réseau local</string>
+    <string name="about_permission_body">Depuis Android 17, une application doit demander votre autorisation pour communiquer avec les appareils de votre réseau local. Hestia en a besoin pour parler à vos appareils. Elle ne contacte que les adresses que vous avez saisies vous-même, n\'explore pas votre réseau et n\'envoie rien à l\'extérieur.</string>
+    <string name="about_independence_title">Indépendance</string>
+    <string name="about_independence">Hestia est un projet indépendant, sans aucun lien avec Shelly ni avec Allterco Robotics. Ce projet n\'est ni commandité, ni sponsorisé, ni approuvé par Shelly. Aucune rémunération ni aucun matériel n\'a été fourni ou prêté par la marque. Shelly est une marque déposée de son propriétaire respectif ; elle n\'est citée qu\'à titre de compatibilité technique.</string>
+    <string name="about_compat">Compatible Shelly Gen2 et ultérieur. Support d\'autres marques prévu dans de prochaines versions.</string>
+    <string name="about_language_title">Langue</string>
+    <string name="about_language">L\'application s\'adapte à la langue du système : anglais par défaut, français si l\'appareil est en français.</string>
+    <string name="about_license_title">Licence</string>
+    <string name="about_license">Distribué sous licence GPLv3.</string>
+    <string name="about_license_link">(en savoir plus)</string>
+    <string name="about_share_title">Partager l\'application</string>
+    <string name="about_qr_hint">Scannez pour télécharger Hestia — Appuyez pour augmenter la luminosité</string>
+    <string name="about_qr_hint_max">Luminosité au maximum — Appuyez pour réduire</string>
+
+    <!-- Réglages -->
+    <string name="settings_devices_title">Appareils</string>
+    <string name="settings_devices_empty">Aucun appareil pour l\'instant.\nAjoute ton premier appareil Shelly avec le bouton +.</string>
+    <string name="settings_add_device">Ajouter un appareil</string>
+    <string name="settings_device_channel">Canal %1$d</string>
+    <string name="settings_open_web">Ouvrir l\'interface web</string>
+    <string name="settings_edit_device">Modifier</string>
+    <string name="settings_delete_device">Supprimer</string>
+    <string name="settings_permission_section">Permission réseau local</string>
+    <string name="settings_permission_granted">Accordée</string>
+    <string name="settings_permission_denied">Refusée</string>
+    <string name="settings_permission_not_required">Non requise sur cette version d\'Android</string>
+    <string name="settings_permission_open_system">Ouvrir les réglages système de l\'application</string>
+    <string name="settings_appearance_section">Apparence</string>
+    <string name="settings_theme_system">Suivre le thème système</string>
+    <string name="settings_theme_light">Thème clair</string>
+    <string name="settings_theme_dark">Thème foncé</string>
+
+    <!-- Notifications de bornes de programmation -->
+    <string name="settings_notifications_section">Notifications</string>
+    <string name="settings_notifications_label">Notifications de programmation</string>
+    <string name="settings_notifications_desc">Prévient au début et à la fin des plannings et des plages de présence. Vérifié en arrière-plan toutes les 15 min environ : l\'alerte peut arriver avec un léger décalage.</string>
+    <string name="settings_notifications_denied">Autorisation refusée. Pour recevoir les notifications, active-les pour Hestia dans les réglages Android.</string>
+
+    <!-- Canal et contenus des notifications -->
+    <string name="notif_channel_name">Programmations</string>
+    <string name="notif_channel_desc">Début et fin des plannings et des plages de présence</string>
+    <string name="notif_planning_started">Planning de %1$s à %2$s lancé</string>
+    <string name="notif_planning_ended">Planning de %1$s à %2$s terminé</string>
+    <string name="notif_presence_started">Présence de %1$s à %2$s lancée</string>
+    <string name="notif_presence_ended">Présence de %1$s à %2$s terminée</string>
+    <string name="notif_timer_ended">Active pour %1$s terminé</string>
+    <string name="notif_cutoff_triggered">Prise coupée (consommation sous le seuil)</string>
+
+    <string name="settings_security_section">Sécurité</string>
+    <string name="settings_security_password_hint">Mot de passe de l\'appareil</string>
+    <string name="settings_security_coming_soon">Disponible prochainement</string>
+
+    <!-- Ajout / modification d'appareil -->
+    <string name="add_device_title">Nouvel appareil</string>
+    <string name="edit_device_title">Modifier l\'appareil</string>
+    <string name="add_device_name_label">Nom</string>
+    <string name="add_device_name_hint">Ex. : Prise scooter</string>
+    <string name="add_device_ip_label">Adresse IP</string>
+    <string name="add_device_ip_hint">Ex. : 192.168.1.96</string>
+    <string name="add_device_type_label">Type</string>
+    <string name="device_type_plug">Prise</string>
+    <string name="device_type_lamp">Lampe</string>
+    <string name="device_type_sensor">Capteur</string>
+    <string name="add_device_test_and_add">Tester la connexion et ajouter</string>
+    <string name="add_device_testing">Test de la connexion…</string>
+    <string name="add_device_save">Enregistrer</string>
+    <string name="add_device_cancel">Annuler</string>
+
+    <!-- Détection de canaux -->
+    <string name="add_device_channels_title">Canaux détectés</string>
+    <string name="add_device_channels_prompt">Cet appareil expose plusieurs canaux. Choisis ceux à ajouter : chacun apparaîtra comme une tuile distincte.</string>
+    <string name="add_device_channel_label">Canal %1$d</string>
+    <string name="add_device_add_selected">Ajouter la sélection</string>
+    <string name="add_device_model_detected">Modèle détecté : %1$s</string>
+
+    <!-- Validation -->
+    <string name="error_name_required">Donne un nom à l\'appareil.</string>
+    <string name="error_ip_invalid">Adresse IP invalide. Format attendu : 192.168.1.96</string>
+    <string name="error_ip_required">Saisis l\'adresse IP de l\'appareil.</string>
+    <string name="error_channel_required">Choisis au moins un canal.</string>
+    <string name="error_device_exists">Ce canal de cet appareil est déjà enregistré.</string>
+
+    <!-- Erreurs réseau / RPC (actionnables, pas techniques) -->
+    <string name="error_unreachable">Appareil injoignable. Vérifie qu\'il est allumé et sur le même réseau Wi-Fi.</string>
+    <string name="error_timeout">L\'appareil n\'a pas répondu à temps. Vérifie le réseau et réessaie.</string>
+    <string name="error_not_shelly">Cette adresse ne répond pas comme un appareil Shelly Gen2 ou ultérieur.</string>
+    <string name="error_gen1_unsupported">Cet appareil est un Shelly Gen1, non pris en charge. Seuls les Gen2 et ultérieurs le sont.</string>
+    <string name="error_rpc_generic">L\'appareil a renvoyé une erreur (code %1$d). Réessaie.</string>
+    <string name="error_permission_denied_action">La permission réseau local est nécessaire pour joindre l\'appareil. Tu peux la réactiver dans les réglages système.</string>
+    <string name="action_retry">Réessayer</string>
+
+    <!-- Confirmation de suppression -->
+    <string name="delete_device_title">Supprimer cet appareil ?</string>
+    <string name="delete_device_message">« %1$s » sera retiré de Hestia. Cela n\'affecte pas l\'appareil lui-même ni sa configuration.</string>
+    <string name="delete_device_confirm">Supprimer</string>
+    <string name="delete_device_cancel">Annuler</string>
+
+    <!-- Modifications non enregistrées -->
+    <string name="unsaved_changes_title">Modifications non enregistrées</string>
+    <string name="unsaved_changes_message">Des modifications n\'ont pas été enregistrées. Les abandonner ?</string>
+    <string name="unsaved_changes_discard">Abandonner</string>
+    <string name="unsaved_changes_keep">Continuer</string>
+
+    <!-- Écran d'explication de la permission réseau local -->
+    <string name="permission_explain_title">Autoriser l\'accès au réseau local</string>
+    <string name="permission_explain_body">Depuis Android 17, une application doit demander votre autorisation pour communiquer avec les appareils de votre réseau local. Hestia en a besoin pour parler à vos appareils.\n\nElle ne contacte que les adresses que vous avez saisies vous-même, n\'explore pas votre réseau et n\'envoie rien à l\'extérieur.</string>
+    <string name="permission_explain_continue">Continuer</string>
+    <string name="permission_explain_cancel">Plus tard</string>
+    <string name="permission_denied_banner">Permission réseau local refusée. Certaines actions ne pourront pas joindre vos appareils.</string>
+
+    <!-- Tableau -->
+    <string name="dashboard_empty_title">Aucun appareil</string>
+    <string name="dashboard_empty_body">Ajoute un appareil Shelly pour le piloter ici.</string>
+    <string name="dashboard_empty_action">Ajouter un appareil</string>
+
+    <!-- États d'une tuile -->
+    <string name="state_active">Actif</string>
+    <string name="state_idle">Repos</string>
+    <string name="state_timed">Minuterie</string>
+    <string name="state_presence">Mode présence</string>
+    <string name="state_planning">Planning</string>
+    <string name="state_offline">Hors ligne</string>
+    <string name="state_loading">Lecture…</string>
+    <string name="state_permission_required">Permission requise</string>
+
+    <!-- Actions de tuile -->
+    <string name="tile_toggle">Interrupteur</string>
+    <string name="tile_grant_permission">Autoriser</string>
+    <string name="tile_number">%1$s</string>
+
+    <!-- Connectivité et ordre dans les Réglages -->
+    <string name="settings_connectivity_online">En ligne</string>
+    <string name="settings_connectivity_offline">Hors ligne</string>
+    <string name="settings_connectivity_checking">Vérification…</string>
+    <string name="settings_move_up">Monter</string>
+    <string name="settings_move_down">Descendre</string>
+
+    <!-- Écran Détail -->
+    <string name="detail_back">Retour</string>
+    <string name="detail_timer_section">Active pour</string>
+    <string name="detail_timer_custom">Perso</string>
+    <string name="detail_timer_running">Minuteur en cours</string>
+    <string name="detail_timer_cancel">Annuler le minuteur</string>
+    <string name="detail_offline">Appareil injoignable pour le moment.</string>
+
+    <!-- Durées -->
+    <string name="duration_hours">%1$d h</string>
+    <string name="duration_minutes">%1$d min</string>
+    <string name="duration_hours_minutes">%1$d h %2$d min</string>
+
+    <!-- Sélecteur « Perso » -->
+    <string name="duration_picker_title">Durée personnalisée</string>
+    <string name="duration_picker_hours">Heures</string>
+    <string name="duration_picker_minutes">Minutes</string>
+    <string name="duration_picker_start">Démarrer</string>
+    <string name="timer_cutoff_label">Couper si la consommation passe sous</string>
+    <string name="duration_picker_min_error">La durée minimale est de 1 minute.</string>
+
+    <!-- Mise à jour du firmware (vérification manuelle uniquement) -->
+    <string name="firmware_section">Mise à jour du firmware</string>
+    <string name="firmware_check_button">Vérifier les mises à jour</string>
+    <string name="firmware_check_hint">Interroge les serveurs Shelly (seule action de l\'application qui sort du réseau local) — uniquement à ta demande.</string>
+    <string name="firmware_up_to_date">%1$s : à jour (version %2$s).</string>
+    <string name="firmware_update_available">%1$s : mise à jour disponible. Version installée : %2$s. Version disponible : %3$s.</string>
+    <string name="firmware_beta_only">%1$s : à jour (version %2$s). Une version bêta (%3$s) est disponible — Hestia ne propose que les mises à jour stables.</string>
+    <string name="firmware_check_error">Vérification impossible. Vérifie que l\'appareil est joignable.</string>
+    <string name="firmware_install_button">Installer la mise à jour</string>
+    <string name="firmware_install_confirm_title">Installer la mise à jour ?</string>
+    <string name="firmware_install_confirm_message">L\'appareil va redémarrer pour appliquer la mise à jour : tout ce qu\'il alimente sera coupé quelques secondes. Ne le débranche pas pendant l\'opération.</string>
+    <string name="firmware_install_confirm_ok">Installer</string>
+    <string name="firmware_install_started">Installation lancée. L\'appareil va redémarrer.</string>
+    <string name="firmware_install_error">Échec du lancement de l\'installation. Réessaie.</string>
+
+    <!-- Redémarrage manuel (dépannage), sous la section firmware -->
+    <string name="firmware_reboot_hint">En cas de comportement anormal (script planté, prise qui ne répond plus), tu peux redémarrer l\'appareil.</string>
+    <string name="firmware_reboot_button">Redémarrer l\'appareil</string>
+    <string name="firmware_reboot_confirm_title">Redémarrer l\'appareil ?</string>
+    <string name="firmware_reboot_confirm_message">Il va couper l\'alimentation de ce qu\'il pilote pendant quelques secondes. Ne le débranche pas pendant l\'opération.</string>
+    <string name="firmware_reboot_confirm_ok">Redémarrer</string>
+    <string name="firmware_reboot_started">Redémarrage lancé.</string>
+    <string name="firmware_reboot_error">Échec du lancement du redémarrage. Réessaie.</string>
+
+    <!-- Simulation de présence (lot 4) -->
+    <string name="presence_section">Simulation de présence</string>
+    <string name="presence_add">Ajouter une plage</string>
+    <string name="presence_empty">Aucune plage.</string>
+    <string name="presence_delete">Supprimer la plage</string>
+    <string name="presence_dialog_title">Nouvelle plage</string>
+    <string name="presence_edit_title">Modifier la plage</string>
+    <string name="presence_margin">Marge aléatoire</string>
+    <string name="presence_margin_value">± %1$d min</string>
+    <string name="presence_conflict_planning">Ce créneau chevauche un planning. Choisis un autre horaire.</string>
+    <string name="presence_delete_title">Supprimer cette plage ?</string>
+    <string name="presence_delete_message">La plage %1$s sera retirée.</string>
+    <string name="presence_delete_active_warning">Cette plage est en cours : sa suppression éteindra la prise.</string>
+    <string name="presence_configure">Configurer</string>
+    <string name="presence_state_active">Active</string>
+    <string name="presence_state_inactive">Inactive</string>
+    <string name="presence_screen_title">Simulation de présence</string>
+    <string name="presence_intro">Hestia génère un script qui allume et éteint l\'appareil dans la plage horaire choisie, avec une marge aléatoire. Une fois déployé, il s\'exécute seul sur l\'appareil, même téléphone éteint.</string>
+    <string name="presence_start_time">Heure de début</string>
+    <string name="presence_end_time">Heure de fin</string>
+    <string name="presence_deploy">Déployer sur l\'appareil</string>
+    <string name="presence_stop">Arrêter la simulation</string>
+    <string name="presence_deploying">Déploiement…</string>
+    <string name="presence_deployed_confirm">Simulation active sur l\'appareil.</string>
+    <string name="presence_stopped_confirm">Simulation arrêtée.</string>
+    <string name="presence_error_end_before_start">Le début et la fin doivent être différents.</string>
+    <string name="presence_error_planning_exists">Un planning est déjà défini sur cette prise. Supprime-le avant d\'activer le mode Présence.</string>
+    <string name="presence_error_margin">Marge invalide (0 à 120 minutes).</string>
+    <string name="presence_clock_device_time">Heure de l\'appareil : %1$s</string>
+    <string name="presence_clock_warning">L\'horloge de l\'appareil est décalée d\'environ %1$s par rapport au téléphone. La simulation repose sur l\'heure de l\'appareil : vérifie qu\'il a une connexion réseau stable.</string>
+
+    <!-- Bascule manuelle pendant une simulation de présence (Tableau) -->
+    <string name="presence_toggle_title">Simulation de présence active</string>
+    <string name="presence_toggle_message">Agir sur l\'interrupteur n\'aura qu\'un effet passager : le programme reprendra la main sur la prise.</string>
+    <string name="presence_toggle_stop">Arrêter la simulation</string>
+
+    <!-- Conflit minuteur / présence -->
+    <string name="conflict_title">Simulation de présence active</string>
+    <string name="conflict_message">La simulation de présence pourra reprendre la main sur l\'appareil pendant le minuteur. Que veux-tu faire ?</string>
+    <string name="conflict_launch_anyway">Lancer quand même</string>
+    <string name="conflict_stop_presence">Arrêter la simulation puis lancer</string>
+    <string name="conflict_cancel">Annuler</string>
+
+    <!-- Minuteur lancé pendant un planning en cours : avertissement, pas un blocage -->
+    <string name="timer_planning_active_title">Planning en cours</string>
+    <string name="timer_planning_active_message">Un planning occupe ce créneau jusqu\'à %1$s. À la fin du minuteur, la prise s\'éteindra même si le planning n\'est pas terminé. Le planning reprendra la main à sa prochaine occurrence.</string>
+    <string name="timer_planning_active_confirm">Lancer quand même</string>
+
+    <!-- Planning (composant Schedule natif de l\'appareil) -->
+    <string name="planning_section">Planning</string>
+    <string name="planning_empty">Aucun planning.</string>
+    <string name="planning_add">Ajouter un planning</string>
+    <string name="planning_limit_reached">Maximum de 10 plannings atteint.</string>
+    <string name="planning_delete">Supprimer le planning</string>
+    <string name="planning_delete_title">Supprimer ce planning ?</string>
+    <string name="planning_delete_message">Le planning %1$s sera retiré de la prise.</string>
+    <string name="planning_delete_confirm">Supprimer</string>
+    <string name="planning_every_day">Tous les jours</string>
+    <string name="planning_dialog_title">Nouveau planning</string>
+    <string name="planning_edit_title">Modifier le planning</string>
+    <string name="planning_edit_blocked_title">Planning en cours</string>
+    <string name="planning_edit_blocked_message">Ce planning est en cours (il a allumé la prise). Modifie-le en dehors de son créneau, ou supprime-le.</string>
+    <string name="planning_delete_active_warning">Ce planning est en cours : sa suppression éteindra la prise.</string>
+    <string name="planning_ok">Compris</string>
+    <string name="planning_start">Début</string>
+    <string name="planning_end">Fin</string>
+    <string name="planning_days">Jours</string>
+    <string name="planning_all_days">Tous les jours</string>
+    <string name="planning_validate">Valider</string>
+    <string name="planning_error_range">Le début et la fin doivent être différents.</string>
+    <string name="planning_error_no_day">Choisis au moins un jour.</string>
+    <string name="planning_conflict">Ce créneau chevauche un planning existant (%1$s). Modifie l\'un ou l\'autre.</string>
+    <string name="planning_conflict_presence">Ce créneau chevauche une plage de simulation de présence. Choisis un autre horaire.</string>
+    <string name="planning_error_generic">Impossible d\'enregistrer le planning. Vérifie que la prise répond.</string>
+    <string name="planning_day_mon">Lun</string>
+    <string name="planning_day_tue">Mar</string>
+    <string name="planning_day_wed">Mer</string>
+    <string name="planning_day_thu">Jeu</string>
+    <string name="planning_day_fri">Ven</string>
+    <string name="planning_day_sat">Sam</string>
+    <string name="planning_day_sun">Dim</string>
+
+    <!-- Sauvegarde / restauration (lot 5) -->
+    <string name="settings_backup_section">Sauvegarde</string>
+    <string name="settings_backup_export">Exporter la configuration</string>
+    <string name="settings_backup_import">Importer une configuration</string>
+    <string name="backup_export_filename">hestia-sauvegarde.json</string>
+    <string name="backup_import_confirm_title">Remplacer la configuration ?</string>
+    <string name="backup_import_confirm_message">L\'import va remplacer tous vos appareils et réglages actuels. Cette action est irréversible.</string>
+    <string name="backup_import_confirm_ok">Remplacer</string>
+    <string name="backup_export_success">Configuration exportée.</string>
+    <string name="backup_export_error">Échec de l\'export.</string>
+    <string name="backup_import_success">Configuration restaurée.</string>
+    <string name="backup_import_invalid">Fichier invalide ou incompatible.</string>
+    <string name="backup_import_error">Échec de l\'import.</string>
+
+    <!-- Journal de diagnostic (lot 5) -->
+    <string name="diagnostic_title">Journal de diagnostic</string>
+    <string name="diagnostic_warning">Ce journal contient les adresses IP locales et les noms de vos appareils. Ne le partagez qu\'avec quelqu\'un de confiance.</string>
+    <string name="diagnostic_share">Partager</string>
+    <string name="diagnostic_share_chooser">Partager le journal</string>
+    <string name="diagnostic_subject">Journal de diagnostic Hestia</string>
+
+    <!-- En-tête du rapport partagé -->
+    <string name="diagnostic_theme_dark">sombre</string>
+    <string name="diagnostic_theme_light">clair</string>
+    <string name="diagnostic_report_header">Hestia — journal de diagnostic</string>
+    <string name="diagnostic_report_app">Application : %1$s</string>
+    <string name="diagnostic_report_android">Android : %1$s (API %2$d)</string>
+    <string name="diagnostic_report_device">Appareil : %1$s %2$s</string>
+    <string name="diagnostic_report_language">Langue : %1$s</string>
+    <string name="diagnostic_report_theme">Thème : %1$s</string>
+    <string name="diagnostic_report_permission">Permission réseau local : %1$s</string>
+    <string name="diagnostic_report_device_count">Appareils configurés : %1$d</string>
+</resources>
