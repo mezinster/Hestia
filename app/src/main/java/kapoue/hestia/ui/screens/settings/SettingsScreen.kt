@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
@@ -351,25 +352,50 @@ private fun ConnectivityIndicator(online: Boolean?) {
     }
 }
 
+/**
+ * Alignée sur le langage visuel de la liste des appareils juste au-dessus (Card + icône de
+ * connectivité colorée) plutôt qu'un simple texte suivi d'un lien — même icône Wifi/WifiOff que
+ * [ConnectivityIndicator], sans dépendance supplémentaire.
+ */
 @Composable
 private fun PermissionSection() {
     val context = LocalContext.current
     val status = remember { LocalNetworkPermission.status(context) }
+    val statusRes = when (status) {
+        LocalNetworkPermissionStatus.GRANTED -> R.string.settings_permission_granted
+        LocalNetworkPermissionStatus.DENIED -> R.string.settings_permission_denied
+        LocalNetworkPermissionStatus.NOT_REQUIRED -> R.string.settings_permission_not_required
+    }
+    val (icon, tint) = when (status) {
+        LocalNetworkPermissionStatus.GRANTED -> Icons.Filled.Wifi to MaterialTheme.colorScheme.primary
+        LocalNetworkPermissionStatus.DENIED -> Icons.Filled.WifiOff to MaterialTheme.stateColors.offlineLed
+        LocalNetworkPermissionStatus.NOT_REQUIRED -> Icons.Filled.Wifi to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Column {
         SectionTitle(stringResource(R.string.settings_permission_section))
-        val statusRes = when (status) {
-            LocalNetworkPermissionStatus.GRANTED -> R.string.settings_permission_granted
-            LocalNetworkPermissionStatus.DENIED -> R.string.settings_permission_denied
-            LocalNetworkPermissionStatus.NOT_REQUIRED -> R.string.settings_permission_not_required
-        }
-        Text(
-            text = stringResource(statusRes),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        if (status != LocalNetworkPermissionStatus.NOT_REQUIRED) {
-            TextButton(onClick = { LocalNetworkPermission.openAppSettings(context) }) {
-                Text(stringResource(R.string.settings_permission_open_system))
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.size(10.dp))
+                Text(
+                    text = stringResource(statusRes),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (status != LocalNetworkPermissionStatus.NOT_REQUIRED) {
+                    IconButton(onClick = { LocalNetworkPermission.openAppSettings(context) }) {
+                        Icon(
+                            Icons.Filled.Settings,
+                            contentDescription = stringResource(R.string.settings_permission_open_system),
+                        )
+                    }
+                }
             }
         }
     }
