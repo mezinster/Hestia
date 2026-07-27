@@ -184,6 +184,21 @@
     <string name="timer_cutoff_label">Couper si la consommation passe sous</string>
     <string name="duration_picker_min_error">La durée minimale est de 1 minute.</string>
 
+    <!-- Mise à jour du firmware (vérification manuelle uniquement) -->
+    <string name="firmware_section">Mise à jour du firmware</string>
+    <string name="firmware_check_button">Vérifier les mises à jour</string>
+    <string name="firmware_check_hint">Interroge les serveurs Shelly (seule action de l\'application qui sort du réseau local) — uniquement à ta demande.</string>
+    <string name="firmware_up_to_date">%1$s : à jour (version %2$s).</string>
+    <string name="firmware_update_available">%1$s : mise à jour disponible. Version installée : %2$s. Version disponible : %3$s.</string>
+    <string name="firmware_beta_only">%1$s : à jour (version %2$s). Une version bêta (%3$s) est disponible — Hestia ne propose que les mises à jour stables.</string>
+    <string name="firmware_check_error">Vérification impossible. Vérifie que l\'appareil est joignable.</string>
+    <string name="firmware_install_button">Installer la mise à jour</string>
+    <string name="firmware_install_confirm_title">Installer la mise à jour ?</string>
+    <string name="firmware_install_confirm_message">L\'appareil va redémarrer pour appliquer la mise à jour : tout ce qu\'il alimente sera coupé quelques secondes. Ne le débranche pas pendant l\'opération.</string>
+    <string name="firmware_install_confirm_ok">Installer</string>
+    <string name="firmware_install_started">Installation lancée. L\'appareil va redémarrer.</string>
+    <string name="firmware_install_error">Échec du lancement de l\'installation. Réessaie.</string>
+
     <!-- Libellés du journal d'activité -->
     <string name="activity_turned_on">Allumé</string>
     <string name="activity_turned_off">Éteint</string>

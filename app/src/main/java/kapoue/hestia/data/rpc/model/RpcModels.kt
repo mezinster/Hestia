@@ -41,8 +41,27 @@ data class DeviceInfoResult(
     /** Génération : 2, 3, 4… Absent ⇒ probablement Gen1. */
     val gen: Int? = null,
     @SerialName("fw_id") val firmwareId: String? = null,
+    /** Version lisible du firmware (ex. « 1.8.99-plugmg3prod0 »), affichée à l'utilisateur. */
+    val ver: String? = null,
     @SerialName("app") val appName: String? = null,
     @SerialName("auth_en") val authEnabled: Boolean? = null,
+)
+
+/**
+ * Réponse de Shelly.CheckForUpdate. Chaque section absente signifie qu'aucune mise à jour n'est
+ * disponible sur ce canal. On ne propose jamais l'installation de [beta] depuis Hestia (trop
+ * risqué pour un outil grand public) : elle n'est affichée qu'à titre informatif.
+ */
+@Serializable
+data class CheckForUpdateResult(
+    val stable: FirmwareUpdateInfo? = null,
+    val beta: FirmwareUpdateInfo? = null,
+)
+
+@Serializable
+data class FirmwareUpdateInfo(
+    val version: String,
+    @SerialName("build_id") val buildId: String? = null,
 )
 
 /**

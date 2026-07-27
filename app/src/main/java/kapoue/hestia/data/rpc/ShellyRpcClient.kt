@@ -1,6 +1,7 @@
 package kapoue.hestia.data.rpc
 
 import kapoue.hestia.core.log.DiagnosticLogger
+import kapoue.hestia.data.rpc.model.CheckForUpdateResult
 import kapoue.hestia.data.rpc.model.ComponentsResult
 import kapoue.hestia.data.rpc.model.DeviceInfoResult
 import kapoue.hestia.data.rpc.model.RpcEnvelope
@@ -115,6 +116,18 @@ class ShellyRpcClient @Inject constructor(
     /** Infos appareil : modèle, génération, firmware. */
     suspend fun getDeviceInfo(ip: String): RpcResult<DeviceInfoResult> =
         call(ip, "Shelly.GetDeviceInfo", null, DeviceInfoResult.serializer())
+
+    /**
+     * Interroge les serveurs Shelly pour savoir si une mise à jour de firmware est disponible.
+     * Seul appel RPC du projet qui fait sortir l'appareil du réseau local — **exclusivement à la
+     * demande explicite de l'utilisateur** (bouton « Vérifier »), jamais en tâche de fond.
+     */
+    suspend fun checkForUpdate(ip: String): RpcResult<CheckForUpdateResult> =
+        call(ip, "Shelly.CheckForUpdate", null, CheckForUpdateResult.serializer())
+
+    /** Installe la mise à jour du canal [stage] ; l'appareil redémarre une fois l'installation faite. */
+    suspend fun updateFirmware(ip: String, stage: String = "stable"): RpcResult<SetConfigResult> =
+        call(ip, "Shelly.Update", buildJsonObject { put("stage", stage) }, SetConfigResult.serializer())
 
     /** État complet de l'appareil ; on n'exploite que la section `sys` (horloge). */
     suspend fun getFullStatus(ip: String): RpcResult<ShellyFullStatus> =

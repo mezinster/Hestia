@@ -4,16 +4,19 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kapoue.hestia.R
 import kapoue.hestia.data.local.entity.ActivationLog
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.domain.model.CreatePlanningResult
+import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.PresenceOpResult
 import kapoue.hestia.domain.model.PresenceWindow
 import kapoue.hestia.domain.model.isActiveNow
+import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.navigation.StackedRoutes
 import kapoue.hestia.ui.screens.dashboard.TileStatus
 import kapoue.hestia.ui.screens.dashboard.toTileStatus
@@ -61,6 +64,51 @@ class DetailViewModel @Inject constructor(
     /** Résultat de la dernière tentative d'ajout (conflit, limite…), consommé par l'UI. */
     private val _addPlanningResult = MutableStateFlow<CreatePlanningResult?>(null)
     val addPlanningResult: StateFlow<CreatePlanningResult?> = _addPlanningResult.asStateFlow()
+
+    /** Résultat de la dernière vérification manuelle de mise à jour firmware. */
+    private val _firmwareCheck = MutableStateFlow<FirmwareCheckResult?>(null)
+    val firmwareCheck: StateFlow<FirmwareCheckResult?> = _firmwareCheck.asStateFlow()
+
+    private val _firmwareChecking = MutableStateFlow(false)
+    val firmwareChecking: StateFlow<Boolean> = _firmwareChecking.asStateFlow()
+
+    private val _firmwareInstalling = MutableStateFlow(false)
+    val firmwareInstalling: StateFlow<Boolean> = _firmwareInstalling.asStateFlow()
+
+    /** Message transitoire de l'installation (démarrée ou en échec), consommé par l'UI. */
+    private val _firmwareInstallMessage = MutableStateFlow<UserMessage?>(null)
+    val firmwareInstallMessage: StateFlow<UserMessage?> = _firmwareInstallMessage.asStateFlow()
+
+    fun consumeFirmwareInstallMessage() {
+        _firmwareInstallMessage.value = null
+    }
+
+    /** Vérification manuelle (seul appel du projet qui sort du réseau local). */
+    fun checkFirmwareUpdate() {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            _firmwareChecking.value = true
+            _firmwareInstallMessage.value = null
+            _firmwareCheck.value = repository.checkFirmwareUpdate(dev)
+            _firmwareChecking.value = false
+        }
+    }
+
+    /** Démarre l'installation de la mise à jour stable ; l'appareil redémarre pour l'appliquer. */
+    fun installFirmwareUpdate() {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            _firmwareInstalling.value = true
+            val result = repository.installFirmwareUpdate(dev)
+            _firmwareInstalling.value = false
+            _firmwareInstallMessage.value = if (result is RpcResult.Success) {
+                _firmwareCheck.value = null // Redémarrage à venir : l'état vérifié devient obsolète.
+                UserMessage(R.string.firmware_install_started)
+            } else {
+                UserMessage(R.string.firmware_install_error)
+            }
+        }
+    }
 
     @Volatile
     private var permissionUsable: Boolean = true

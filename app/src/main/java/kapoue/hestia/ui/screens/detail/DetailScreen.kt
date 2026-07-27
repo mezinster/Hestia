@@ -1,6 +1,7 @@
 package kapoue.hestia.ui.screens.detail
 
 import android.os.SystemClock
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Power
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -60,6 +62,7 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.domain.model.ActivationAction
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.PresenceOpResult
 import kapoue.hestia.domain.model.PresenceWindow
@@ -84,6 +87,10 @@ fun DetailScreen(
     val addPresenceResult by viewModel.addPresenceResult.collectAsStateWithLifecycle()
     val plannings by viewModel.plannings.collectAsStateWithLifecycle()
     val addPlanningResult by viewModel.addPlanningResult.collectAsStateWithLifecycle()
+    val firmwareCheck by viewModel.firmwareCheck.collectAsStateWithLifecycle()
+    val firmwareChecking by viewModel.firmwareChecking.collectAsStateWithLifecycle()
+    val firmwareInstalling by viewModel.firmwareInstalling.collectAsStateWithLifecycle()
+    val firmwareInstallMessage by viewModel.firmwareInstallMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -105,6 +112,15 @@ fun DetailScreen(
     var blockedEditPlanning by remember { mutableStateOf<Planning?>(null) }
     // Planning en attente de confirmation de suppression.
     var planningToDelete by remember { mutableStateOf<Planning?>(null) }
+    // Confirmation avant de lancer l'installation d'une mise à jour firmware.
+    var showFirmwareInstallConfirm by remember { mutableStateOf(false) }
+
+    LaunchedEffect(firmwareInstallMessage) {
+        firmwareInstallMessage?.let {
+            Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
+            viewModel.consumeFirmwareInstallMessage()
+        }
+    }
 
     // Ferme le dialogue dès qu'un ajout/édition aboutit ; les conflits le laissent ouvert.
     LaunchedEffect(addPlanningResult) {
@@ -217,8 +233,28 @@ fun DetailScreen(
             }
 
             HorizontalDivider()
+            FirmwareSection(
+                deviceType = dev.type,
+                result = firmwareCheck,
+                checking = firmwareChecking,
+                installing = firmwareInstalling,
+                onCheck = { viewModel.checkFirmwareUpdate() },
+                onInstall = { showFirmwareInstallConfirm = true },
+            )
+
+            HorizontalDivider()
             ActivitySection(logs)
         }
+    }
+
+    if (showFirmwareInstallConfirm) {
+        FirmwareInstallConfirmDialog(
+            onConfirm = {
+                showFirmwareInstallConfirm = false
+                viewModel.installFirmwareUpdate()
+            },
+            onDismiss = { showFirmwareInstallConfirm = false },
+        )
     }
 
     if (showSheet) {
@@ -842,6 +878,86 @@ private fun TimerSection(
     }
 }
 
+/**
+ * Vérification manuelle de mise à jour firmware — jamais automatique (seul appel du projet qui
+ * sort du réseau local). Une version bêta disponible n'est jamais proposée à l'installation,
+ * seulement signalée.
+ */
+@Composable
+private fun FirmwareSection(
+    deviceType: DeviceType,
+    result: FirmwareCheckResult?,
+    checking: Boolean,
+    installing: Boolean,
+    onCheck: () -> Unit,
+    onInstall: () -> Unit,
+) {
+    // Désigne l'appareil par son type (« Prise », « Lampe », « Capteur ») plutôt que par le mot
+    // générique « appareil » — évite aussi tout accord de genre dans la phrase (le nom sert
+    // d'étiquette, pas de sujet grammatical : « Prise : à jour », pas « Ta prise est à jour »).
+    val noun = stringResource(nounFor(deviceType))
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.firmware_section),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+
+        when (result) {
+            null -> Text(
+                text = stringResource(R.string.firmware_check_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            is FirmwareCheckResult.UpToDate -> Text(
+                stringResource(R.string.firmware_up_to_date, noun, result.installedVersion),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            is FirmwareCheckResult.BetaOnly -> Text(
+                stringResource(R.string.firmware_beta_only, noun, result.installedVersion, result.betaVersion),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            is FirmwareCheckResult.UpdateAvailable -> Text(
+                stringResource(R.string.firmware_update_available, noun, result.installedVersion, result.newVersion),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            FirmwareCheckResult.Error -> Text(
+                stringResource(R.string.firmware_check_error),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onCheck, enabled = !checking && !installing) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.firmware_check_button))
+            }
+            if (result is FirmwareCheckResult.UpdateAvailable) {
+                Button(onClick = onInstall, enabled = !installing) {
+                    Text(stringResource(R.string.firmware_install_button))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FirmwareInstallConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.firmware_install_confirm_title)) },
+        text = { Text(stringResource(R.string.firmware_install_confirm_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.firmware_install_confirm_ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
 @Composable
 private fun ActivitySection(logs: List<ActivationLog>) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -916,4 +1032,10 @@ private fun iconFor(type: DeviceType): ImageVector = when (type) {
     DeviceType.PLUG -> Icons.Filled.Power
     DeviceType.LAMP -> Icons.Filled.Lightbulb
     DeviceType.SENSOR -> Icons.Filled.Sensors
+}
+
+private fun nounFor(type: DeviceType): Int = when (type) {
+    DeviceType.PLUG -> R.string.device_type_plug
+    DeviceType.LAMP -> R.string.device_type_lamp
+    DeviceType.SENSOR -> R.string.device_type_sensor
 }

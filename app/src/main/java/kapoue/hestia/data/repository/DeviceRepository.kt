@@ -26,6 +26,7 @@ import kapoue.hestia.data.rpc.model.SwitchStatusResult
 import kapoue.hestia.domain.model.ActivationAction
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.PresenceWindow
 import kapoue.hestia.domain.model.isActiveNow
@@ -462,6 +463,39 @@ class DeviceRepository @Inject constructor(
 
     /** Teste la connexion et déduit les capacités de l'appareil (rejette les Gen1). */
     suspend fun probe(ip: String): RpcResult<DeviceCapabilities> = rpcClient.probe(ip)
+
+    // --- Mise à jour du firmware (vérification et installation, toujours à la demande) ---
+
+    /**
+     * Vérifie manuellement si une mise à jour du firmware est disponible. Combine la version
+     * installée (`Shelly.GetDeviceInfo`) et les versions publiées (`Shelly.CheckForUpdate`).
+     * Ne propose jamais l'installation d'une bêta (voir [FirmwareCheckResult.BetaOnly]).
+     */
+    suspend fun checkFirmwareUpdate(device: Device): FirmwareCheckResult {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return FirmwareCheckResult.UpToDate("démo")
+        val ip = device.ipAddress
+        val installed = (rpcClient.getDeviceInfo(ip).getOrNull()?.ver) ?: return FirmwareCheckResult.Error
+        val update = rpcClient.checkForUpdate(ip).getOrNull() ?: return FirmwareCheckResult.Error
+        return when {
+            update.stable != null -> FirmwareCheckResult.UpdateAvailable(installed, update.stable.version)
+            update.beta != null -> FirmwareCheckResult.BetaOnly(installed, update.beta.version)
+            else -> FirmwareCheckResult.UpToDate(installed)
+        }
+    }
+
+    /**
+     * Lance l'installation de la mise à jour stable. Asynchrone côté appareil : ce retour signale
+     * seulement que l'installation a **démarré**, pas qu'elle a abouti — l'appareil redémarre pour
+     * l'appliquer et devient temporairement injoignable.
+     */
+    suspend fun installFirmwareUpdate(device: Device): RpcResult<Unit> {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(Unit)
+        return when (val r = rpcClient.updateFirmware(device.ipAddress)) {
+            is RpcResult.Success -> RpcResult.Success(Unit)
+            is RpcResult.RpcError -> r
+            is RpcResult.Failure -> r
+        }
+    }
 
     suspend fun channelExists(ip: String, switchId: Int): Boolean = deviceDao.exists(ip, switchId)
 
