@@ -1,18 +1,7 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-07-26 (après le lot Notifications).
-
-## Dette technique
-
-- **Route de navigation `presence` morte.** L'écran de configuration de présence a été supprimé
-  lors de la refonte en plages multiples (la présence se gère désormais depuis l'écran de détail),
-  mais `PRESENCE`, `PRESENCE_ARG_ID` et `PRESENCE_PATTERN` subsistent dans `Destinations.kt` sans
-  aucun appelant, et le paquet `ui/screens/presence/` est vide. À retirer.
-- **Remplacer `material-icons-extended` par les quinze icônes réellement utilisées.** La
-  bibliothèque embarque plusieurs milliers d'icônes compilées ; c'est elle qui faisait passer
-  l'APK release à 47 Mo avant R8. R8 règle le problème à la livraison, mais la dépendance reste
-  lourde à compiler et inutile à 99,9 %.
+Dernière mise à jour : 2026-07-27 (après le lot Nettoyage de dette).
 
 ## Finitions (petits polissages)
 
@@ -31,6 +20,13 @@ Dernière mise à jour : 2026-07-26 (après le lot Notifications).
 - **Authentification de l'appareil (mot de passe Shelly).** Envisagé (saisie à l'ajout + client
   RPC en digest auth + stockage sécurisé), **écarté le 2026-07-26** : David n'en met pas sur son
   réseau privé. À reconsidérer seulement si des utilisateurs F-Droid le demandent.
+- **Remplacer `material-icons-extended` par les icônes réellement utilisées** (10 sur les 17
+  icônes de l'app n'existent que dans ce module, les 7 autres sont dans le module « core »).
+  **Écarté le 2026-07-27** : le poids qu'il posait est déjà réglé par R8 (47 Mo → 3,6 Mo en
+  release) ; l'extraction manuelle des tracés vectoriels (tentée par décompilation) s'est révélée
+  peu fiable sur les icônes à courbes (Wifi, Sensors, Lightbulb), et un rendu cassé ne serait pas
+  détectable sans capture d'écran après build. À reconsidérer seulement si le poids redevient un
+  problème réel.
 
 ## Fonctionnalités futures
 
@@ -71,4 +67,5 @@ Points sortis du backlog, avec ce qui a été tranché :
   jamais une action manuelle.
 - **Écran de configuration de présence** : supprimé (la présence se gère depuis l'écran de
   détail, comme le planning), ce qui rend caduque l'ancienne demande de confirmation
-  « modifications non enregistrées ».
+  « modifications non enregistrées ». La route de navigation `presence` associée, restée morte
+  dans `Destinations.kt` après cette suppression, a été retirée au lot Nettoyage (2026-07-27).
