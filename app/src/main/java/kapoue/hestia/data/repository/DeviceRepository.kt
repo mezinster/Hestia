@@ -450,6 +450,19 @@ class DeviceRepository @Inject constructor(
         }
     }
 
+    /**
+     * Redémarre l'appareil (dépannage, ex. script planté). Toujours à la demande explicite,
+     * jamais bloqué par un minuteur en cours — c'est justement un des cas où ça peut servir.
+     */
+    suspend fun rebootDevice(device: Device): RpcResult<Unit> {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(Unit)
+        return when (val r = rpcClient.reboot(device.ipAddress)) {
+            is RpcResult.Success -> RpcResult.Success(Unit)
+            is RpcResult.RpcError -> r
+            is RpcResult.Failure -> r
+        }
+    }
+
     suspend fun channelExists(ip: String, switchId: Int): Boolean = deviceDao.exists(ip, switchId)
 
     /**

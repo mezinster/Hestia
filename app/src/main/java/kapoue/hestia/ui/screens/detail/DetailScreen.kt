@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Power
@@ -59,6 +60,7 @@ import kapoue.hestia.core.util.formatCountdown
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.DriverType
 import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.PresenceOpResult
@@ -87,6 +89,8 @@ fun DetailScreen(
     val firmwareChecking by viewModel.firmwareChecking.collectAsStateWithLifecycle()
     val firmwareInstalling by viewModel.firmwareInstalling.collectAsStateWithLifecycle()
     val firmwareInstallMessage by viewModel.firmwareInstallMessage.collectAsStateWithLifecycle()
+    val rebooting by viewModel.rebooting.collectAsStateWithLifecycle()
+    val rebootMessage by viewModel.rebootMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -110,11 +114,20 @@ fun DetailScreen(
     var planningToDelete by remember { mutableStateOf<Planning?>(null) }
     // Confirmation avant de lancer l'installation d'une mise à jour firmware.
     var showFirmwareInstallConfirm by remember { mutableStateOf(false) }
+    // Confirmation avant de redémarrer l'appareil (dépannage).
+    var showRebootConfirm by remember { mutableStateOf(false) }
 
     LaunchedEffect(firmwareInstallMessage) {
         firmwareInstallMessage?.let {
             Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
             viewModel.consumeFirmwareInstallMessage()
+        }
+    }
+
+    LaunchedEffect(rebootMessage) {
+        rebootMessage?.let {
+            Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
+            viewModel.consumeRebootMessage()
         }
     }
 
@@ -231,11 +244,14 @@ fun DetailScreen(
             HorizontalDivider()
             FirmwareSection(
                 deviceType = dev.type,
+                driver = dev.driver,
                 result = firmwareCheck,
                 checking = firmwareChecking,
                 installing = firmwareInstalling,
+                rebooting = rebooting,
                 onCheck = { viewModel.checkFirmwareUpdate() },
                 onInstall = { showFirmwareInstallConfirm = true },
+                onReboot = { showRebootConfirm = true },
             )
         }
     }
@@ -247,6 +263,16 @@ fun DetailScreen(
                 viewModel.installFirmwareUpdate()
             },
             onDismiss = { showFirmwareInstallConfirm = false },
+        )
+    }
+
+    if (showRebootConfirm) {
+        RebootConfirmDialog(
+            onConfirm = {
+                showRebootConfirm = false
+                viewModel.rebootDevice()
+            },
+            onDismiss = { showRebootConfirm = false },
         )
     }
 
@@ -879,11 +905,14 @@ private fun TimerSection(
 @Composable
 private fun FirmwareSection(
     deviceType: DeviceType,
+    driver: DriverType,
     result: FirmwareCheckResult?,
     checking: Boolean,
     installing: Boolean,
+    rebooting: Boolean,
     onCheck: () -> Unit,
     onInstall: () -> Unit,
+    onReboot: () -> Unit,
 ) {
     // Désigne l'appareil par son type (« Prise », « Lampe », « Capteur ») plutôt que par le mot
     // générique « appareil » — évite aussi tout accord de genre dans la phrase (le nom sert
@@ -924,7 +953,7 @@ private fun FirmwareSection(
 
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onCheck, enabled = !checking && !installing) {
-                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Icon(Icons.Filled.CloudDownload, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                 Text(stringResource(R.string.firmware_check_button))
             }
             if (result is FirmwareCheckResult.UpdateAvailable) {
@@ -933,7 +962,37 @@ private fun FirmwareSection(
                 }
             }
         }
+
+        // Redémarrage (dépannage) : méthode RPC propre à Shelly, absente si un jour Hestia gère
+        // une autre marque — c'est pourquoi ce bloc est distinct du reste, propre au pilote.
+        if (driver == DriverType.SHELLY_GEN2) {
+            Text(
+                text = stringResource(R.string.firmware_reboot_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            OutlinedButton(onClick = onReboot, enabled = !rebooting) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.firmware_reboot_button))
+            }
+        }
     }
+}
+
+@Composable
+private fun RebootConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.firmware_reboot_confirm_title)) },
+        text = { Text(stringResource(R.string.firmware_reboot_confirm_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.firmware_reboot_confirm_ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }
 
 @Composable

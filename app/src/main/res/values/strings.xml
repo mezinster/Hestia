@@ -197,6 +197,15 @@
     <string name="firmware_install_started">Installation lancée. L\'appareil va redémarrer.</string>
     <string name="firmware_install_error">Échec du lancement de l\'installation. Réessaie.</string>
 
+    <!-- Redémarrage manuel (dépannage), sous la section firmware -->
+    <string name="firmware_reboot_hint">En cas de comportement anormal (script planté, prise qui ne répond plus), tu peux redémarrer l\'appareil.</string>
+    <string name="firmware_reboot_button">Redémarrer l\'appareil</string>
+    <string name="firmware_reboot_confirm_title">Redémarrer l\'appareil ?</string>
+    <string name="firmware_reboot_confirm_message">Il va couper l\'alimentation de ce qu\'il pilote pendant quelques secondes. Ne le débranche pas pendant l\'opération.</string>
+    <string name="firmware_reboot_confirm_ok">Redémarrer</string>
+    <string name="firmware_reboot_started">Redémarrage lancé.</string>
+    <string name="firmware_reboot_error">Échec du lancement du redémarrage. Réessaie.</string>
+
     <!-- Simulation de présence (lot 4) -->
     <string name="presence_section">Simulation de présence</string>
     <string name="presence_add">Ajouter une plage</string>

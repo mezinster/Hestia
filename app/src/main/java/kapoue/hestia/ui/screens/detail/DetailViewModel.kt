@@ -106,6 +106,33 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    private val _rebooting = MutableStateFlow(false)
+    val rebooting: StateFlow<Boolean> = _rebooting.asStateFlow()
+
+    /** Message transitoire du redémarrage (lancé ou en échec), consommé par l'UI. */
+    private val _rebootMessage = MutableStateFlow<UserMessage?>(null)
+    val rebootMessage: StateFlow<UserMessage?> = _rebootMessage.asStateFlow()
+
+    fun consumeRebootMessage() {
+        _rebootMessage.value = null
+    }
+
+    /** Redémarre l'appareil (dépannage) ; jamais bloqué par un minuteur en cours. */
+    fun rebootDevice() {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            _rebooting.value = true
+            val result = repository.rebootDevice(dev)
+            _rebooting.value = false
+            _rebootMessage.value = if (result is RpcResult.Success) {
+                _firmwareCheck.value = null // Redémarrage à venir : l'état vérifié devient obsolète.
+                UserMessage(R.string.firmware_reboot_started)
+            } else {
+                UserMessage(R.string.firmware_reboot_error)
+            }
+        }
+    }
+
     @Volatile
     private var permissionUsable: Boolean = true
 

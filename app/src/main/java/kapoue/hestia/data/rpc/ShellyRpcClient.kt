@@ -129,6 +129,10 @@ class ShellyRpcClient @Inject constructor(
     suspend fun updateFirmware(ip: String, stage: String = "stable"): RpcResult<SetConfigResult> =
         call(ip, "Shelly.Update", buildJsonObject { put("stage", stage) }, SetConfigResult.serializer())
 
+    /** Redémarre l'appareil (dépannage). Toujours à la demande explicite, jamais automatique. */
+    suspend fun reboot(ip: String): RpcResult<SetConfigResult> =
+        call(ip, "Shelly.Reboot", null, SetConfigResult.serializer())
+
     /** État complet de l'appareil ; on n'exploite que la section `sys` (horloge). */
     suspend fun getFullStatus(ip: String): RpcResult<ShellyFullStatus> =
         call(ip, "Shelly.GetStatus", null, ShellyFullStatus.serializer())
