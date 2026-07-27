@@ -1,7 +1,7 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-07-27 (après le lot Nettoyage de dette).
+Dernière mise à jour : 2026-07-27 (après le lot Coupure sur seuil, roulette de valeurs).
 
 ## Finitions (petits polissages)
 
@@ -36,10 +36,6 @@ Dernière mise à jour : 2026-07-27 (après le lot Nettoyage de dette).
   `formatTimeRange` produit `9h00 - 11h00` (format horaire français en dur) et le worker de
   notifications formate ses heures en `8h30` → à localiser. Les nombres, eux, sont déjà corrects :
   `formatPower` force le point (choix produit) et `formatCountdown` est neutre.
-- **Vérification du firmware de la prise** (via `Shelly.CheckForUpdate`) + notification si une
-  mise à jour est disponible. ⚠️ Nuance à trancher : cette méthode fait **contacter le serveur de
-  Shelly par l'appareil** — à confronter au principe « 100 % local » avant de l'implémenter.
-  L'infrastructure de notification existe désormais, seul le principe reste à arbitrer.
 - **Audit des fonctions RPC de la prise non gérées** par Hestia (mesure d'énergie détaillée,
   métriques cumulées, etc.).
 
@@ -69,3 +65,12 @@ Points sortis du backlog, avec ce qui a été tranché :
   détail, comme le planning), ce qui rend caduque l'ancienne demande de confirmation
   « modifications non enregistrées ». La route de navigation `presence` associée, restée morte
   dans `Destinations.kt` après cette suppression, a été retirée au lot Nettoyage (2026-07-27).
+- **Vérification manuelle du firmware** : section « Mise à jour du firmware » sur l'écran de
+  détail, bouton « Vérifier » qui interroge `Shelly.CheckForUpdate` — jamais en tâche de fond,
+  seule action du projet qui sort du réseau local. Bêta signalée mais jamais installable.
+  Tranché : pas de notification de mise à jour disponible (contrairement à ce qu'envisageait
+  l'ancienne entrée de ce backlog) — la vérification reste ponctuelle, à la main de l'utilisateur.
+- **Coupure sur seuil, ergonomie** : case à cocher remplacée par un interrupteur (désactivé par
+  défaut, même style que Notifications), et saisie libre du seuil remplacée par une roulette sur
+  des valeurs prédéfinies (5, 10, 20, 30, 40, 50 W, défaut 10) via le nouveau `ValueWheelPicker`,
+  qui généralise `TimeWheelPicker` à une liste de valeurs arbitraire.
