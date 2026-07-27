@@ -34,12 +34,6 @@ object StackedRoutes {
 
     fun detail(deviceId: Long) = "$DETAIL/$deviceId"
 
-    const val PRESENCE = "presence"
-    const val PRESENCE_ARG_ID = "deviceId"
-    const val PRESENCE_PATTERN = "$PRESENCE/{$PRESENCE_ARG_ID}"
-
-    fun presence(deviceId: Long) = "$PRESENCE/$deviceId"
-
     /** Journal de diagnostic (accès discret par 5 appuis sur le titre du Tableau). */
     const val DIAGNOSTIC = "diagnostic"
 }

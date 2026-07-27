@@ -26,11 +26,14 @@ Dernière mise à jour : 2026-07-26 (après le lot Notifications).
   inférence (mémo `PendingTimer`, vérification du script de seuil) — il y a de la logique à
   mutualiser.
 
+## Écarté
+
+- **Authentification de l'appareil (mot de passe Shelly).** Envisagé (saisie à l'ajout + client
+  RPC en digest auth + stockage sécurisé), **écarté le 2026-07-26** : David n'en met pas sur son
+  réseau privé. À reconsidérer seulement si des utilisateurs F-Droid le demandent.
+
 ## Fonctionnalités futures
 
-- **Authentification de l'appareil (mot de passe Shelly)** à saisir **lors de l'ajout d'un
-  appareil** (écran Nouvel appareil), pas dans Réglages où le champ n'avait pas sa place — il a
-  été retiré. À gérer côté client RPC (digest auth Shelly) + stockage sécurisé.
 - **Traduction anglaise** (déjà prévue au CLAUDE.md) : adaptation à la langue du système
   (anglais par défaut, français si l'appareil est en français). Au-delà des `strings.xml`,
   attention aux **formats codés « à la française »** qui ne se traduisent pas tout seuls :
