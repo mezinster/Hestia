@@ -81,7 +81,7 @@ class DeviceRepository @Inject constructor(
     suspend fun startTimer(device: Device, seconds: Int, detail: String?): RpcResult<Unit> =
         when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = true, toggleAfterSec = seconds)) {
             is RpcResult.Success -> {
-                rememberPendingTimer(device.id, seconds, detail, cutoff = false)
+                rememberPendingTimer(device.id, seconds, detail, thresholdW = null)
                 RpcResult.Success(Unit)
             }
             is RpcResult.RpcError -> set
@@ -113,14 +113,14 @@ class DeviceRepository @Inject constructor(
         rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
         rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
 
-        rememberPendingTimer(device.id, seconds, detail, cutoff = true)
+        rememberPendingTimer(device.id, seconds, detail, thresholdW = thresholdW)
         return RpcResult.Success(Unit)
     }
 
     /** Mémorise un minuteur en attente pour la notification de fin (voir [PendingTimer]). */
-    private fun rememberPendingTimer(deviceId: Long, seconds: Int, detail: String?, cutoff: Boolean) {
+    private fun rememberPendingTimer(deviceId: Long, seconds: Int, detail: String?, thresholdW: Int?) {
         appPreferences.putPendingTimer(
-            PendingTimer(deviceId, System.currentTimeMillis() + seconds * 1000L, detail.orEmpty(), cutoff),
+            PendingTimer(deviceId, System.currentTimeMillis() + seconds * 1000L, detail.orEmpty(), thresholdW),
         )
     }
 

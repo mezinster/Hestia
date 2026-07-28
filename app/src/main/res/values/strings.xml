@@ -162,7 +162,7 @@
     <!-- Écran Détail -->
     <string name="detail_back">Back</string>
     <string name="detail_timer_section">On for</string>
-    <string name="detail_timer_custom">Custom</string>
+    <string name="detail_timer_custom">Manual</string>
     <string name="detail_timer_running">Timer running</string>
     <string name="detail_timer_cancel">Cancel timer</string>
     <string name="detail_offline">Device unreachable right now.</string>
@@ -179,6 +179,20 @@
     <string name="duration_picker_start">Start</string>
     <string name="timer_cutoff_label">Switch off if power drops below</string>
     <string name="duration_picker_min_error">The minimum duration is 1 minute.</string>
+
+    <!-- Réglage personnalisé enregistrable (puce « Perso » sous 1h/2h/3h/Manuel) -->
+    <string name="timer_preset_chip">Preset</string>
+    <string name="timer_preset_add">Add a preset</string>
+    <string name="timer_preset_new_title">New preset</string>
+    <string name="timer_preset_edit_title">Edit preset</string>
+    <string name="timer_preset_save">Save</string>
+    <string name="timer_preset_cutoff_detail">Cutoff at %1$d W</string>
+    <string name="timer_preset_no_cutoff">No cutoff threshold</string>
+    <string name="timer_preset_delete">Delete preset</string>
+    <string name="timer_preset_row_label">Preset - %1$s</string>
+    <string name="timer_preset_delete_confirm_title">Delete this preset?</string>
+    <string name="timer_preset_delete_confirm_message">The preset will be deleted. You can create a new one anytime.</string>
+    <string name="timer_preset_delete_confirm_ok">Delete</string>
 
     <!-- Mise à jour du firmware (vérification manuelle uniquement) -->
     <string name="firmware_section">Firmware update</string>

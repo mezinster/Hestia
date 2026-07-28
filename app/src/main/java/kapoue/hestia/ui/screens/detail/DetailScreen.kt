@@ -21,8 +21,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -32,11 +34,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -80,6 +84,7 @@ fun DetailScreen(
 ) {
     val device by viewModel.device.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
+    val pendingThresholdW by viewModel.pendingThresholdW.collectAsStateWithLifecycle()
     val presenceActive by viewModel.presenceActive.collectAsStateWithLifecycle()
     val presenceWindows by viewModel.presenceWindows.collectAsStateWithLifecycle()
     val addPresenceResult by viewModel.addPresenceResult.collectAsStateWithLifecycle()
@@ -95,6 +100,8 @@ fun DetailScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var showSheet by remember { mutableStateOf(false) }
+    var showPresetSheet by remember { mutableStateOf(false) }
+    var showDeletePresetConfirm by remember { mutableStateOf(false) }
     var showAddPlanning by remember { mutableStateOf(false) }
     var showAddPresence by remember { mutableStateOf(false) }
     var editingPresence by remember { mutableStateOf<PresenceWindow?>(null) }
@@ -203,12 +210,25 @@ fun DetailScreen(
 
             if (dev.supportsSwitch) {
                 HorizontalDivider()
+                // Résolu ici (contexte composable, stringResource) puis capturé par le callback,
+                // qui lui n'est pas composable (voir onLaunchPreset).
+                val presetLabel = dev.presetDurationSeconds?.let { durationLabel(it) }
                 TimerSection(
                     status = status,
                     elapsedNow = elapsedNow,
+                    runningThresholdW = pendingThresholdW,
+                    presetDurationSeconds = dev.presetDurationSeconds,
+                    presetThresholdW = dev.presetThresholdW,
                     onPreset = { seconds, label -> requestStartTimer(seconds, label) },
                     onCustom = { showSheet = true },
                     onCancel = { viewModel.cancelTimer() },
+                    onLaunchPreset = {
+                        val seconds = dev.presetDurationSeconds
+                        if (seconds != null) requestStartTimer(seconds, presetLabel.orEmpty(), dev.presetThresholdW)
+                    },
+                    onAddPreset = { showPresetSheet = true },
+                    onEditPreset = { showPresetSheet = true },
+                    onDeletePreset = { showDeletePresetConfirm = true },
                 )
 
                 HorizontalDivider()
@@ -279,11 +299,48 @@ fun DetailScreen(
     if (showSheet) {
         DurationPickerSheet(
             hasPowerMetering = device?.hasPowerMetering ?: false,
+            title = stringResource(R.string.duration_picker_title),
+            confirmLabel = stringResource(R.string.duration_picker_start),
+            confirmIcon = Icons.Filled.PlayArrow,
             onDismiss = { showSheet = false },
             onConfirm = { seconds, label, thresholdW ->
                 showSheet = false
                 requestStartTimer(seconds, label, thresholdW)
             },
+        )
+    }
+
+    if (showPresetSheet) {
+        // Pré-remplit avec le réglage existant en édition, sinon la même valeur par défaut que
+        // "Manuel" (30 min, sans coupure).
+        val existingSeconds = device?.presetDurationSeconds
+        val existingThreshold = device?.presetThresholdW
+        DurationPickerSheet(
+            hasPowerMetering = device?.hasPowerMetering ?: false,
+            title = stringResource(
+                if (existingSeconds == null) R.string.timer_preset_new_title else R.string.timer_preset_edit_title,
+            ),
+            confirmLabel = stringResource(R.string.timer_preset_save),
+            confirmIcon = Icons.Filled.Save,
+            initialHours = (existingSeconds ?: 1800) / 3600,
+            initialMinutes = ((existingSeconds ?: 1800) % 3600) / 60,
+            initialCutoffEnabled = existingThreshold != null,
+            initialThresholdW = existingThreshold ?: 10,
+            onDismiss = { showPresetSheet = false },
+            onConfirm = { seconds, _, thresholdW ->
+                showPresetSheet = false
+                viewModel.savePreset(seconds, thresholdW)
+            },
+        )
+    }
+
+    if (showDeletePresetConfirm) {
+        DeletePresetConfirmDialog(
+            onConfirm = {
+                showDeletePresetConfirm = false
+                viewModel.deletePreset()
+            },
+            onDismiss = { showDeletePresetConfirm = false },
         )
     }
 
@@ -511,48 +568,52 @@ private fun AddPresenceDialog(
         else -> null
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(stringResource(if (initial == null) R.string.presence_dialog_title else R.string.presence_edit_title))
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(R.string.planning_start), style = MaterialTheme.typography.bodyMedium)
-                        TimeWheelPicker(startHour, startMinute) { h, m -> startHour = h; startMinute = m }
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(R.string.planning_end), style = MaterialTheme.typography.bodyMedium)
-                        TimeWheelPicker(endHour, endMinute) { h, m -> endHour = h; endMinute = m }
-                    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(if (initial == null) R.string.presence_dialog_title else R.string.presence_edit_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(stringResource(R.string.planning_start), style = MaterialTheme.typography.bodyMedium)
+                    TimeWheelPicker(startHour, startMinute) { h, m -> startHour = h; startMinute = m }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        stringResource(R.string.presence_margin),
-                        modifier = Modifier.weight(1f),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    TextButton(onClick = { margin = (margin - 5).coerceAtLeast(0) }) { Text("−") }
-                    Text(stringResource(R.string.presence_margin_value, margin), fontFamily = FontFamily.Monospace)
-                    TextButton(onClick = { margin = (margin + 5).coerceAtMost(120) }) { Text("+") }
-                }
-                errorText?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(stringResource(R.string.planning_end), style = MaterialTheme.typography.bodyMedium)
+                    TimeWheelPicker(endHour, endMinute) { h, m -> endHour = h; endMinute = m }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    stringResource(R.string.presence_margin),
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = { margin = (margin - 5).coerceAtLeast(0) }) { Text("−") }
+                Text(stringResource(R.string.presence_margin_value, margin), fontFamily = FontFamily.Monospace)
+                TextButton(onClick = { margin = (margin + 5).coerceAtMost(120) }) { Text("+") }
+            }
+            errorText?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+
+            Button(
                 enabled = valid,
                 onClick = { onValidate(startHour, startMinute, endHour, endMinute, margin) },
-            ) { Text(stringResource(R.string.planning_validate)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.conflict_cancel)) }
-        },
-    )
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.planning_validate))
+            }
+        }
+    }
 }
 
 /** Minuteur en attente de résolution du conflit présence (durée, libellé, seuil de coupure). */
@@ -750,67 +811,71 @@ private fun AddPlanningDialog(
         else -> null
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = {
-            Text(stringResource(if (initial == null) R.string.planning_dialog_title else R.string.planning_edit_title))
-        },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(R.string.planning_start), style = MaterialTheme.typography.bodyMedium)
-                        TimeWheelPicker(startHour, startMinute) { h, m -> startHour = h; startMinute = m }
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(R.string.planning_end), style = MaterialTheme.typography.bodyMedium)
-                        TimeWheelPicker(endHour, endMinute) { h, m -> endHour = h; endMinute = m }
-                    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(if (initial == null) R.string.planning_dialog_title else R.string.planning_edit_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(stringResource(R.string.planning_start), style = MaterialTheme.typography.bodyMedium)
+                    TimeWheelPicker(startHour, startMinute) { h, m -> startHour = h; startMinute = m }
                 }
-
-                Text(stringResource(R.string.planning_days), style = MaterialTheme.typography.bodyMedium)
-                // Deux modes exclusifs. « Tous les jours » a son propre état : le taper l'active
-                // et vide la sélection précise ; taper un jour bascule en mode « jours précis »
-                // et éteint « Tous les jours ». Jamais les deux allumés en même temps.
-                FilterChip(
-                    selected = everyDay,
-                    onClick = {
-                        everyDay = true
-                        days = emptySet()
-                    },
-                    label = { Text(stringResource(R.string.planning_all_days)) },
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    WEEK_DAYS.forEach { d ->
-                        FilterChip(
-                            selected = !everyDay && d in days,
-                            onClick = {
-                                everyDay = false
-                                days = if (d in days) days - d else days + d
-                            },
-                            label = { Text(dayLabel(d)) },
-                        )
-                    }
-                }
-
-                errorText?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(stringResource(R.string.planning_end), style = MaterialTheme.typography.bodyMedium)
+                    TimeWheelPicker(endHour, endMinute) { h, m -> endHour = h; endMinute = m }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
+
+            Text(stringResource(R.string.planning_days), style = MaterialTheme.typography.bodyMedium)
+            // Deux modes exclusifs. « Tous les jours » a son propre état : le taper l'active
+            // et vide la sélection précise ; taper un jour bascule en mode « jours précis »
+            // et éteint « Tous les jours ». Jamais les deux allumés en même temps.
+            FilterChip(
+                selected = everyDay,
+                onClick = {
+                    everyDay = true
+                    days = emptySet()
+                },
+                label = { Text(stringResource(R.string.planning_all_days)) },
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                WEEK_DAYS.forEach { d ->
+                    FilterChip(
+                        selected = !everyDay && d in days,
+                        onClick = {
+                            everyDay = false
+                            days = if (d in days) days - d else days + d
+                        },
+                        label = { Text(dayLabel(d)) },
+                    )
+                }
+            }
+
+            errorText?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
+
+            Button(
                 enabled = valid,
                 onClick = { onValidate(startHour, startMinute, endHour, endMinute, effectiveDays) },
-            ) { Text(stringResource(R.string.planning_validate)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.conflict_cancel)) }
-        },
-    )
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.planning_validate))
+            }
+        }
+    }
 }
 
 @Composable
@@ -848,9 +913,16 @@ private fun DeviceHeader(device: Device) {
 private fun TimerSection(
     status: TileStatus,
     elapsedNow: Long,
+    runningThresholdW: Int?,
+    presetDurationSeconds: Int?,
+    presetThresholdW: Int?,
     onPreset: (Int, String) -> Unit,
     onCustom: () -> Unit,
     onCancel: () -> Unit,
+    onLaunchPreset: () -> Unit,
+    onAddPreset: () -> Unit,
+    onEditPreset: () -> Unit,
+    onDeletePreset: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -873,6 +945,13 @@ private fun TimerSection(
                 style = MaterialTheme.typography.headlineMedium,
                 fontFamily = FontFamily.Monospace,
             )
+            if (runningThresholdW != null) {
+                Text(
+                    text = stringResource(R.string.timer_preset_cutoff_detail, runningThresholdW),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Button(onClick = onCancel) {
                 Text(stringResource(R.string.detail_timer_cancel))
             }
@@ -889,10 +968,54 @@ private fun TimerSection(
                     val label = durationLabel(seconds)
                     OutlinedButton(onClick = { onPreset(seconds, label) }) { Text(label) }
                 }
+                // Se glisse juste avant "Manuel" : lancement direct, comme 1h/2h/3h.
+                if (presetDurationSeconds != null) {
+                    OutlinedButton(onClick = onLaunchPreset) {
+                        Text(stringResource(R.string.timer_preset_chip))
+                    }
+                }
                 OutlinedButton(onClick = onCustom) {
                     Text(stringResource(R.string.detail_timer_custom))
                 }
             }
+
+            if (presetDurationSeconds != null) {
+                PersonalPresetRow(
+                    label = stringResource(R.string.timer_preset_row_label, durationLabel(presetDurationSeconds)),
+                    detail = if (presetThresholdW != null) {
+                        stringResource(R.string.timer_preset_cutoff_detail, presetThresholdW)
+                    } else {
+                        stringResource(R.string.timer_preset_no_cutoff)
+                    },
+                    onEdit = onEditPreset,
+                    onDelete = onDeletePreset,
+                )
+            } else {
+                OutlinedButton(onClick = onAddPreset) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(4.dp))
+                    Text(stringResource(R.string.timer_preset_add))
+                }
+            }
+        }
+    }
+}
+
+/** Ligne du réglage personnalisé enregistré, présentée comme un [PlanningRow]. */
+@Composable
+private fun PersonalPresetRow(label: String, detail: String, onEdit: () -> Unit, onDelete: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        // Un tap sur la durée ouvre l'édition, pré-remplie avec le réglage existant.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onEdit),
+        ) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge, fontFamily = FontFamily.Monospace)
+            Text(text = detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.timer_preset_delete))
         }
     }
 }
@@ -988,6 +1111,21 @@ private fun RebootConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         text = { Text(stringResource(R.string.firmware_reboot_confirm_message)) },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text(stringResource(R.string.firmware_reboot_confirm_ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun DeletePresetConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.timer_preset_delete_confirm_title)) },
+        text = { Text(stringResource(R.string.timer_preset_delete_confirm_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.timer_preset_delete_confirm_ok)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }

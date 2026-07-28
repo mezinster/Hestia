@@ -50,6 +50,8 @@ data class TileUiState(
     val presence: PresenceInfo? = null,
     /** Plannings présents sur l'appareil ; la tuile affiche celui **en cours** s'il y en a un. */
     val plannings: List<Planning> = emptyList(),
+    /** Seuil du minuteur en attente (mémo local), affiché à côté du décompte si actif. */
+    val pendingThresholdW: Int? = null,
 )
 
 data class DashboardUiState(

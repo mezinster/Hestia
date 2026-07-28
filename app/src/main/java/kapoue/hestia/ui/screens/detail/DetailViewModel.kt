@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kapoue.hestia.R
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
@@ -30,6 +31,7 @@ import javax.inject.Inject
 @HiltViewModel
 class DetailViewModel @Inject constructor(
     private val repository: DeviceRepository,
+    private val appPreferences: AppPreferences,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -40,6 +42,14 @@ class DetailViewModel @Inject constructor(
 
     private val _status = MutableStateFlow<TileStatus>(TileStatus.Loading)
     val status: StateFlow<TileStatus> = _status.asStateFlow()
+
+    /**
+     * Seuil du minuteur actuellement en attente pour cet appareil, ou null. Lu à chaque relevé ;
+     * l'écran ne l'affiche que si l'appareil confirme lui-même un minuteur en cours (voir
+     * [status]) — ce mémo peut rester en place un moment après la fin réelle du minuteur.
+     */
+    private val _pendingThresholdW = MutableStateFlow<Int?>(null)
+    val pendingThresholdW: StateFlow<Int?> = _pendingThresholdW.asStateFlow()
 
     /** Simulation de présence réellement active (pour la gestion du conflit avec le minuteur). */
     private val _presenceActive = MutableStateFlow(false)
@@ -161,6 +171,25 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Enregistre (ou remplace) le réglage personnalisé du minuteur — confort propre à Hestia,
+     * jamais envoyé à la prise avant que l'utilisateur ne le lance via la puce « Perso ».
+     */
+    fun savePreset(seconds: Int, thresholdW: Int?) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            repository.updateDevice(dev.copy(presetDurationSeconds = seconds, presetThresholdW = thresholdW))
+        }
+    }
+
+    /** Supprime le réglage personnalisé ; la puce « Perso » et sa ligne disparaissent. */
+    fun deletePreset() {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            repository.updateDevice(dev.copy(presetDurationSeconds = null, presetThresholdW = null))
+        }
+    }
+
     fun cancelTimer() {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
@@ -262,6 +291,7 @@ class DetailViewModel @Inject constructor(
     private suspend fun fetch() {
         val dev = repository.getDevice(deviceId) ?: return
         _status.value = repository.getStatus(dev).toTileStatus()
+        _pendingThresholdW.value = appPreferences.pendingTimers().firstOrNull { it.deviceId == deviceId }?.thresholdW
         if (dev.hasScripting) loadPresence(dev)
         if (dev.supportsSwitch) loadPlannings(dev)
     }

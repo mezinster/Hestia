@@ -157,7 +157,7 @@
     <!-- Écran Détail -->
     <string name="detail_back">Retour</string>
     <string name="detail_timer_section">Active pour</string>
-    <string name="detail_timer_custom">Perso</string>
+    <string name="detail_timer_custom">Manuel</string>
     <string name="detail_timer_running">Minuteur en cours</string>
     <string name="detail_timer_cancel">Annuler le minuteur</string>
     <string name="detail_offline">Appareil injoignable pour le moment.</string>
@@ -174,6 +174,20 @@
     <string name="duration_picker_start">Démarrer</string>
     <string name="timer_cutoff_label">Couper si la consommation passe sous</string>
     <string name="duration_picker_min_error">La durée minimale est de 1 minute.</string>
+
+    <!-- Réglage personnalisé enregistrable (puce « Perso » sous 1h/2h/3h/Manuel) -->
+    <string name="timer_preset_chip">Perso</string>
+    <string name="timer_preset_add">Ajouter un réglage perso</string>
+    <string name="timer_preset_new_title">Nouveau réglage perso</string>
+    <string name="timer_preset_edit_title">Modifier le réglage perso</string>
+    <string name="timer_preset_save">Enregistrer</string>
+    <string name="timer_preset_cutoff_detail">Coupure à %1$d W</string>
+    <string name="timer_preset_no_cutoff">Sans coupure sur seuil</string>
+    <string name="timer_preset_delete">Supprimer le réglage perso</string>
+    <string name="timer_preset_row_label">Perso - %1$s</string>
+    <string name="timer_preset_delete_confirm_title">Supprimer ce réglage perso ?</string>
+    <string name="timer_preset_delete_confirm_message">Le réglage sera supprimé. Tu pourras en créer un nouveau à tout moment.</string>
+    <string name="timer_preset_delete_confirm_ok">Supprimer</string>
 
     <!-- Mise à jour du firmware (vérification manuelle uniquement) -->
     <string name="firmware_section">Mise à jour du firmware</string>
@@ -267,7 +281,7 @@
     <string name="planning_end">Fin</string>
     <string name="planning_days">Jours</string>
     <string name="planning_all_days">Tous les jours</string>
-    <string name="planning_validate">Valider</string>
+    <string name="planning_validate">Enregistrer</string>
     <string name="planning_error_range">Le début et la fin doivent être différents.</string>
     <string name="planning_error_no_day">Choisis au moins un jour.</string>
     <string name="planning_conflict">Ce créneau chevauche un planning existant (%1$s). Modifie l\'un ou l\'autre.</string>

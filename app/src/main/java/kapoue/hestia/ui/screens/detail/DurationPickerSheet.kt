@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
@@ -19,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
@@ -26,24 +28,31 @@ import kapoue.hestia.ui.components.TimeWheelPicker
 import kapoue.hestia.ui.components.ValueWheelPicker
 
 /**
- * Sélecteur de durée « Perso » en bottom sheet : molette heures/minutes. La durée n'est plus
- * répétée en texte (on la lit dans la molette). Sur les prises qui mesurent la consommation, une
- * option de **coupure sur seuil** permet d'arrêter avant la fin si la conso reste basse.
- * Durée minimale : 1 minute.
+ * Sélecteur de durée en bottom sheet : molette heures/minutes, coupure sur seuil optionnelle.
+ * Réutilisé pour deux usages distincts (titre/bouton/valeurs initiales fournis par l'appelant) :
+ * le minuteur « Manuel » (démarre tout de suite) et le réglage « Perso » enregistrable
+ * (sauvegarde sans rien envoyer à la prise). Durée minimale : 1 minute.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DurationPickerSheet(
     hasPowerMetering: Boolean,
+    title: String,
+    confirmLabel: String,
+    confirmIcon: ImageVector? = null,
+    initialHours: Int = 0,
+    initialMinutes: Int = 30,
+    initialCutoffEnabled: Boolean = false,
+    initialThresholdW: Int = DEFAULT_THRESHOLD_W,
     onDismiss: () -> Unit,
     onConfirm: (seconds: Int, label: String, thresholdW: Int?) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
-    var hours by remember { mutableStateOf(0) }
-    var minutes by remember { mutableStateOf(30) }
+    var hours by remember { mutableStateOf(initialHours) }
+    var minutes by remember { mutableStateOf(initialMinutes) }
     var showError by remember { mutableStateOf(false) }
-    var cutoffEnabled by remember { mutableStateOf(false) }
-    var threshold by remember { mutableStateOf(DEFAULT_THRESHOLD_W) }
+    var cutoffEnabled by remember { mutableStateOf(initialCutoffEnabled) }
+    var threshold by remember { mutableStateOf(initialThresholdW) }
 
     val totalSeconds = hours * 3600 + minutes * 60
     val label = durationLabel(totalSeconds)
@@ -56,10 +65,7 @@ fun DurationPickerSheet(
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = stringResource(R.string.duration_picker_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
             // Molette heures/minutes (00–23 / 00–59), lue comme une durée.
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 TimeWheelPicker(hours, minutes) { h, m -> hours = h; minutes = m; showError = false }
@@ -107,7 +113,10 @@ fun DurationPickerSheet(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(stringResource(R.string.duration_picker_start))
+                if (confirmIcon != null) {
+                    Icon(confirmIcon, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                }
+                Text(confirmLabel)
             }
         }
     }

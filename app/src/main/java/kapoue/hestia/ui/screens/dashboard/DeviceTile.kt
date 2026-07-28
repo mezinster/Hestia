@@ -71,7 +71,7 @@ fun DeviceTile(
     // elapsedNow (rafraîchi à la seconde par le parent) force le recalcul du planning en cours
     // au fil du temps, sans attendre le prochain relevé réseau.
     val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
-    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning)
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW)
 
     // Fin de créneau : dès que le planning en cours cesse de l'être, on force un relevé pour
     // confirmer l'extinction tout de suite (sinon la tuile afficherait le dernier état connu —
@@ -205,6 +205,7 @@ private fun TileStatus.toVisual(
     elapsedNow: Long,
     presence: PresenceInfo?,
     activePlanning: Planning?,
+    pendingThresholdW: Int?,
 ): TileVisual = when (this) {
     // Lecture en cours : spinner plutôt que gris (qui se lirait « désactivé »).
     TileStatus.Loading -> TileVisual(
@@ -221,7 +222,8 @@ private fun TileStatus.toVisual(
                 ledColor = colors.timedLed,
                 textColor = colors.timedText,
                 label = stringResource(R.string.state_timed),
-                countdown = formatCountdown(remaining),
+                // Format technique (comme formatPower) : jamais localisé phrase par phrase.
+                countdown = formatCountdown(remaining) + (pendingThresholdW?.let { " · $it W" } ?: ""),
                 ledStyle = LedStyle.FILLED,
             )
             // Même orange que la minuterie : dans les deux cas, un programme pilote le canal.

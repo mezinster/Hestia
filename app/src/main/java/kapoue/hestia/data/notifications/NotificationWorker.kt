@@ -135,7 +135,7 @@ class NotificationWorker(
             val stale = reachedEnd && now - timer.endMillis > MAX_LOOKBACK_MS
             when {
                 stale -> Unit
-                timer.cutoff && repository.cutoffScriptFired(device) -> {
+                timer.thresholdW != null && repository.cutoffScriptFired(device) -> {
                     post(ctx, device.id, "cut", timer.endMillis, device.name,
                         ctx.getString(R.string.notif_cutoff_triggered))
                     posted++

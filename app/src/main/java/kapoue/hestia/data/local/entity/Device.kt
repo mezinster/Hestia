@@ -51,4 +51,12 @@ data class Device(
      * SQLite embarquées par Android 11+ (minSdk 30), un risque disproportionné pour ce nettoyage.
      */
     val lastKnownOutput: Boolean? = null,
+    /**
+     * Réglage personnalisé enregistré pour le minuteur « Active pour » (durée + coupure sur
+     * seuil optionnelle). Confort propre à Hestia, pas une configuration d'appareil — jamais
+     * envoyé à la prise avant que l'utilisateur ne le lance. Null = aucun réglage enregistré.
+     */
+    val presetDurationSeconds: Int? = null,
+    /** Seuil de coupure du réglage personnalisé, en Watts. Null = sans coupure sur seuil. */
+    val presetThresholdW: Int? = null,
 )

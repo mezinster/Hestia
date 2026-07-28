@@ -66,3 +66,15 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         db.execSQL("DROP TABLE IF EXISTS activation_logs")
     }
 }
+
+/**
+ * v6 → v7 : réglage personnalisé du minuteur « Active pour » (durée + seuil de coupure
+ * optionnel), enregistrable par l'utilisateur. Colonnes nullables : aucune valeur par défaut
+ * nécessaire, absence = aucun réglage enregistré pour cet appareil.
+ */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN presetDurationSeconds INTEGER")
+        db.execSQL("ALTER TABLE devices ADD COLUMN presetThresholdW INTEGER")
+    }
+}

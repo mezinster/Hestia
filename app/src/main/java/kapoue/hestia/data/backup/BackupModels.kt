@@ -30,6 +30,9 @@ data class DeviceBackup(
     val hasScripting: Boolean = false,
     val hasPowerMetering: Boolean = false,
     val position: Int = 0,
+    /** Réglage personnalisé du minuteur « Active pour », confort propre à Hestia. */
+    val presetDurationSeconds: Int? = null,
+    val presetThresholdW: Int? = null,
 )
 
 /**

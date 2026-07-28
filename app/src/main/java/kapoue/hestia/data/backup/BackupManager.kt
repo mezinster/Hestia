@@ -108,6 +108,8 @@ private fun Device.toBackup() = DeviceBackup(
     hasScripting = hasScripting,
     hasPowerMetering = hasPowerMetering,
     position = position,
+    presetDurationSeconds = presetDurationSeconds,
+    presetThresholdW = presetThresholdW,
 )
 
 private fun DeviceBackup.toEntity() = Device(
@@ -121,6 +123,8 @@ private fun DeviceBackup.toEntity() = Device(
     hasScripting = hasScripting,
     hasPowerMetering = hasPowerMetering,
     position = position,
+    presetDurationSeconds = presetDurationSeconds,
+    presetThresholdW = presetThresholdW,
 )
 
 private fun PresenceConfig.toBackup(device: Device) = PresenceConfigBackup(

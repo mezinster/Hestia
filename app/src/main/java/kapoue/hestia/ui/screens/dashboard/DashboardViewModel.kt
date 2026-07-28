@@ -7,6 +7,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.repository.DeviceRepository
@@ -29,6 +30,7 @@ import javax.inject.Inject
 class DashboardViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: DeviceRepository,
+    private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
 ) : ViewModel() {
 
@@ -42,15 +44,19 @@ class DashboardViewModel @Inject constructor(
     // Plannings présents sur chaque appareil (la tuile affiche celui en cours, le cas échéant).
     private val plannings = MutableStateFlow<Map<Long, List<Planning>>>(emptyMap())
 
+    // Seuil du minuteur en attente par appareil (mémo local, lecture instantanée — pas de RPC).
+    // La tuile ne l'affiche que si l'appareil confirme lui-même un minuteur en cours.
+    private val pendingThresholds = MutableStateFlow<Map<Long, Int>>(emptyMap())
+
     // Renseigné par la couche UI (qui seule connaît le Context) à chaque reprise d'écran.
     @Volatile
     private var permissionUsable: Boolean = true
 
-    // combine plafonne à 5 flux typés : on regroupe présence + planning en un seul.
-    private val extras = combine(presences, plannings) { p, pl -> p to pl }
+    // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils en un seul.
+    private val extras = combine(presences, plannings, pendingThresholds) { p, pl, th -> Triple(p, pl, th) }
 
     val uiState: StateFlow<DashboardUiState> =
-        combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, (presenceMap, planningMap) ->
+        combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, (presenceMap, planningMap, thresholdMap) ->
             DashboardUiState(
                 tiles = devices.mapIndexed { index, device ->
                     TileUiState(
@@ -59,6 +65,7 @@ class DashboardViewModel @Inject constructor(
                         status = statusMap[device.id] ?: TileStatus.Loading,
                         presence = presenceMap[device.id],
                         plannings = planningMap[device.id].orEmpty(),
+                        pendingThresholdW = thresholdMap[device.id],
                     )
                 },
                 isRefreshing = isRefreshing,
@@ -119,6 +126,10 @@ class DashboardViewModel @Inject constructor(
                     .mapNotNull { (id, info) -> info?.let { id to it } }
                     .toMap()
                 plannings.value = planningResults.await().toMap()
+                // Lecture locale (SharedPreferences), pas de RPC : pas besoin de la paralléliser.
+                pendingThresholds.value = appPreferences.pendingTimers()
+                    .mapNotNull { timer -> timer.thresholdW?.let { timer.deviceId to it } }
+                    .toMap()
                 loaded.value = true
             }
             val indicator = if (userInitiated) {
