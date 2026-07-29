@@ -16,8 +16,8 @@ import java.time.LocalTime
  * Ignoré quand [date] est non nul (planning **Unique**, une occurrence à cette date précise).
  * [onJobId] / [offJobId] : identifiants des deux programmes dans l'appareil (pour la suppression).
  *
- * [cutoffScriptId] : script dédié de coupure sur seuil (réservé aux plannings Unique), non nul si
- * une coupure est configurée — id à supprimer avec le planning. [cutoffThresholdW] : seuil relu
+ * [cutoffScriptId] : script dédié de coupure sur seuil (Unique ou récurrent), non nul si une
+ * coupure est configurée — id à supprimer avec le planning. [cutoffThresholdW] : seuil relu
  * depuis ce script (null tant qu'il n'a pas encore été relu, voir [DeviceRepository]).
  */
 data class Planning(

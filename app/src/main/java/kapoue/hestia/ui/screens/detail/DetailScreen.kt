@@ -817,7 +817,7 @@ private fun AddPlanningDialog(
     // « Tous les jours ». [onceDate] par défaut aujourd'hui, choisi via les chips Aujourd'hui/jours.
     var once by remember { mutableStateOf(initial?.date != null) }
     var onceDate by remember { mutableStateOf(initial?.date ?: LocalDate.now()) }
-    // Coupure sur seuil, réservée aux plannings Unique.
+    // Coupure sur seuil (Unique comme récurrent, script dédié réarmé à chaque occurrence).
     var cutoffEnabled by remember { mutableStateOf(initial?.cutoffThresholdW != null) }
     var cutoffThreshold by remember { mutableStateOf(initial?.cutoffThresholdW ?: DEFAULT_PLANNING_THRESHOLD_W) }
     val effectiveDays = if (everyDay) setOf(0, 1, 2, 3, 4, 5, 6) else days
@@ -908,32 +908,6 @@ private fun AddPlanningDialog(
                         )
                     }
                 }
-
-                // Coupure sur seuil, réservée aux plannings Unique (script dédié par planning).
-                if (hasCutoff) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = stringResource(R.string.timer_cutoff_label),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Switch(checked = cutoffEnabled, onCheckedChange = { cutoffEnabled = it })
-                    }
-                    if (cutoffEnabled) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.Center,
-                        ) {
-                            ValueWheelPicker(
-                                values = PLANNING_CUTOFF_THRESHOLDS_W,
-                                value = cutoffThreshold,
-                                onChange = { cutoffThreshold = it },
-                            )
-                            Text(" Watts", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 8.dp))
-                        }
-                    }
-                }
             } else {
                 Text(stringResource(R.string.planning_days), style = MaterialTheme.typography.bodyMedium)
                 // Deux modes exclusifs. « Tous les jours » a son propre état : le taper l'active
@@ -961,6 +935,32 @@ private fun AddPlanningDialog(
                 }
             }
 
+            // Coupure sur seuil : Unique comme récurrent, script dédié par planning.
+            if (hasCutoff) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.timer_cutoff_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = cutoffEnabled, onCheckedChange = { cutoffEnabled = it })
+                }
+                if (cutoffEnabled) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        ValueWheelPicker(
+                            values = PLANNING_CUTOFF_THRESHOLDS_W,
+                            value = cutoffThreshold,
+                            onChange = { cutoffThreshold = it },
+                        )
+                        Text(" Watts", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 8.dp))
+                    }
+                }
+            }
+
             errorText?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
@@ -971,7 +971,7 @@ private fun AddPlanningDialog(
                     onValidate(
                         startHour, startMinute, endHour, endMinute, effectiveDays,
                         if (once) onceDate else null,
-                        if (once && hasCutoff && cutoffEnabled) cutoffThreshold else null,
+                        if (hasCutoff && cutoffEnabled) cutoffThreshold else null,
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),

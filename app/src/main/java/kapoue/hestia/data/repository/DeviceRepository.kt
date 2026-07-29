@@ -351,10 +351,11 @@ class DeviceRepository @Inject constructor(
      * [date] : deux Uniques au même jour de semaine mais à des dates différentes peuvent donc se
      * signaler comme en conflit à tort (cas rare, accepté pour ne pas complexifier le contrôle).
      *
-     * [cutoffThresholdW] : coupure sur seuil de consommation, réservée aux plannings **Unique**
-     * ([date] non nul) — ignoré sinon. Déploie un script dédié à ce planning (jamais partagé,
-     * jamais réutilisé par un autre minuteur ou planning : deux plannings à coupure indépendants
-     * ne doivent pas se marcher dessus).
+     * [cutoffThresholdW] : coupure sur seuil de consommation, Unique comme récurrent. Déploie un
+     * script dédié à ce planning (jamais partagé, jamais réutilisé par un autre minuteur ou
+     * planning : deux plannings à coupure indépendants ne doivent pas se marcher dessus). Pour un
+     * récurrent, le script se réarme proprement à chaque occurrence (`Script.Start` après un
+     * `Script.Stop` réexécute le script depuis le début, aucun état résiduel — validé en direct).
      */
     suspend fun createPlanning(
         device: Device,
@@ -393,7 +394,7 @@ class DeviceRepository @Inject constructor(
         }
 
         val ip = device.ipAddress
-        val scriptId = if (date != null && cutoffThresholdW != null) {
+        val scriptId = if (cutoffThresholdW != null) {
             createCutoffScript(ip, device.switchId, cutoffThresholdW) ?: return CreatePlanningResult.Error
         } else {
             null
@@ -487,7 +488,7 @@ class DeviceRepository @Inject constructor(
         }
 
         val ip = device.ipAddress
-        val scriptId = if (date != null && cutoffThresholdW != null) {
+        val scriptId = if (cutoffThresholdW != null) {
             createCutoffScript(ip, device.switchId, cutoffThresholdW) ?: return CreatePlanningResult.Error
         } else {
             null
