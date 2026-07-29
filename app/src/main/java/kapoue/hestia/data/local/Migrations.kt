@@ -78,3 +78,16 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("ALTER TABLE devices ADD COLUMN presetThresholdW INTEGER")
     }
 }
+
+/**
+ * v7 → v8 : un 2ᵉ réglage personnalisé (« Perso 1 »/« Perso 2 ») et un nom pour chacun. Colonnes
+ * nullables : absence = emplacement vide, comme pour le premier réglage en v6→v7.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN presetName TEXT")
+        db.execSQL("ALTER TABLE devices ADD COLUMN preset2DurationSeconds INTEGER")
+        db.execSQL("ALTER TABLE devices ADD COLUMN preset2ThresholdW INTEGER")
+        db.execSQL("ALTER TABLE devices ADD COLUMN preset2Name TEXT")
+    }
+}

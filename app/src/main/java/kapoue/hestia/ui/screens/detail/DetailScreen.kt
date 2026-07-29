@@ -105,8 +105,9 @@ fun DetailScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var showSheet by remember { mutableStateOf(false) }
-    var showPresetSheet by remember { mutableStateOf(false) }
-    var showDeletePresetConfirm by remember { mutableStateOf(false) }
+    // Emplacement (1 ou 2) du réglage Perso en cours d'ajout/édition/suppression ; null = fermé.
+    var editingPresetSlot by remember { mutableStateOf<Int?>(null) }
+    var deletingPresetSlot by remember { mutableStateOf<Int?>(null) }
     var showAddPlanning by remember { mutableStateOf(false) }
     var showAddPresence by remember { mutableStateOf(false) }
     var editingPresence by remember { mutableStateOf<PresenceWindow?>(null) }
@@ -215,25 +216,29 @@ fun DetailScreen(
 
             if (dev.supportsSwitch) {
                 HorizontalDivider()
-                // Résolu ici (contexte composable, stringResource) puis capturé par le callback,
-                // qui lui n'est pas composable (voir onLaunchPreset).
-                val presetLabel = dev.presetDurationSeconds?.let { durationLabel(it) }
+                val presets = listOf(
+                    PersonalPreset(1, dev.presetName, dev.presetDurationSeconds, dev.presetThresholdW),
+                    PersonalPreset(2, dev.preset2Name, dev.preset2DurationSeconds, dev.preset2ThresholdW),
+                )
+                // Repli si un réglage existant (migré) n'a pas encore de nom — résolu ici (contexte
+                // composable, stringResource) puis capturé par le callback, qui lui ne l'est pas.
+                val presetFallbackLabels = presets.associate { it.slot to it.durationSeconds?.let { s -> durationLabel(s) } }
                 TimerSection(
                     status = status,
                     elapsedNow = elapsedNow,
                     runningThresholdW = pendingThresholdW,
-                    presetDurationSeconds = dev.presetDurationSeconds,
-                    presetThresholdW = dev.presetThresholdW,
+                    presets = presets,
                     onPreset = { seconds, label -> requestStartTimer(seconds, label) },
                     onCustom = { showSheet = true },
                     onCancel = { viewModel.cancelTimer() },
-                    onLaunchPreset = {
-                        val seconds = dev.presetDurationSeconds
-                        if (seconds != null) requestStartTimer(seconds, presetLabel.orEmpty(), dev.presetThresholdW)
+                    onLaunchPreset = { slot ->
+                        val p = presets.first { it.slot == slot }
+                        val seconds = p.durationSeconds
+                        if (seconds != null) requestStartTimer(seconds, p.name ?: presetFallbackLabels[slot].orEmpty(), p.thresholdW)
                     },
-                    onAddPreset = { showPresetSheet = true },
-                    onEditPreset = { showPresetSheet = true },
-                    onDeletePreset = { showDeletePresetConfirm = true },
+                    onAddPreset = { slot -> editingPresetSlot = slot },
+                    onEditPreset = { slot -> editingPresetSlot = slot },
+                    onDeletePreset = { slot -> deletingPresetSlot = slot },
                 )
 
                 HorizontalDivider()
@@ -308,18 +313,19 @@ fun DetailScreen(
             confirmLabel = stringResource(R.string.duration_picker_start),
             confirmIcon = Icons.Filled.PlayArrow,
             onDismiss = { showSheet = false },
-            onConfirm = { seconds, label, thresholdW ->
+            onConfirm = { seconds, label, thresholdW, _ ->
                 showSheet = false
                 requestStartTimer(seconds, label, thresholdW)
             },
         )
     }
 
-    if (showPresetSheet) {
+    editingPresetSlot?.let { slot ->
         // Pré-remplit avec le réglage existant en édition, sinon la même valeur par défaut que
         // "Manuel" (30 min, sans coupure).
-        val existingSeconds = device?.presetDurationSeconds
-        val existingThreshold = device?.presetThresholdW
+        val existingName = if (slot == 1) device?.presetName else device?.preset2Name
+        val existingSeconds = if (slot == 1) device?.presetDurationSeconds else device?.preset2DurationSeconds
+        val existingThreshold = if (slot == 1) device?.presetThresholdW else device?.preset2ThresholdW
         DurationPickerSheet(
             hasPowerMetering = device?.hasPowerMetering ?: false,
             title = stringResource(
@@ -331,21 +337,23 @@ fun DetailScreen(
             initialMinutes = ((existingSeconds ?: 1800) % 3600) / 60,
             initialCutoffEnabled = existingThreshold != null,
             initialThresholdW = existingThreshold ?: 10,
-            onDismiss = { showPresetSheet = false },
-            onConfirm = { seconds, _, thresholdW ->
-                showPresetSheet = false
-                viewModel.savePreset(seconds, thresholdW)
+            showNameField = true,
+            initialName = existingName.orEmpty(),
+            onDismiss = { editingPresetSlot = null },
+            onConfirm = { seconds, _, thresholdW, name ->
+                editingPresetSlot = null
+                viewModel.savePreset(slot, name, seconds, thresholdW)
             },
         )
     }
 
-    if (showDeletePresetConfirm) {
+    deletingPresetSlot?.let { slot ->
         DeletePresetConfirmDialog(
             onConfirm = {
-                showDeletePresetConfirm = false
-                viewModel.deletePreset()
+                deletingPresetSlot = null
+                viewModel.deletePreset(slot)
             },
-            onDismiss = { showDeletePresetConfirm = false },
+            onDismiss = { deletingPresetSlot = null },
         )
     }
 
@@ -1013,21 +1021,23 @@ private fun DeviceHeader(device: Device) {
     }
 }
 
+/** Un des deux emplacements « Perso » ([slot] = 1 ou 2). Null = emplacement vide. */
+private data class PersonalPreset(val slot: Int, val name: String?, val durationSeconds: Int?, val thresholdW: Int?)
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TimerSection(
     status: TileStatus,
     elapsedNow: Long,
     runningThresholdW: Int?,
-    presetDurationSeconds: Int?,
-    presetThresholdW: Int?,
+    presets: List<PersonalPreset>,
     onPreset: (Int, String) -> Unit,
     onCustom: () -> Unit,
     onCancel: () -> Unit,
-    onLaunchPreset: () -> Unit,
-    onAddPreset: () -> Unit,
-    onEditPreset: () -> Unit,
-    onDeletePreset: () -> Unit,
+    onLaunchPreset: (slot: Int) -> Unit,
+    onAddPreset: (slot: Int) -> Unit,
+    onEditPreset: (slot: Int) -> Unit,
+    onDeletePreset: (slot: Int) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -1073,10 +1083,12 @@ private fun TimerSection(
                     val label = durationLabel(seconds)
                     OutlinedButton(onClick = { onPreset(seconds, label) }) { Text(label) }
                 }
-                // Se glisse juste avant "Manuel" : lancement direct, comme 1h/2h/3h.
-                if (presetDurationSeconds != null) {
-                    OutlinedButton(onClick = onLaunchPreset) {
-                        Text(stringResource(R.string.timer_preset_chip))
+                // Se glissent juste avant "Manuel" : lancement direct, comme 1h/2h/3h.
+                presets.forEach { p ->
+                    if (p.durationSeconds != null) {
+                        OutlinedButton(onClick = { onLaunchPreset(p.slot) }) {
+                            Text(p.name ?: stringResource(R.string.timer_preset_chip))
+                        }
                     }
                 }
                 OutlinedButton(onClick = onCustom) {
@@ -1084,22 +1096,24 @@ private fun TimerSection(
                 }
             }
 
-            if (presetDurationSeconds != null) {
-                PersonalPresetRow(
-                    label = stringResource(R.string.timer_preset_row_label, durationLabel(presetDurationSeconds)),
-                    detail = if (presetThresholdW != null) {
-                        stringResource(R.string.timer_preset_cutoff_detail, presetThresholdW)
-                    } else {
-                        stringResource(R.string.timer_preset_no_cutoff)
-                    },
-                    onEdit = onEditPreset,
-                    onDelete = onDeletePreset,
-                )
-            } else {
-                OutlinedButton(onClick = onAddPreset) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.size(4.dp))
-                    Text(stringResource(R.string.timer_preset_add))
+            presets.forEach { p ->
+                if (p.durationSeconds != null) {
+                    PersonalPresetRow(
+                        label = stringResource(R.string.timer_preset_row_label, p.name.orEmpty(), durationLabel(p.durationSeconds)),
+                        detail = if (p.thresholdW != null) {
+                            stringResource(R.string.timer_preset_cutoff_detail, p.thresholdW)
+                        } else {
+                            stringResource(R.string.timer_preset_no_cutoff)
+                        },
+                        onEdit = { onEditPreset(p.slot) },
+                        onDelete = { onDeletePreset(p.slot) },
+                    )
+                } else {
+                    OutlinedButton(onClick = { onAddPreset(p.slot) }) {
+                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(4.dp))
+                        Text(stringResource(R.string.timer_preset_add_slot, p.slot))
+                    }
                 }
             }
         }

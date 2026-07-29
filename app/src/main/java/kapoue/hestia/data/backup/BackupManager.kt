@@ -110,6 +110,10 @@ private fun Device.toBackup() = DeviceBackup(
     position = position,
     presetDurationSeconds = presetDurationSeconds,
     presetThresholdW = presetThresholdW,
+    presetName = presetName,
+    preset2DurationSeconds = preset2DurationSeconds,
+    preset2ThresholdW = preset2ThresholdW,
+    preset2Name = preset2Name,
 )
 
 private fun DeviceBackup.toEntity() = Device(
@@ -125,6 +129,10 @@ private fun DeviceBackup.toEntity() = Device(
     position = position,
     presetDurationSeconds = presetDurationSeconds,
     presetThresholdW = presetThresholdW,
+    presetName = presetName,
+    preset2DurationSeconds = preset2DurationSeconds,
+    preset2ThresholdW = preset2ThresholdW,
+    preset2Name = preset2Name,
 )
 
 private fun PresenceConfig.toBackup(device: Device) = PresenceConfigBackup(

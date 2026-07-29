@@ -17,7 +17,7 @@ import kapoue.hestia.data.local.entity.PresenceConfig
  */
 @Database(
     entities = [Device::class, PresenceConfig::class, DiagnosticLog::class],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

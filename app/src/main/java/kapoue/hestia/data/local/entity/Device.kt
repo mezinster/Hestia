@@ -52,11 +52,16 @@ data class Device(
      */
     val lastKnownOutput: Boolean? = null,
     /**
-     * Réglage personnalisé enregistré pour le minuteur « Active pour » (durée + coupure sur
-     * seuil optionnelle). Confort propre à Hestia, pas une configuration d'appareil — jamais
-     * envoyé à la prise avant que l'utilisateur ne le lance. Null = aucun réglage enregistré.
+     * Deux réglages personnalisés enregistrables pour le minuteur « Active pour » (nom + durée +
+     * coupure sur seuil optionnelle). Confort propre à Hestia, pas une configuration d'appareil —
+     * jamais envoyé à la prise avant que l'utilisateur ne le lance. Null = emplacement vide.
      */
     val presetDurationSeconds: Int? = null,
-    /** Seuil de coupure du réglage personnalisé, en Watts. Null = sans coupure sur seuil. */
+    /** Seuil de coupure du 1ᵉʳ réglage personnalisé, en Watts. Null = sans coupure sur seuil. */
     val presetThresholdW: Int? = null,
+    /** Nom donné par l'utilisateur au 1ᵉʳ réglage (ex. « Scooter »). */
+    val presetName: String? = null,
+    val preset2DurationSeconds: Int? = null,
+    val preset2ThresholdW: Int? = null,
+    val preset2Name: String? = null,
 )

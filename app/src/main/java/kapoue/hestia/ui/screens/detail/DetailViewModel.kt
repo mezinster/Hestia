@@ -173,21 +173,32 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * Enregistre (ou remplace) le réglage personnalisé du minuteur — confort propre à Hestia,
-     * jamais envoyé à la prise avant que l'utilisateur ne le lance via la puce « Perso ».
+     * Enregistre (ou remplace) l'un des deux réglages personnalisés du minuteur ([slot] = 1 ou
+     * 2) — confort propre à Hestia, jamais envoyé à la prise avant que l'utilisateur ne le lance
+     * via sa puce nommée.
      */
-    fun savePreset(seconds: Int, thresholdW: Int?) {
+    fun savePreset(slot: Int, name: String, seconds: Int, thresholdW: Int?) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            repository.updateDevice(dev.copy(presetDurationSeconds = seconds, presetThresholdW = thresholdW))
+            val updated = if (slot == 1) {
+                dev.copy(presetName = name, presetDurationSeconds = seconds, presetThresholdW = thresholdW)
+            } else {
+                dev.copy(preset2Name = name, preset2DurationSeconds = seconds, preset2ThresholdW = thresholdW)
+            }
+            repository.updateDevice(updated)
         }
     }
 
-    /** Supprime le réglage personnalisé ; la puce « Perso » et sa ligne disparaissent. */
-    fun deletePreset() {
+    /** Supprime le réglage de l'emplacement [slot] ; sa puce et sa ligne disparaissent. */
+    fun deletePreset(slot: Int) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            repository.updateDevice(dev.copy(presetDurationSeconds = null, presetThresholdW = null))
+            val updated = if (slot == 1) {
+                dev.copy(presetName = null, presetDurationSeconds = null, presetThresholdW = null)
+            } else {
+                dev.copy(preset2Name = null, preset2DurationSeconds = null, preset2ThresholdW = null)
+            }
+            repository.updateDevice(updated)
         }
     }
 

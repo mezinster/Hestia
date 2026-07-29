@@ -10,6 +10,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -29,9 +30,9 @@ import kapoue.hestia.ui.components.ValueWheelPicker
 
 /**
  * Sélecteur de durée en bottom sheet : molette heures/minutes, coupure sur seuil optionnelle.
- * Réutilisé pour deux usages distincts (titre/bouton/valeurs initiales fournis par l'appelant) :
- * le minuteur « Manuel » (démarre tout de suite) et le réglage « Perso » enregistrable
- * (sauvegarde sans rien envoyer à la prise). Durée minimale : 1 minute.
+ * Réutilisé pour trois usages distincts (titre/bouton/valeurs initiales fournis par l'appelant) :
+ * le minuteur « Manuel » (démarre tout de suite) et les deux réglages « Perso » enregistrables
+ * (sauvegarde sans rien envoyer à la prise, nommés). Durée minimale : 1 minute.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -44,15 +45,19 @@ fun DurationPickerSheet(
     initialMinutes: Int = 30,
     initialCutoffEnabled: Boolean = false,
     initialThresholdW: Int = DEFAULT_THRESHOLD_W,
+    showNameField: Boolean = false,
+    initialName: String = "",
     onDismiss: () -> Unit,
-    onConfirm: (seconds: Int, label: String, thresholdW: Int?) -> Unit,
+    onConfirm: (seconds: Int, label: String, thresholdW: Int?, name: String) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
     var hours by remember { mutableStateOf(initialHours) }
     var minutes by remember { mutableStateOf(initialMinutes) }
     var showError by remember { mutableStateOf(false) }
+    var showNameError by remember { mutableStateOf(false) }
     var cutoffEnabled by remember { mutableStateOf(initialCutoffEnabled) }
     var threshold by remember { mutableStateOf(initialThresholdW) }
+    var name by remember { mutableStateOf(initialName) }
 
     val totalSeconds = hours * 3600 + minutes * 60
     val label = durationLabel(totalSeconds)
@@ -66,6 +71,23 @@ fun DurationPickerSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(text = title, style = MaterialTheme.typography.titleMedium)
+
+            if (showNameField) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { if (it.length <= MAX_NAME_LENGTH) { name = it; showNameError = false } },
+                    label = { Text(stringResource(R.string.timer_preset_name_label)) },
+                    isError = showNameError,
+                    supportingText = if (showNameError) {
+                        { Text(stringResource(R.string.timer_preset_name_error)) }
+                    } else {
+                        null
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
             // Molette heures/minutes (00–23 / 00–59), lue comme une durée.
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 TimeWheelPicker(hours, minutes) { h, m -> hours = h; minutes = m; showError = false }
@@ -105,10 +127,10 @@ fun DurationPickerSheet(
             }
             Button(
                 onClick = {
-                    if (totalSeconds < 60) {
-                        showError = true
-                    } else {
-                        onConfirm(totalSeconds, label, if (cutoffEnabled) threshold else null)
+                    when {
+                        totalSeconds < 60 -> showError = true
+                        showNameField && name.isBlank() -> showNameError = true
+                        else -> onConfirm(totalSeconds, label, if (cutoffEnabled) threshold else null, name.trim())
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -124,3 +146,4 @@ fun DurationPickerSheet(
 
 private val CUTOFF_THRESHOLDS_W = listOf(5, 10, 20, 30, 40, 50)
 private const val DEFAULT_THRESHOLD_W = 10
+private const val MAX_NAME_LENGTH = 20
