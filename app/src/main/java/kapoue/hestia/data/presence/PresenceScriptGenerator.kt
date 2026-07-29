@@ -1,5 +1,6 @@
 package kapoue.hestia.data.presence
 
+import kapoue.hestia.data.notifications.NtfyScriptSupport
 import kapoue.hestia.domain.model.PresenceWindow
 import kotlinx.serialization.json.Json
 
@@ -22,11 +23,24 @@ object PresenceScriptGenerator {
 
     private const val MARKER = "// hestia_windows:"
 
-    fun generate(windows: List<PresenceWindow>, switchId: Int): String {
+    /**
+     * [ntfyTopic] non nul = notifie via ntfy à chaque bascule ([ntfyTitle] = nom de la prise,
+     * [ntfyStartBody]/[ntfyEndBody] = textes début/fin). Toujours après `Switch.Set`.
+     */
+    fun generate(
+        windows: List<PresenceWindow>,
+        switchId: Int,
+        ntfyTopic: String? = null,
+        ntfyTitle: String = "",
+        ntfyStartBody: String = "",
+        ntfyEndBody: String = "",
+    ): String {
         // [début(min), fin(min), marge(min)] par plage — même donnée pour le marqueur et le runtime.
         val arr = windows.joinToString(",", "[", "]") {
             "[${it.startMinutes},${it.endMinutes},${it.marginMinutes}]"
         }
+        val ntfyStart = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyStartBody)
+        val ntfyEnd = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyEndBody)
         return """
             // Généré par Hestia — simulation de présence
             $MARKER$arr
@@ -63,8 +77,8 @@ object PresenceScriptGenerator {
                 let w = over ? (now >= onAt || now < offAt) : (now >= onAt && now < offAt);
                 if (w) { inWin = true; break; }
               }
-              if (inWin && !st.output) Shelly.call("Switch.Set", { id: CFG.switchId, on: true });
-              if (!inWin && st.output) Shelly.call("Switch.Set", { id: CFG.switchId, on: false });
+              if (inWin && !st.output) { Shelly.call("Switch.Set", { id: CFG.switchId, on: true }); $ntfyStart }
+              if (!inWin && st.output) { Shelly.call("Switch.Set", { id: CFG.switchId, on: false }); $ntfyEnd }
             });
         """.trimIndent()
     }

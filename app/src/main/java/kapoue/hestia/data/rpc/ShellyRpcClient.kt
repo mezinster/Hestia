@@ -190,7 +190,10 @@ class ShellyRpcClient @Inject constructor(
      * Switch.Set par défaut — c'est ce qui permet de reconstruire les plannings côté repository.
      * [scriptCallMethod]/[scriptId] ajoutent un second appel (`Script.Start`/`Script.Stop`) dans
      * le même programme — validé sur Plug M Gen3 : les deux appels s'exécutent bien l'un après
-     * l'autre (planning Unique avec coupure sur seuil).
+     * l'autre (planning Unique avec coupure sur seuil). [ntfyTopic]/[ntfyTitle]/[ntfyBody]
+     * ajoutent un appel `HTTP.Request` (POST) vers ntfy — toujours **après** `Switch.Set` pour ne
+     * jamais retarder l'action réelle si ntfy.sh est lent ou injoignable (timeout court, 5 s).
+     * `HTTP.POST` ne permet pas d'en-têtes personnalisés (pas de titre) : `HTTP.Request` si.
      */
     suspend fun scheduleCreate(
         ip: String,
@@ -199,6 +202,9 @@ class ShellyRpcClient @Inject constructor(
         on: Boolean,
         scriptCallMethod: String? = null,
         scriptId: Int? = null,
+        ntfyTopic: String? = null,
+        ntfyTitle: String? = null,
+        ntfyBody: String? = null,
         enable: Boolean = true,
     ): RpcResult<ScheduleCreateResult> = call(
         ip,
@@ -229,11 +235,31 @@ class ShellyRpcClient @Inject constructor(
                             },
                         )
                     }
+                    if (ntfyTopic != null && ntfyBody != null) {
+                        add(ntfyCall(ntfyTopic, ntfyTitle, ntfyBody))
+                    }
                 },
             )
         },
         ScheduleCreateResult.serializer(),
     )
+
+    /** Appel `HTTP.Request` (POST vers ntfy), partagé entre `Schedule.Create` et les scripts. */
+    private fun ntfyCall(topic: String, title: String?, body: String): JsonObject = buildJsonObject {
+        put("method", "HTTP.Request")
+        put(
+            "params",
+            buildJsonObject {
+                put("method", "POST")
+                put("url", "https://ntfy.sh/$topic")
+                put("body", body)
+                put("timeout", 5)
+                if (title != null) {
+                    put("headers", buildJsonObject { put("Title", title) })
+                }
+            },
+        )
+    }
 
     suspend fun scheduleDelete(ip: String, id: Int): RpcResult<ScheduleDeleteResult> =
         call(ip, "Schedule.Delete", buildJsonObject { put("id", id) }, ScheduleDeleteResult.serializer())

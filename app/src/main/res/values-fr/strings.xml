@@ -54,6 +54,21 @@
     <string name="settings_notifications_label">Notifications de programmation</string>
     <string name="settings_notifications_desc">Prévient au début et à la fin des plannings et des plages de présence. Vérifié en arrière-plan toutes les 15 min environ : l\'alerte peut arriver avec un léger décalage.</string>
     <string name="settings_notifications_denied">Autorisation refusée. Pour recevoir les notifications, active-les pour Hestia dans les réglages Android.</string>
+    <string name="settings_notifications_superseded">Remplacé par les notifications instantanées (ntfy, ci-dessous) — pas vraiment coupé, juste devenu inutile.</string>
+
+    <!-- Notifications instantanées via ntfy (service externe, opt-in, remplace la section ci-dessus si actif) -->
+    <string name="settings_ntfy_section">Notifications instantanées (ntfy)</string>
+    <string name="settings_ntfy_desc_before">Envoie tes notifications instantanément depuis tes appareils, sans délai, en passant par un service externe plutôt que de rester uniquement sur ton réseau local. Nécessite l\'appli ntfy — disponible sur </string>
+    <string name="settings_ntfy_desc_after"> — pour les recevoir sur ton téléphone.</string>
+    <string name="settings_ntfy_toggle_label">Activer ntfy</string>
+    <string name="settings_ntfy_topic_hint_setup">Encore une étape : installe l\'appli ntfy, crée un sujet, puis colle-le ci-dessous. Tant que ce champ est vide, tu ne recevras rien.</string>
+    <string name="settings_ntfy_topic_label">Sujet ntfy</string>
+    <string name="settings_ntfy_topic_placeholder">Pas encore renseigné</string>
+    <string name="settings_ntfy_topic_hint">À traiter comme un mot de passe : ne le partage jamais. Génère-le depuis l\'appli ntfy.</string>
+    <string name="settings_ntfy_reveal">Afficher le sujet</string>
+    <string name="settings_ntfy_hide">Masquer le sujet</string>
+    <string name="settings_ntfy_test">Tester</string>
+    <string name="ntfy_test_message">Si tu lis ce message, ntfy fonctionne. Si tu ne le lis pas, on a un problème de logique.</string>
 
     <!-- Canal et contenus des notifications -->
     <string name="notif_channel_name">Programmations</string>
@@ -62,8 +77,12 @@
     <string name="notif_planning_ended">Planning de %1$s à %2$s terminé</string>
     <string name="notif_presence_started">Présence de %1$s à %2$s lancée</string>
     <string name="notif_presence_ended">Présence de %1$s à %2$s terminée</string>
-    <string name="notif_timer_ended">Active pour %1$s terminé</string>
-    <string name="notif_cutoff_triggered">Prise coupée (consommation sous le seuil)</string>
+    <string name="notif_timer_ended">%1$s terminé</string>
+    <string name="notif_cutoff_triggered">Coupure sur seuil de consommation</string>
+    <!-- Variantes ntfy de la présence : plusieurs plages possibles par appareil, la prise ne sait
+         pas laquelle a déclenché au moment de la bascule — pas d'horaire, contrairement au planning. -->
+    <string name="notif_ntfy_presence_started">Simulation de présence démarrée</string>
+    <string name="notif_ntfy_presence_ended">Simulation de présence arrêtée</string>
 
     <string name="settings_security_section">Sécurité</string>
     <string name="settings_security_password_hint">Mot de passe de l\'appareil</string>

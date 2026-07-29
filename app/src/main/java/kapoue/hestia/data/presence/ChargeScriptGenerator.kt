@@ -1,5 +1,7 @@
 package kapoue.hestia.data.presence
 
+import kapoue.hestia.data.notifications.NtfyScriptSupport
+
 /**
  * Génère le script de **coupure sur seuil de consommation** (« Active pour … + coupe sous X W »).
  *
@@ -25,7 +27,21 @@ object ChargeScriptGenerator {
      */
     fun uniquePlanningScriptName(): String = "hestia_pcut_${System.currentTimeMillis()}"
 
-    fun generate(switchId: Int, thresholdW: Int, belowSec: Int, selfId: Int): String = """
+    /**
+     * [ntfyTopic] non nul = notifie via ntfy quand la coupure se déclenche ([ntfyTitle] = nom de
+     * la prise, [ntfyBody] = texte). Toujours après `Switch.Set`, jamais avant.
+     */
+    fun generate(
+        switchId: Int,
+        thresholdW: Int,
+        belowSec: Int,
+        selfId: Int,
+        ntfyTopic: String? = null,
+        ntfyTitle: String = "",
+        ntfyBody: String = "",
+    ): String {
+        val ntfyStatement = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyBody)
+        return """
         // Généré par Hestia — coupure sur seuil de consommation
         $MARKER$thresholdW
         let CFG = { switchId: $switchId, thresholdW: $thresholdW, belowSec: $belowSec, selfId: $selfId };
@@ -52,13 +68,15 @@ object ChargeScriptGenerator {
             if (belowSince === null) belowSince = now;
             if (now - belowSince >= CFG.belowSec) {
               Shelly.call("Switch.Set", { id: CFG.switchId, on: false });
+              $ntfyStatement
               stopSelf();
             }
           } else {
             belowSince = null;
           }
         });
-    """.trimIndent()
+        """.trimIndent()
+    }
 
     /** Relit le seuil configuré depuis la ligne-marqueur (même technique que [PresenceScriptGenerator]). */
     fun parseThreshold(code: String): Int? {

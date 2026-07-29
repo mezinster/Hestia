@@ -56,6 +56,21 @@
     <string name="settings_notifications_label">Schedule notifications</string>
     <string name="settings_notifications_desc">Notifies at the start and end of plannings and presence windows. Checked in the background roughly every 15 min: the alert may arrive with a slight delay.</string>
     <string name="settings_notifications_denied">Permission denied. To receive notifications, enable them for Hestia in Android settings.</string>
+    <string name="settings_notifications_superseded">Replaced by instant notifications (ntfy, below) — not actually off, just no longer needed.</string>
+
+    <!-- Notifications instantanées via ntfy (service externe, opt-in, remplace la section ci-dessus si actif) -->
+    <string name="settings_ntfy_section">Instant notifications (ntfy)</string>
+    <string name="settings_ntfy_desc_before">Sends your notifications instantly, straight from your outlets, instead of staying only on your local network. Requires the ntfy app — available on </string>
+    <string name="settings_ntfy_desc_after"> — to receive them on your phone.</string>
+    <string name="settings_ntfy_toggle_label">Enable ntfy</string>
+    <string name="settings_ntfy_topic_hint_setup">One more step: install the ntfy app, create a topic, then paste it below. As long as this field is empty, you won\'t receive anything.</string>
+    <string name="settings_ntfy_topic_label">ntfy topic</string>
+    <string name="settings_ntfy_topic_placeholder">Not set yet</string>
+    <string name="settings_ntfy_topic_hint">Treat this like a password: never share it. Generate it from the ntfy app.</string>
+    <string name="settings_ntfy_reveal">Show topic</string>
+    <string name="settings_ntfy_hide">Hide topic</string>
+    <string name="settings_ntfy_test">Test</string>
+    <string name="ntfy_test_message">If you\'re reading this, ntfy works. If you\'re not reading it, we have a logic problem.</string>
 
     <!-- Canal et contenus des notifications -->
     <string name="notif_channel_name">Schedules</string>
@@ -64,8 +79,12 @@
     <string name="notif_planning_ended">Planning from %1$s to %2$s ended</string>
     <string name="notif_presence_started">Presence from %1$s to %2$s started</string>
     <string name="notif_presence_ended">Presence from %1$s to %2$s ended</string>
-    <string name="notif_timer_ended">\"On for %1$s\" ended</string>
-    <string name="notif_cutoff_triggered">Outlet switched off (power below threshold)</string>
+    <string name="notif_timer_ended">%1$s ended</string>
+    <string name="notif_cutoff_triggered">Switched off (power below threshold)</string>
+    <!-- Variantes ntfy de la présence : plusieurs plages possibles par appareil, la prise ne sait
+         pas laquelle a déclenché au moment de la bascule — pas d'horaire, contrairement au planning. -->
+    <string name="notif_ntfy_presence_started">Presence simulation started</string>
+    <string name="notif_ntfy_presence_ended">Presence simulation ended</string>
 
     <string name="settings_security_section">Security</string>
     <string name="settings_security_password_hint">Device password</string>

@@ -27,8 +27,11 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
@@ -43,6 +46,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -57,9 +62,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -86,6 +100,8 @@ fun SettingsScreen(
     val backupMessage by viewModel.backupMessage.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
+    val ntfyEnabled by viewModel.ntfyEnabled.collectAsStateWithLifecycle()
+    val ntfyTopic by viewModel.ntfyTopic.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var deviceToDelete by remember { mutableStateOf<Device?>(null) }
@@ -201,7 +217,23 @@ fun SettingsScreen(
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { AppearanceSection(themeMode, viewModel::setThemeMode) }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-            item { NotificationsSection(notificationsEnabled, onToggleNotifications) }
+            item {
+                NotificationsSection(
+                    enabled = notificationsEnabled,
+                    onToggle = onToggleNotifications,
+                    supersededByNtfy = ntfyEnabled,
+                )
+            }
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+            item {
+                NtfySection(
+                    enabled = ntfyEnabled,
+                    topic = ntfyTopic.orEmpty(),
+                    onToggle = viewModel::setNtfyEnabled,
+                    onTopicChange = viewModel::setNtfyTopic,
+                    onTest = viewModel::testNtfy,
+                )
+            }
         }
     }
 
@@ -431,8 +463,9 @@ private fun themeModeLabel(mode: ThemeMode): Int = when (mode) {
  * demande l'autorisation système avant d'appeler le ViewModel. Le libellé rappelle le délai
  * inhérent (le worker passe ~toutes les 15 min : notification différée, pas instantanée).
  */
+/** [supersededByNtfy] : ntfy actif = ce système est désactivé et l'interrupteur grisé. */
 @Composable
-private fun NotificationsSection(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+private fun NotificationsSection(enabled: Boolean, onToggle: (Boolean) -> Unit, supersededByNtfy: Boolean) {
     Column {
         SectionTitle(stringResource(R.string.settings_notifications_section))
         Row(
@@ -451,9 +484,129 @@ private fun NotificationsSection(enabled: Boolean, onToggle: (Boolean) -> Unit) 
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (supersededByNtfy) {
+                    Text(
+                        text = stringResource(R.string.settings_notifications_superseded),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
             Spacer(Modifier.size(12.dp))
+            Switch(checked = enabled && !supersededByNtfy, onCheckedChange = onToggle, enabled = !supersededByNtfy)
+        }
+    }
+}
+
+/**
+ * Notifications instantanées via ntfy — service externe, opt-in. Le texte explicatif (avec le
+ * lien F-Droid) passe **avant** l'interrupteur pour que l'intérêt soit clair avant de l'activer.
+ * Un encadré d'aide guide vers l'appli ntfy tant qu'aucun sujet n'est renseigné. L'envoi groupé de
+ * tous les textes de notif (outil de support) se déclenche depuis le Tableau (3 appuis sur le
+ * titre, à côté des 5 appuis du journal de diagnostic), pas ici.
+ */
+@Composable
+private fun NtfySection(
+    enabled: Boolean,
+    topic: String,
+    onToggle: (Boolean) -> Unit,
+    onTopicChange: (String) -> Unit,
+    onTest: () -> Unit,
+) {
+    // Champ local : ne se recale sur [topic] qu'à la composition initiale, pas à chaque frappe
+    // (sinon la resynchro déclenchée à chaque caractère créerait un aller-retour permanent).
+    var topicField by remember { mutableStateOf(topic) }
+    var topicVisible by remember { mutableStateOf(false) }
+
+    Column {
+        Text(
+            text = stringResource(R.string.settings_ntfy_section),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+
+        val fdroidLink = LinkAnnotation.Url("https://f-droid.org/packages/io.heckel.ntfy/")
+        Text(
+            text = buildAnnotatedString {
+                append(stringResource(R.string.settings_ntfy_desc_before))
+                withLink(fdroidLink) {
+                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)) {
+                        append("F-Droid")
+                    }
+                }
+                append(stringResource(R.string.settings_ntfy_desc_after))
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+        )
+
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = stringResource(R.string.settings_ntfy_toggle_label),
+                style = MaterialTheme.typography.bodyLarge,
+                modifier = Modifier.weight(1f),
+            )
             Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+
+        if (enabled) {
+            Spacer(Modifier.size(8.dp))
+            if (topic.isBlank()) {
+                Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                    Text(
+                        text = stringResource(R.string.settings_ntfy_topic_hint_setup),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
+                Spacer(Modifier.size(8.dp))
+            }
+
+            OutlinedTextField(
+                value = topicField,
+                onValueChange = { topicField = it },
+                label = { Text(stringResource(R.string.settings_ntfy_topic_label)) },
+                placeholder = { Text(stringResource(R.string.settings_ntfy_topic_placeholder)) },
+                singleLine = true,
+                visualTransformation = if (topicVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { topicVisible = !topicVisible }) {
+                        Icon(
+                            if (topicVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                            contentDescription = stringResource(
+                                if (topicVisible) R.string.settings_ntfy_hide else R.string.settings_ntfy_reveal,
+                            ),
+                        )
+                    }
+                },
+                // La resynchro (RPC vers chaque appareil) ne part qu'une fois la saisie terminée,
+                // pas à chaque caractère.
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { if (!it.isFocused && topicField != topic) onTopicChange(topicField) },
+            )
+            Text(
+                text = stringResource(R.string.settings_ntfy_topic_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+
+            Button(
+                onClick = {
+                    // Enregistre d'abord une saisie pas encore validée (perte de focus non passée
+                    // par là si on appuie directement sur Tester), pour tester la bonne valeur.
+                    if (topicField != topic) onTopicChange(topicField)
+                    onTest()
+                },
+                enabled = topicField.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(Icons.Filled.NotificationsActive, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.settings_ntfy_test))
+            }
         }
     }
 }

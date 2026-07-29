@@ -12,6 +12,7 @@ import kapoue.hestia.data.backup.BackupManager
 import kapoue.hestia.data.backup.ImportResult
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.notifications.NotificationScheduler
+import kapoue.hestia.data.notifications.NtfyClient
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.RpcResult
@@ -32,6 +33,7 @@ class SettingsViewModel @Inject constructor(
     private val backupManager: BackupManager,
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
+    private val ntfyClient: NtfyClient,
 ) : ViewModel() {
 
     val devices: StateFlow<List<Device>> = repository.observeDevices()
@@ -61,6 +63,43 @@ class SettingsViewModel @Inject constructor(
      */
     fun reconcileNotifications(canPost: Boolean) {
         if (notificationsEnabled.value && !canPost) setNotificationsEnabled(false)
+    }
+
+    // --- Notifications instantanées via ntfy ---
+
+    val ntfyEnabled: StateFlow<Boolean> = appPreferences.ntfyEnabled
+    val ntfyTopic: StateFlow<String?> = appPreferences.ntfyTopic
+
+    /**
+     * Active/désactive ntfy. À l'activation, prend le relais du worker périodique (coupé s'il
+     * était actif). Dans les deux sens, **recrée** les plannings et redéploie le script de
+     * présence de chaque appareil joignable pour qu'ils reflètent le nouvel état — un appareil
+     * injoignable à cet instant garde son ancien comportement jusqu'à sa prochaine modification
+     * (pas de tâche de fond pour rattraper ça tout seul, cf. principe du projet).
+     */
+    fun setNtfyEnabled(enabled: Boolean) {
+        appPreferences.setNtfyEnabled(enabled)
+        if (enabled && notificationsEnabled.value) setNotificationsEnabled(false)
+        logger.info(DiagnosticLogger.UI, "ntfy ${if (enabled) "activé" else "désactivé"}")
+        resyncNtfy()
+    }
+
+    /** Sujet ntfy ; vide = équivalent à non configuré. Resynchronise si ntfy est déjà actif. */
+    fun setNtfyTopic(topic: String) {
+        appPreferences.setNtfyTopic(topic.trim().ifBlank { null })
+        if (ntfyEnabled.value) resyncNtfy()
+    }
+
+    private fun resyncNtfy() {
+        viewModelScope.launch { repository.resyncNtfyForAllDevices() }
+    }
+
+    /** Envoie une notif de test avec le texte choisi par l'utilisateur (pas configurable). */
+    fun testNtfy() {
+        val topic = ntfyTopic.value ?: return
+        viewModelScope.launch {
+            ntfyClient.send(topic, appContext.getString(R.string.app_name), appContext.getString(R.string.ntfy_test_message))
+        }
     }
 
     /** Connectivité par appareil : null = en cours/inconnu, true = joignable, false = injoignable. */

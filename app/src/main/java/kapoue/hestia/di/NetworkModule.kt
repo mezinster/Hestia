@@ -22,8 +22,10 @@ object NetworkModule {
     }
 
     /**
-     * Client HTTP dédié au réseau local : timeouts courts (SPEC-V1 § 3), aucune reprise
-     * automatique. On désactive `retryOnConnectionFailure` pour ne jamais boucler tout seul.
+     * Client HTTP partagé : timeouts courts (SPEC-V1 § 3), aucune reprise automatique. Utilisé
+     * pour le réseau local (RPC Shelly) et, ponctuellement, pour les appels ntfy émis depuis le
+     * téléphone (test/validation — l'appareil, lui, appelle ntfy directement, sans passer par ce
+     * client). On désactive `retryOnConnectionFailure` pour ne jamais boucler tout seul.
      */
     @Provides
     @Singleton

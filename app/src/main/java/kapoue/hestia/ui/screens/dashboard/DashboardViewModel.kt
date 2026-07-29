@@ -5,8 +5,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kapoue.hestia.R
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.notifications.NtfyClient
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
@@ -32,7 +34,32 @@ class DashboardViewModel @Inject constructor(
     private val repository: DeviceRepository,
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
+    private val ntfyClient: NtfyClient,
 ) : ViewModel() {
+
+    /**
+     * Outil de support (pas une fonctionnalité) : envoie d'un coup tous les textes de notif
+     * possibles, pour les relire et les valider sans attendre que chaque cas réel se produise.
+     * Déclenché par 3 appuis rapprochés sur le titre du Tableau — jamais visible ailleurs.
+     */
+    fun debugSendAllNtfyTexts() {
+        if (!appPreferences.ntfyEnabled.value) return
+        val topic = appPreferences.ntfyTopic.value ?: return
+        viewModelScope.launch {
+            val title = "Hestia (test)"
+            listOf(
+                context.getString(R.string.notif_planning_started, "09:00", "17:00"),
+                context.getString(R.string.notif_planning_ended, "09:00", "17:00"),
+                context.getString(R.string.notif_ntfy_presence_started),
+                context.getString(R.string.notif_ntfy_presence_ended),
+                context.getString(R.string.notif_timer_ended, "30 min"),
+                context.getString(R.string.notif_cutoff_triggered),
+            ).forEach { body ->
+                ntfyClient.send(topic, title, body)
+                delay(1_500)
+            }
+        }
+    }
 
     private val statuses = MutableStateFlow<Map<Long, TileStatus>>(emptyMap())
     private val refreshing = MutableStateFlow(false)

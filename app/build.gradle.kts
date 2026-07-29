@@ -95,6 +95,10 @@ dependencies {
     // ce qui évite hilt-work et toute modification de l'Application/manifest.
     implementation(libs.androidx.work.runtime)
 
+    // Chiffrement local (Android Keystore) du sujet ntfy — un secret au même titre qu'un mot de
+    // passe, jamais stocké en clair.
+    implementation(libs.androidx.security.crypto)
+
     // Génération locale du QR code (Apache 2.0, sans service Google — F-Droid OK).
     implementation(libs.zxing.core)
 

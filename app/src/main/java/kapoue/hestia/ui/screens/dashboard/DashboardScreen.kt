@@ -95,10 +95,21 @@ fun DashboardScreen(
         }
     }
 
-    // Accès discret au journal de diagnostic : 5 appuis sur le titre (compteur réinitialisé
-    // après 2 s d'inactivité, aucun retour visuel — outil de support, pas une fonctionnalité).
+    // Accès discrets, empilés sur le même geste (compteur réinitialisé après 2 s d'inactivité,
+    // aucun retour visuel — outils de support, pas des fonctionnalités) :
+    // 3 appuis → envoi groupé de tous les textes de notif ntfy (ne se déclenche qu'à l'arrêt à 3,
+    // pas en chemin vers 5, pour ne pas polluer l'accès au journal de diagnostic).
+    // 5 appuis → journal de diagnostic.
     var tapCount by remember { mutableStateOf(0) }
     var lastTapAt by remember { mutableStateOf(0L) }
+
+    // Le triple appui ne se distingue du chemin vers 5 qu'après une pause : s'il n'y a pas eu de
+    // 4ᵉ appui dans les 2 s, et qu'on s'est arrêté pile à 3, c'est le geste ntfy.
+    LaunchedEffect(tapCount) {
+        if (tapCount != 3) return@LaunchedEffect
+        delay(2_000)
+        if (tapCount == 3) viewModel.debugSendAllNtfyTexts()
+    }
 
     Scaffold(
         topBar = {
@@ -109,7 +120,6 @@ fun DashboardScreen(
                         modifier = Modifier.combinedClickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                            // 5 appuis rapprochés → journal de diagnostic.
                             onClick = {
                                 val now = SystemClock.elapsedRealtime()
                                 tapCount = if (now - lastTapAt <= 2_000) tapCount + 1 else 1

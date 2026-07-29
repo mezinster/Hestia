@@ -1,6 +1,8 @@
 package kapoue.hestia.data.prefs
 
 import android.content.Context
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.data.notifications.PendingTimer
 import kapoue.hestia.domain.model.ThemeMode
@@ -21,6 +23,18 @@ import javax.inject.Singleton
 class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
 
     private val prefs = context.getSharedPreferences("hestia_prefs", Context.MODE_PRIVATE)
+
+    /**
+     * Stockage chiffré (Android Keystore) réservé au sujet ntfy : à traiter comme un mot de
+     * passe, jamais en clair (n'importe qui le connaissant peut lire — ou polluer — les notifs).
+     */
+    private val securePrefs = EncryptedSharedPreferences.create(
+        context,
+        "hestia_secure_prefs",
+        MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+    )
 
     private val _themeMode = MutableStateFlow(readThemeMode())
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
@@ -52,6 +66,25 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         get() = prefs.getLong(KEY_NOTIFS_LAST_RUN, 0L)
         set(value) { prefs.edit().putLong(KEY_NOTIFS_LAST_RUN, value).apply() }
 
+    // --- Notifications instantanées via ntfy (opt-in, remplace le worker ci-dessus si actif) ---
+
+    private val _ntfyEnabled = MutableStateFlow(prefs.getBoolean(KEY_NTFY_ENABLED, false))
+    val ntfyEnabled: StateFlow<Boolean> = _ntfyEnabled.asStateFlow()
+
+    fun setNtfyEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_NTFY_ENABLED, enabled).apply()
+        _ntfyEnabled.value = enabled
+    }
+
+    /** Sujet ntfy, à traiter comme un mot de passe — stocké chiffré, jamais en clair. */
+    private val _ntfyTopic = MutableStateFlow(securePrefs.getString(KEY_NTFY_TOPIC, null))
+    val ntfyTopic: StateFlow<String?> = _ntfyTopic.asStateFlow()
+
+    fun setNtfyTopic(topic: String?) {
+        securePrefs.edit().putString(KEY_NTFY_TOPIC, topic).apply()
+        _ntfyTopic.value = topic
+    }
+
     // --- Minuteurs en attente (mémos pour notifier la fin d'un « Active pour » / coupure seuil) ---
 
     fun pendingTimers(): List<PendingTimer> =
@@ -74,6 +107,8 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_THEME = "theme_mode"
         const val KEY_NOTIFS = "notifications_enabled"
         const val KEY_NOTIFS_LAST_RUN = "notifications_last_run"
+        const val KEY_NTFY_ENABLED = "ntfy_enabled"
+        const val KEY_NTFY_TOPIC = "ntfy_topic"
         const val KEY_PENDING_TIMERS = "pending_timers"
         val json = Json { ignoreUnknownKeys = true }
     }
