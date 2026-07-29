@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -61,7 +62,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatCountdown
+import kapoue.hestia.core.util.formatDate
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
@@ -72,9 +75,11 @@ import kapoue.hestia.domain.model.PresenceWindow
 import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.components.StatusBadge
 import kapoue.hestia.ui.components.TimeWheelPicker
+import kapoue.hestia.ui.components.ValueWheelPicker
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.screens.dashboard.TileStatus
 import kotlinx.coroutines.delay
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -373,10 +378,11 @@ fun DetailScreen(
         AddPlanningDialog(
             initial = editingPlanning,
             result = addPlanningResult,
-            onValidate = { sh, sm, eh, em, days ->
+            hasCutoff = (device?.hasScripting ?: false) && (device?.hasPowerMetering ?: false),
+            onValidate = { sh, sm, eh, em, days, date, thresholdW ->
                 val edit = editingPlanning
-                if (edit != null) viewModel.updatePlanning(edit, sh, sm, eh, em, days)
-                else viewModel.addPlanning(sh, sm, eh, em, days)
+                if (edit != null) viewModel.updatePlanning(edit, sh, sm, eh, em, days, date, thresholdW)
+                else viewModel.addPlanning(sh, sm, eh, em, days, date, thresholdW)
             },
             onDismiss = {
                 showAddPlanning = false
@@ -677,6 +683,9 @@ private fun PlanningInProgressDialog(
 // Ordre d'affichage lundi → dimanche ; l'indice suit le cron Shelly (0 = dimanche).
 private val WEEK_DAYS = listOf(1, 2, 3, 4, 5, 6, 0)
 
+private val PLANNING_CUTOFF_THRESHOLDS_W = listOf(5, 10, 20, 30, 40, 50)
+private const val DEFAULT_PLANNING_THRESHOLD_W = 10
+
 @Composable
 private fun PlanningSection(
     plannings: List<Planning>,
@@ -736,6 +745,13 @@ private fun PlanningRow(planning: Planning, onEdit: () -> Unit, onDelete: () -> 
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            planning.cutoffThresholdW?.let {
+                Text(
+                    text = stringResource(R.string.timer_preset_cutoff_detail, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.planning_delete))
@@ -745,6 +761,14 @@ private fun PlanningRow(planning: Planning, onEdit: () -> Unit, onDelete: () -> 
 
 @Composable
 private fun daysSummary(planning: Planning): String {
+    val date = planning.date
+    if (date != null) {
+        return if (date == LocalDate.now()) {
+            stringResource(R.string.planning_today)
+        } else {
+            "${dayLabel(date.dayOfWeek.value % 7)} ${formatDate(date)}"
+        }
+    }
     if (planning.everyDay) return stringResource(R.string.planning_every_day)
     // Libellés résolus ici (contexte composable), puis assemblés hors lambda composable.
     val labels = mapOf(
@@ -777,7 +801,8 @@ private fun dayLabel(day: Int): String = stringResource(
 private fun AddPlanningDialog(
     initial: Planning?,
     result: CreatePlanningResult?,
-    onValidate: (Int, Int, Int, Int, Set<Int>) -> Unit,
+    hasCutoff: Boolean,
+    onValidate: (Int, Int, Int, Int, Set<Int>, LocalDate?, Int?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var startHour by remember { mutableStateOf(initial?.startHour ?: 9) }
@@ -786,14 +811,21 @@ private fun AddPlanningDialog(
     var endMinute by remember { mutableStateOf(initial?.endMinute ?: 0) }
     // Deux modes exclusifs : « tous les jours » OU une sélection de jours précis. [everyDay]
     // porte l'état propre du chip « Tous les jours » ; [days] les jours précis (mode contraire).
-    var everyDay by remember { mutableStateOf(initial?.everyDay ?: true) }
+    var everyDay by remember { mutableStateOf(initial?.date == null && (initial?.everyDay ?: true)) }
     var days by remember { mutableStateOf(if (initial != null && !initial.everyDay) initial.days else emptySet()) }
+    // Planning Unique (une seule occurrence, à une date précise) : mode à part, incompatible avec
+    // « Tous les jours ». [onceDate] par défaut aujourd'hui, choisi via les chips Aujourd'hui/jours.
+    var once by remember { mutableStateOf(initial?.date != null) }
+    var onceDate by remember { mutableStateOf(initial?.date ?: LocalDate.now()) }
+    // Coupure sur seuil, réservée aux plannings Unique.
+    var cutoffEnabled by remember { mutableStateOf(initial?.cutoffThresholdW != null) }
+    var cutoffThreshold by remember { mutableStateOf(initial?.cutoffThresholdW ?: DEFAULT_PLANNING_THRESHOLD_W) }
     val effectiveDays = if (everyDay) setOf(0, 1, 2, 3, 4, 5, 6) else days
 
     val startMin = startHour * 60 + startMinute
     val endMin = endHour * 60 + endMinute
     // Début == fin interdit (créneau nul ou de 24 h, ambigu) ; fin < début = créneau de nuit, OK.
-    val valid = (everyDay || days.isNotEmpty()) && startMin != endMin
+    val valid = (once || everyDay || days.isNotEmpty()) && startMin != endMin
 
     val errorText: String? = when {
         result is CreatePlanningResult.Conflict -> stringResource(
@@ -804,9 +836,10 @@ private fun AddPlanningDialog(
             ),
         )
         result is CreatePlanningResult.PresenceOverlap -> stringResource(R.string.planning_conflict_presence)
+        result is CreatePlanningResult.PastOnce -> stringResource(R.string.planning_error_past)
         result is CreatePlanningResult.LimitReached -> stringResource(R.string.planning_limit_reached)
         result is CreatePlanningResult.Error -> stringResource(R.string.planning_error_generic)
-        !everyDay && days.isEmpty() -> stringResource(R.string.planning_error_no_day)
+        !once && !everyDay && days.isEmpty() -> stringResource(R.string.planning_error_no_day)
         startMin == endMin -> stringResource(R.string.planning_error_range)
         else -> null
     }
@@ -837,28 +870,94 @@ private fun AddPlanningDialog(
                 }
             }
 
-            Text(stringResource(R.string.planning_days), style = MaterialTheme.typography.bodyMedium)
-            // Deux modes exclusifs. « Tous les jours » a son propre état : le taper l'active
-            // et vide la sélection précise ; taper un jour bascule en mode « jours précis »
-            // et éteint « Tous les jours ». Jamais les deux allumés en même temps.
-            FilterChip(
-                selected = everyDay,
-                onClick = {
-                    everyDay = true
-                    days = emptySet()
-                },
-                label = { Text(stringResource(R.string.planning_all_days)) },
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                WEEK_DAYS.forEach { d ->
-                    FilterChip(
-                        selected = !everyDay && d in days,
-                        onClick = {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.planning_once),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = once,
+                    onCheckedChange = { checked ->
+                        once = checked
+                        if (checked) {
                             everyDay = false
-                            days = if (d in days) days - d else days + d
-                        },
-                        label = { Text(dayLabel(d)) },
+                        } else if (!everyDay && days.isEmpty()) {
+                            // Retour au récurrent sans sélection restante (rien à préserver) :
+                            // « Tous les jours » par défaut plutôt qu'un état invalide.
+                            everyDay = true
+                        }
+                    },
+                )
+            }
+
+            if (once) {
+                Text(stringResource(R.string.planning_once_day), style = MaterialTheme.typography.bodyMedium)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FilterChip(
+                        selected = onceDate == LocalDate.now(),
+                        onClick = { onceDate = LocalDate.now() },
+                        label = { Text(stringResource(R.string.planning_today)) },
                     )
+                    WEEK_DAYS.forEach { d ->
+                        val occurrence = ScheduleCodec.nextOccurrence(d)
+                        FilterChip(
+                            selected = onceDate == occurrence,
+                            onClick = { onceDate = occurrence },
+                            label = { Text(dayLabel(d)) },
+                        )
+                    }
+                }
+
+                // Coupure sur seuil, réservée aux plannings Unique (script dédié par planning).
+                if (hasCutoff) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = stringResource(R.string.timer_cutoff_label),
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Switch(checked = cutoffEnabled, onCheckedChange = { cutoffEnabled = it })
+                    }
+                    if (cutoffEnabled) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            ValueWheelPicker(
+                                values = PLANNING_CUTOFF_THRESHOLDS_W,
+                                value = cutoffThreshold,
+                                onChange = { cutoffThreshold = it },
+                            )
+                            Text(" Watts", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 8.dp))
+                        }
+                    }
+                }
+            } else {
+                Text(stringResource(R.string.planning_days), style = MaterialTheme.typography.bodyMedium)
+                // Deux modes exclusifs. « Tous les jours » a son propre état : le taper l'active
+                // et vide la sélection précise ; taper un jour bascule en mode « jours précis »
+                // et éteint « Tous les jours ». Jamais les deux allumés en même temps.
+                FilterChip(
+                    selected = everyDay,
+                    onClick = {
+                        everyDay = true
+                        days = emptySet()
+                    },
+                    label = { Text(stringResource(R.string.planning_all_days)) },
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    WEEK_DAYS.forEach { d ->
+                        FilterChip(
+                            selected = !everyDay && d in days,
+                            onClick = {
+                                everyDay = false
+                                days = if (d in days) days - d else days + d
+                            },
+                            label = { Text(dayLabel(d)) },
+                        )
+                    }
                 }
             }
 
@@ -868,7 +967,13 @@ private fun AddPlanningDialog(
 
             Button(
                 enabled = valid,
-                onClick = { onValidate(startHour, startMinute, endHour, endMinute, effectiveDays) },
+                onClick = {
+                    onValidate(
+                        startHour, startMinute, endHour, endMinute, effectiveDays,
+                        if (once) onceDate else null,
+                        if (once && hasCutoff && cutoffEnabled) cutoffThreshold else null,
+                    )
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.padding(end = 8.dp))

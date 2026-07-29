@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 @HiltViewModel
@@ -211,21 +212,30 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    /** Ajoute un planning ; le résultat (succès ou conflit) est publié pour l'UI. */
-    fun addPlanning(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int, days: Set<Int>) {
+    /**
+     * Ajoute un planning ; le résultat (succès ou conflit) est publié pour l'UI. [date] non nul =
+     * Unique. [cutoffThresholdW] : coupure sur seuil, réservée aux plannings Unique.
+     */
+    fun addPlanning(
+        startHour: Int, startMinute: Int, endHour: Int, endMinute: Int, days: Set<Int>,
+        date: LocalDate? = null, cutoffThresholdW: Int? = null,
+    ) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            val result = repository.createPlanning(dev, startHour, startMinute, endHour, endMinute, days)
+            val result = repository.createPlanning(dev, startHour, startMinute, endHour, endMinute, days, date, cutoffThresholdW)
             _addPlanningResult.value = result
             if (result is CreatePlanningResult.Success) loadPlannings(dev)
         }
     }
 
     /** Modifie un planning existant ; même canal de résultat que l'ajout. */
-    fun updatePlanning(old: Planning, startHour: Int, startMinute: Int, endHour: Int, endMinute: Int, days: Set<Int>) {
+    fun updatePlanning(
+        old: Planning, startHour: Int, startMinute: Int, endHour: Int, endMinute: Int, days: Set<Int>,
+        date: LocalDate? = null, cutoffThresholdW: Int? = null,
+    ) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            val result = repository.updatePlanning(dev, old, startHour, startMinute, endHour, endMinute, days)
+            val result = repository.updatePlanning(dev, old, startHour, startMinute, endHour, endMinute, days, date, cutoffThresholdW)
             _addPlanningResult.value = result
             if (result is CreatePlanningResult.Success) loadPlannings(dev)
         }

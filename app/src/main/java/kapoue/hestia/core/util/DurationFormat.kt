@@ -1,5 +1,6 @@
 package kapoue.hestia.core.util
 
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
@@ -20,6 +21,9 @@ fun formatClockTime(hour: Int, minute: Int): String =
 
 /** Variante à partir des minutes depuis minuit (0..1439), format déjà utilisé par les bornes. */
 fun formatClockTime(totalMinutes: Int): String = formatClockTime(totalMinutes / 60, totalMinutes % 60)
+
+/** Formate une date selon la locale de l'appareil (« 30/07/26 » en français, « 7/30/26 » en anglais). */
+fun formatDate(date: LocalDate): String = date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT))
 
 /** Formate une plage horaire pour l'affichage : « 9:00 AM - 11:00 AM » (selon la locale). */
 fun formatTimeRange(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int): String =

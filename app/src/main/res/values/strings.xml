@@ -286,9 +286,13 @@
     <string name="planning_end">End</string>
     <string name="planning_days">Days</string>
     <string name="planning_all_days">Every day</string>
+    <string name="planning_once">One-time</string>
+    <string name="planning_once_day">Day</string>
+    <string name="planning_today">Today</string>
     <string name="planning_validate">Save</string>
     <string name="planning_error_range">Start and end must be different.</string>
     <string name="planning_error_no_day">Choose at least one day.</string>
+    <string name="planning_error_past">This one-time window is already over. Pick a time in the future.</string>
     <string name="planning_conflict">This window overlaps an existing planning (%1$s). Change one or the other.</string>
     <string name="planning_conflict_presence">This window overlaps a presence simulation window. Choose a different time.</string>
     <string name="planning_error_generic">Couldn\'t save the planning. Check that the outlet is responding.</string>

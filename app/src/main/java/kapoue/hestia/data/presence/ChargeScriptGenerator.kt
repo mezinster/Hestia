@@ -13,10 +13,21 @@ package kapoue.hestia.data.presence
  */
 object ChargeScriptGenerator {
 
+    /** Script partagé du minuteur (Manuel/Perso) : un seul à la fois, réutilisé par nom. */
     const val SCRIPT_NAME = "hestia_charge"
+
+    private const val MARKER = "// hestia_threshold:"
+
+    /**
+     * Nom **unique** pour un script de coupure dédié à un planning (jamais partagé, ni entre
+     * plannings, ni avec [SCRIPT_NAME]) : un timestamp suffit à éviter toute collision de nom,
+     * seul l'id du script (retourné par `Script.Create`) compte ensuite pour Hestia.
+     */
+    fun uniquePlanningScriptName(): String = "hestia_pcut_${System.currentTimeMillis()}"
 
     fun generate(switchId: Int, thresholdW: Int, belowSec: Int, selfId: Int): String = """
         // Généré par Hestia — coupure sur seuil de consommation
+        $MARKER$thresholdW
         let CFG = { switchId: $switchId, thresholdW: $thresholdW, belowSec: $belowSec, selfId: $selfId };
         let belowSince = null;
         let wasOn = false;
@@ -48,4 +59,10 @@ object ChargeScriptGenerator {
           }
         });
     """.trimIndent()
+
+    /** Relit le seuil configuré depuis la ligne-marqueur (même technique que [PresenceScriptGenerator]). */
+    fun parseThreshold(code: String): Int? {
+        val line = code.lineSequence().firstOrNull { it.trimStart().startsWith(MARKER) } ?: return null
+        return line.trim().removePrefix(MARKER).trim().toIntOrNull()
+    }
 }

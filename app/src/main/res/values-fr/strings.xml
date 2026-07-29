@@ -281,9 +281,13 @@
     <string name="planning_end">Fin</string>
     <string name="planning_days">Jours</string>
     <string name="planning_all_days">Tous les jours</string>
+    <string name="planning_once">Unique</string>
+    <string name="planning_once_day">Jour</string>
+    <string name="planning_today">Aujourd\'hui</string>
     <string name="planning_validate">Enregistrer</string>
     <string name="planning_error_range">Le début et la fin doivent être différents.</string>
     <string name="planning_error_no_day">Choisis au moins un jour.</string>
+    <string name="planning_error_past">Ce créneau unique est déjà passé. Choisis un horaire à venir.</string>
     <string name="planning_conflict">Ce créneau chevauche un planning existant (%1$s). Modifie l\'un ou l\'autre.</string>
     <string name="planning_conflict_presence">Ce créneau chevauche une plage de simulation de présence. Choisis un autre horaire.</string>
     <string name="planning_error_generic">Impossible d\'enregistrer le planning. Vérifie que la prise répond.</string>

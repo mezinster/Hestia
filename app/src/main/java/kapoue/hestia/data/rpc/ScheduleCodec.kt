@@ -1,6 +1,7 @@
 package kapoue.hestia.data.rpc
 
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 /**
@@ -20,18 +21,54 @@ object ScheduleCodec {
     fun timespec(hour: Int, minute: Int, days: Set<Int>): String =
         "0 $minute $hour * * ${encodeDays(days)}"
 
+    /**
+     * timespec d'un déclenchement **unique** à [hour]:[minute] à une [date] précise (planning
+     * « Unique »). Les champs jour-du-mois/mois du cron sont renseignés explicitement au lieu de
+     * `*` ; le jour de la semaine reste `*` puisqu'il ne sert à rien ici.
+     */
+    fun timespecOnce(hour: Int, minute: Int, date: LocalDate): String =
+        "0 $minute $hour ${date.dayOfMonth} ${date.monthValue} *"
+
     /** Forme canonique du champ jours : `*` pour tous les jours, sinon liste triée « 1,2,5 ». */
     fun encodeDays(days: Set<Int>): String =
         if (days.size >= 7 || days.isEmpty()) "*" else days.sorted().joinToString(",")
 
-    /** Reconstruit (heure, minute, jours) depuis un timespec, ou null si le format n'est pas géré. */
+    /**
+     * Reconstruit un timespec, ou null si le format n'est pas géré. Un job dont les champs
+     * jour-du-mois/mois sont renseignés (pas `*`) est une occurrence **unique** ([Parsed.date]
+     * non nul) ; sinon c'est un job récurrent classique (jours de semaine dans [Parsed.days]).
+     * Le cron ne portant pas d'année, on retient la plus proche année future (ou l'année courante
+     * si la date n'est pas encore passée) : un planning Unique expiré est de toute façon nettoyé
+     * au prochain relevé, cette ambiguïté ne peut donc pas s'accumuler sur plusieurs années.
+     */
     fun parse(timespec: String): Parsed? {
         val f = timespec.trim().split(Regex("\\s+"))
         if (f.size < 6) return null
         val minute = f[1].toIntOrNull() ?: return null
         val hour = f[2].toIntOrNull() ?: return null
-        val days = decodeDays(f[5]) ?: return null
-        return Parsed(hour, minute, days)
+        return if (f[3] == "*" && f[4] == "*") {
+            val days = decodeDays(f[5]) ?: return null
+            Parsed(hour, minute, days, date = null)
+        } else {
+            val day = f[3].toIntOrNull() ?: return null
+            val month = f[4].toIntOrNull() ?: return null
+            val date = resolveYear(month, day) ?: return null
+            Parsed(hour, minute, emptySet(), date)
+        }
+    }
+
+    private fun resolveYear(month: Int, day: Int): LocalDate? = runCatching {
+        val today = LocalDate.now()
+        var d = LocalDate.of(today.year, month, day)
+        if (d.isBefore(today)) d = d.plusYears(1)
+        d
+    }.getOrNull()
+
+    /** Prochaine date (aujourd'hui incluse) dont le jour de semaine cron est [cronDay]. */
+    fun nextOccurrence(cronDay: Int, from: LocalDate = LocalDate.now()): LocalDate {
+        var d = from
+        while (d.dayOfWeek.value % 7 != cronDay) d = d.plusDays(1)
+        return d
     }
 
     /** Décode le champ jours en tolérant `*`, les listes « 0,6 » et les intervalles « 1-5 ». */
@@ -51,7 +88,7 @@ object ScheduleCodec {
         return out.ifEmpty { null }
     }
 
-    data class Parsed(val hour: Int, val minute: Int, val days: Set<Int>)
+    data class Parsed(val hour: Int, val minute: Int, val days: Set<Int>, val date: LocalDate? = null)
 
     /** Jours décalés au lendemain (pour l'extinction d'un créneau qui passe minuit). */
     fun nextDay(days: Set<Int>): Set<Int> = days.map { (it + 1) % 7 }.toSet()
