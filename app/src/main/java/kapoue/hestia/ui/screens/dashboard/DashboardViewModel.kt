@@ -135,7 +135,16 @@ class DashboardViewModel @Inject constructor(
                 // du plus lent, pas la somme.
                 val statusResults = async {
                     devices.map { device ->
-                        async { device.id to repository.getStatus(device).toTileStatus() }
+                        async {
+                            val tileStatus = repository.getStatus(device).toTileStatus()
+                            // Rattrapage ntfy best-effort : l'appareil répond, on en profite pour
+                            // vérifier s'il a raté une resynchro (aucune requête si déjà à jour).
+                            // Détaché du cycle de relevé (pas annulé par un tirage manuel suivant).
+                            if (tileStatus is TileStatus.Online) {
+                                viewModelScope.launch { repository.ntfyCatchUpIfNeeded(device) }
+                            }
+                            device.id to tileStatus
+                        }
                     }.awaitAll()
                 }
                 val presenceResults = async {

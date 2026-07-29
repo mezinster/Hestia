@@ -72,6 +72,7 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
     val ntfyEnabled: StateFlow<Boolean> = _ntfyEnabled.asStateFlow()
 
     fun setNtfyEnabled(enabled: Boolean) {
+        if (enabled != _ntfyEnabled.value) bumpNtfyGeneration()
         prefs.edit().putBoolean(KEY_NTFY_ENABLED, enabled).apply()
         _ntfyEnabled.value = enabled
     }
@@ -81,8 +82,32 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
     val ntfyTopic: StateFlow<String?> = _ntfyTopic.asStateFlow()
 
     fun setNtfyTopic(topic: String?) {
+        if (topic != _ntfyTopic.value) bumpNtfyGeneration()
         securePrefs.edit().putString(KEY_NTFY_TOPIC, topic).apply()
         _ntfyTopic.value = topic
+    }
+
+    /**
+     * Rattrapage des appareils injoignables au moment d'un bascule de réglage ntfy : chaque
+     * changement incrémente une génération ; un appareil « à jour » pour la génération courante
+     * n'a pas besoin d'être resynchronisé. Le Tableau (qui interroge déjà tous les appareils en
+     * boucle) compare et resynchronise ceux qui ont raté un changement — pas de tâche de fond.
+     */
+    private fun bumpNtfyGeneration() {
+        prefs.edit().putInt(KEY_NTFY_GEN, ntfyGeneration + 1).apply()
+    }
+
+    val ntfyGeneration: Int get() = prefs.getInt(KEY_NTFY_GEN, 0)
+
+    private fun ntfySyncedMap(): Map<String, Int> =
+        runCatching { json.decodeFromString<Map<String, Int>>(prefs.getString(KEY_NTFY_SYNCED, null) ?: "{}") }
+            .getOrDefault(emptyMap())
+
+    fun isNtfySynced(deviceId: Long): Boolean = ntfySyncedMap()[deviceId.toString()] == ntfyGeneration
+
+    fun markNtfySynced(deviceId: Long) {
+        val updated = ntfySyncedMap() + (deviceId.toString() to ntfyGeneration)
+        prefs.edit().putString(KEY_NTFY_SYNCED, json.encodeToString(updated)).apply()
     }
 
     // --- Minuteurs en attente (mémos pour notifier la fin d'un « Active pour » / coupure seuil) ---
@@ -109,6 +134,8 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_NOTIFS_LAST_RUN = "notifications_last_run"
         const val KEY_NTFY_ENABLED = "ntfy_enabled"
         const val KEY_NTFY_TOPIC = "ntfy_topic"
+        const val KEY_NTFY_GEN = "ntfy_generation"
+        const val KEY_NTFY_SYNCED = "ntfy_synced_devices"
         const val KEY_PENDING_TIMERS = "pending_timers"
         val json = Json { ignoreUnknownKeys = true }
     }

@@ -748,25 +748,45 @@ class DeviceRepository @Inject constructor(
     /**
      * Recrée les plannings et redéploie le script de présence de **tous les appareils
      * joignables** pour refléter l'état actuel de ntfy (activation, sujet) — appelé quand
-     * l'utilisateur bascule le réglage. Best-effort par appareil : un appareil injoignable à cet
-     * instant garde son ancien comportement jusqu'à sa prochaine modification (pas de tâche de
-     * fond pour le rattraper tout seul).
+     * l'utilisateur bascule le réglage. Un appareil injoignable à cet instant n'est pas marqué à
+     * jour : le Tableau le rattrapera de lui-même dès qu'il redeviendra joignable ([ntfyCatchUpIfNeeded]).
      */
     suspend fun resyncNtfyForAllDevices() {
-        for (device in getDevicesOnce()) resyncNtfyForDevice(device)
+        for (device in getDevicesOnce()) {
+            if (resyncNtfyForDevice(device)) appPreferences.markNtfySynced(device.id)
+        }
     }
 
-    private suspend fun resyncNtfyForDevice(device: Device) {
-        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return
+    /**
+     * Rattrapage best-effort : appelé par le Tableau à chaque relevé où l'appareil répond, ne
+     * fait rien s'il est déjà à jour pour la génération ntfy courante (évite de tout recréer à
+     * chaque cycle de 5 s). Aucune tâche de fond dédiée — le rattrapage n'a lieu que parce que le
+     * Tableau interroge de toute façon déjà l'appareil.
+     */
+    suspend fun ntfyCatchUpIfNeeded(device: Device) {
+        if (appPreferences.isNtfySynced(device.id)) return
+        if (resyncNtfyForDevice(device)) appPreferences.markNtfySynced(device.id)
+    }
+
+    /** @return vrai si l'appareil était joignable (donc effectivement resynchronisé). */
+    private suspend fun resyncNtfyForDevice(device: Device): Boolean {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return true
+        var reachable = true
         if (device.supportsSwitch) {
-            for (p in getPlannings(device).getOrNull().orEmpty()) {
-                updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, p.cutoffThresholdW)
+            when (val r = getPlannings(device)) {
+                is RpcResult.Success -> for (p in r.value) {
+                    updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, p.cutoffThresholdW)
+                }
+                is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
             }
         }
         if (device.hasScripting) {
-            val windows = getPresenceWindows(device).getOrNull()
-            if (!windows.isNullOrEmpty()) setPresenceWindows(device, windows)
+            when (val r = getPresenceWindows(device)) {
+                is RpcResult.Success -> if (r.value.isNotEmpty()) setPresenceWindows(device, r.value)
+                is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
+            }
         }
+        return reachable
     }
 
     // --- Mode démo (captures d'écran, build debug uniquement) ---

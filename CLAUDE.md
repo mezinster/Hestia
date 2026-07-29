@@ -3,8 +3,16 @@
 ## Contexte projet
 
 **Hestia** est une application Android de pilotage local d'équipements domotiques Shelly.
-Aucun cloud, aucun compte, aucune télémétrie. L'application communique uniquement en HTTP
-sur le réseau local avec les appareils, via leur API RPC embarquée.
+Aucun cloud, aucun compte, aucune télémétrie **par défaut**. L'application communique
+principalement en HTTP sur le réseau local avec les appareils, via leur API RPC embarquée.
+
+Exception unique, explicite et désactivée par défaut : les **notifications instantanées via
+ntfy** (ajoutées le 2026-07-29). Si l'utilisateur l'active dans les
+Réglages, ce sont les **appareils eux-mêmes** (pas Hestia) qui envoient le texte de leurs
+notifications à `ntfy.sh`, un service tiers de son choix. Toujours opt-in, jamais activé sans
+action explicite, toujours réversible. Toute nouvelle fonctionnalité qui ferait sortir des
+données du réseau local doit suivre le même principe : opt-in, expliqué clairement dans
+l'écran À propos et dans les Réglages, jamais présenté comme silencieux.
 
 - Dépôt : `https://codeberg.org/kapoue/Hestia.git`
 - Licence : **GPLv3**

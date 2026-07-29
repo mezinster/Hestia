@@ -17,8 +17,8 @@
     <string name="about_version">Version %1$s</string>
     <string name="about_name_origin_title">Origine du nom</string>
     <string name="about_name_origin">Hestia est, dans la mythologie grecque, la déesse du foyer et du feu domestique. Elle veille sur la maison, discrètement et sans jamais la quitter.</string>
-    <string name="about_positioning_title">Pilotage 100 % local</string>
-    <string name="about_positioning">Hestia pilote vos appareils entièrement en local. Aucune donnée ne quitte votre réseau, aucun compte, aucun traçage.</string>
+    <string name="about_positioning_title">Pilotage local par défaut</string>
+    <string name="about_positioning">Hestia pilote vos appareils entièrement en local, sans cloud ni compte. Une option distincte, désactivée par défaut — les notifications instantanées via ntfy, dans les Réglages — envoie le texte de vos notifications à un service externe de votre choix, uniquement si vous l\'activez vous-même.</string>
     <string name="about_permission_title">Permission réseau local</string>
     <string name="about_permission_body">Depuis Android 17, une application doit demander votre autorisation pour communiquer avec les appareils de votre réseau local. Hestia en a besoin pour parler à vos appareils. Elle ne contacte que les adresses que vous avez saisies vous-même, n\'explore pas votre réseau et n\'envoie rien à l\'extérieur.</string>
     <string name="about_independence_title">Indépendance</string>
@@ -214,7 +214,7 @@
     <!-- Mise à jour du firmware (vérification manuelle uniquement) -->
     <string name="firmware_section">Mise à jour du firmware</string>
     <string name="firmware_check_button">Vérifier les mises à jour</string>
-    <string name="firmware_check_hint">Interroge les serveurs Shelly (seule action de l\'application qui sort du réseau local) — uniquement à ta demande.</string>
+    <string name="firmware_check_hint">Interroge les serveurs Shelly — uniquement à ta demande.</string>
     <string name="firmware_up_to_date">%1$s : à jour (version %2$s).</string>
     <string name="firmware_update_available">%1$s : mise à jour disponible. Version installée : %2$s. Version disponible : %3$s.</string>
     <string name="firmware_beta_only">%1$s : à jour (version %2$s). Une version bêta (%3$s) est disponible — Hestia ne propose que les mises à jour stables.</string>
