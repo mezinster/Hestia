@@ -64,6 +64,7 @@ import kapoue.hestia.R
 import kapoue.hestia.core.util.formatCountdown
 import kapoue.hestia.core.util.formatDate
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
@@ -95,6 +96,7 @@ fun DetailScreen(
     val addPresenceResult by viewModel.addPresenceResult.collectAsStateWithLifecycle()
     val plannings by viewModel.plannings.collectAsStateWithLifecycle()
     val addPlanningResult by viewModel.addPlanningResult.collectAsStateWithLifecycle()
+    val buttonTimerConfig by viewModel.buttonTimerConfig.collectAsStateWithLifecycle()
     val firmwareCheck by viewModel.firmwareCheck.collectAsStateWithLifecycle()
     val firmwareChecking by viewModel.firmwareChecking.collectAsStateWithLifecycle()
     val firmwareInstalling by viewModel.firmwareInstalling.collectAsStateWithLifecycle()
@@ -112,6 +114,8 @@ fun DetailScreen(
     var showAddPresence by remember { mutableStateOf(false) }
     var editingPresence by remember { mutableStateOf<PresenceWindow?>(null) }
     var presenceToDelete by remember { mutableStateOf<PresenceWindow?>(null) }
+    var showButtonTimerSheet by remember { mutableStateOf(false) }
+    var showButtonTimerDisableConfirm by remember { mutableStateOf(false) }
     LaunchedEffect(addPresenceResult) {
         if (addPresenceResult is PresenceOpResult.Success) {
             showAddPresence = false
@@ -268,6 +272,13 @@ fun DetailScreen(
                     },
                     onEdit = { editingPresence = it },
                     onDelete = { presenceToDelete = it },
+                )
+
+                HorizontalDivider()
+                ButtonTimerSection(
+                    config = buttonTimerConfig,
+                    onConfigure = { showButtonTimerSheet = true },
+                    onDisable = { showButtonTimerDisableConfirm = true },
                 )
             }
 
@@ -500,6 +511,44 @@ fun DetailScreen(
             },
         )
     }
+
+    if (showButtonTimerSheet) {
+        val existing = buttonTimerConfig
+        DurationPickerSheet(
+            hasPowerMetering = device?.hasPowerMetering ?: false,
+            title = stringResource(R.string.detail_button_timer_dialog_title),
+            confirmLabel = stringResource(R.string.timer_preset_save),
+            confirmIcon = Icons.Filled.Save,
+            initialHours = (existing?.durationSeconds ?: 1800) / 3600,
+            initialMinutes = ((existing?.durationSeconds ?: 1800) % 3600) / 60,
+            initialCutoffEnabled = existing?.thresholdW != null,
+            initialThresholdW = existing?.thresholdW ?: 10,
+            onDismiss = { showButtonTimerSheet = false },
+            onConfirm = { seconds, _, thresholdW, _ ->
+                showButtonTimerSheet = false
+                viewModel.setButtonTimer(true, seconds, thresholdW)
+            },
+        )
+    }
+
+    if (showButtonTimerDisableConfirm) {
+        AlertDialog(
+            onDismissRequest = { showButtonTimerDisableConfirm = false },
+            title = { Text(stringResource(R.string.detail_button_timer_disable_confirm_title)) },
+            text = { Text(stringResource(R.string.detail_button_timer_disable_confirm_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showButtonTimerDisableConfirm = false
+                    viewModel.setButtonTimer(false, 1800, null)
+                }) { Text(stringResource(R.string.detail_button_timer_disable)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showButtonTimerDisableConfirm = false }) {
+                    Text(stringResource(R.string.conflict_cancel))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -553,6 +602,49 @@ private fun PresenceRow(window: PresenceWindow, onEdit: () -> Unit, onDelete: ()
         }
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.presence_delete))
+        }
+    }
+}
+
+/**
+ * Minuteur déclenché par le bouton physique : un appui arme un minuteur (avec coupure sur seuil
+ * optionnelle) au lieu d'une simple bascule. [config] reflète toujours l'état réel déployé sur
+ * l'appareil (jamais supposé) — null tant qu'il n'a pas encore été relu.
+ */
+@Composable
+private fun ButtonTimerSection(
+    config: DeviceRepository.ButtonTimerConfig?,
+    onConfigure: () -> Unit,
+    onDisable: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.detail_button_timer_section),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.detail_button_timer_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (config?.enabled == true) {
+            PersonalPresetRow(
+                label = stringResource(R.string.detail_button_timer_row_label, durationLabel(config.durationSeconds)),
+                detail = if (config.thresholdW != null) {
+                    stringResource(R.string.timer_preset_cutoff_detail, config.thresholdW)
+                } else {
+                    stringResource(R.string.timer_preset_no_cutoff)
+                },
+                onEdit = onConfigure,
+                onDelete = onDisable,
+            )
+        } else {
+            OutlinedButton(onClick = onConfigure) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.size(4.dp))
+                Text(stringResource(R.string.detail_button_timer_configure))
+            }
         }
     }
 }

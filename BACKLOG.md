@@ -1,7 +1,7 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-07-27 (redémarrage manuel + traduction anglaise).
+Dernière mise à jour : 2026-07-29 (planning Unique + coupure, 2 réglages Perso, notifications ntfy).
 
 ## Fait — en cours (à surveiller)
 
@@ -51,6 +51,20 @@ Dernière mise à jour : 2026-07-27 (redémarrage manuel + traduction anglaise).
 
 - **Audit des fonctions RPC de la prise non gérées** par Hestia (mesure d'énergie détaillée,
   métriques cumulées, etc.).
+- **Lecture à distance de la puissance tirée, hors réseau local** (2026-07-29) : David voudrait
+  voir la conso instantanée d'un appareil branché même hors Wi-Fi domestique, à l'image d'une
+  appli de suivi de charge de scooter — mais la prise ne connaît que le côté électrique (watts),
+  jamais un pourcentage de batterie ni un temps restant (ça, c'est propre au BMS de l'appareil
+  branché, la prise ne le voit pas). Passerait par le **cloud Shelly** (compte Allterco), en
+  lecture seule, opt-in et bien expliqué — jamais imposé. Chantier réel : API cloud distincte de
+  l'API locale, stockage d'identifiants (nouvelle catégorie de donnée sensible). Mis de côté
+  volontairement pour ne pas alourdir l'app pour un usage occasionnel. Deux idées écartées pour
+  le même besoin : notifications ntfy (résout la notification à distance, pas la lecture de
+  puissance) ; VPN personnel type Tailscale (fonctionnerait déjà, hors périmètre d'Hestia).
+- **Coupures liées au firmware 2.0.0** (compteurs d'usage natifs du Switch, paramètre `tag` sur
+  les commandes, `Script.addRpcHandler`) : évoquées le 2026-07-29, écartées pour l'instant —
+  relèveraient de fait la version minimale supportée, cassant l'app pour qui n'a pas encore migré.
+  Idées techniques sans bénéfice utilisateur direct identifié à ce jour.
 
 ## Fait — pour mémoire
 
@@ -68,21 +82,22 @@ Points sortis du backlog, avec ce qui a été tranché :
 - **Coupure automatique sur seuil de consommation** : script `hestia_charge` qui surveille
   `apower` et coupe le relais après 60 s sous le seuil, puis s'auto-désactive.
 - **Puissance instantanée sur la tuile** et **marqueur « Mode présence »** sur le Tableau.
-- **Notifications** : la tension architecturale relevée ici a été tranchée en faveur du
-  **100 % local** — WorkManager (~15 min, délai assumé et annoncé dans l'UI) plutôt qu'un webhook
-  sortant type ntfy, qui aurait fait quitter le réseau local à la prise. Opt-in, désactivé par
-  défaut, `POST_NOTIFICATIONS` demandée à l'activation seulement. Notifie les **bornes** de
+- **Notifications** : WorkManager (~15 min, délai assumé et annoncé dans l'UI), opt-in, désactivé
+  par défaut, `POST_NOTIFICATIONS` demandée à l'activation seulement. Notifie les **bornes** de
   programmation (une seule notification par borne), la fin d'un minuteur et la coupure sur seuil ;
-  jamais une action manuelle.
+  jamais une action manuelle. **Complété le 2026-07-29** par une option **ntfy** (notifications
+  instantanées, désactivée par défaut) — voir entrée dédiée plus bas ; la tension "100 % local"
+  notée ici initialement est retranchée, cf. § Notifications instantanées (ntfy).
 - **Écran de configuration de présence** : supprimé (la présence se gère depuis l'écran de
   détail, comme le planning), ce qui rend caduque l'ancienne demande de confirmation
   « modifications non enregistrées ». La route de navigation `presence` associée, restée morte
   dans `Destinations.kt` après cette suppression, a été retirée au lot Nettoyage (2026-07-27).
 - **Vérification manuelle du firmware** : section « Mise à jour du firmware » sur l'écran de
-  détail, bouton « Vérifier » qui interroge `Shelly.CheckForUpdate` — jamais en tâche de fond,
-  seule action du projet qui sort du réseau local. Bêta signalée mais jamais installable.
-  Tranché : pas de notification de mise à jour disponible (contrairement à ce qu'envisageait
-  l'ancienne entrée de ce backlog) — la vérification reste ponctuelle, à la main de l'utilisateur.
+  détail, bouton « Vérifier » qui interroge `Shelly.CheckForUpdate` — jamais en tâche de fond.
+  Bêta signalée mais jamais installable. Tranché : pas de notification de mise à jour disponible
+  (contrairement à ce qu'envisageait l'ancienne entrée de ce backlog) — la vérification reste
+  ponctuelle, à la main de l'utilisateur. (N'est plus la seule action à sortir du réseau local
+  depuis l'ajout de ntfy, opt-in — voir plus bas.)
 - **Coupure sur seuil, ergonomie** : case à cocher remplacée par un interrupteur (désactivé par
   défaut, même style que Notifications), et saisie libre du seuil remplacée par une roulette sur
   des valeurs prédéfinies (5, 10, 20, 30, 40, 50 W, défaut 10) via le nouveau `ValueWheelPicker`,
@@ -92,3 +107,34 @@ Points sortis du backlog, avec ce qui a été tranché :
   pas d'équivalent générique si une autre marque est gérée un jour. Jamais bloqué par un
   minuteur en cours (peut justement servir à débloquer une prise plantée). Confirmation
   obligatoire avant déclenchement.
+- **Planning « Unique »** (occurrence unique datée, plutôt que récurrente) : cron avec
+  jour-du-mois/mois renseignés (au lieu de `*`) au lieu d'un bricolage à part. Nettoyage
+  automatique du planning expiré à la prochaine lecture (pas de tâche de fond). Chips
+  Aujourd'hui/jour précis en sélection unique, remplacent « Tous les jours » en mode Unique.
+- **Coupure sur seuil pour les plannings**, Unique **et récurrent** : script dédié par planning
+  (jamais partagé, ni entre eux ni avec le minuteur — un nom de script fixe aurait fait échouer
+  `Script.Create` en cas de collision), démarré/arrêté par le même programme cron que
+  l'allumage/extinction (`calls` de `Schedule.Create`, jusqu'à 5 appels, validé en direct). Pour
+  le récurrent : validé qu'un script relancé après un `Script.Stop` réexécute proprement depuis
+  le début (`let` réinitialisés), donc se réarme correctement à chaque occurrence sans recréer
+  quoi que ce soit.
+- **Deux réglages « Perso » nommables** (au lieu d'un seul, anonyme) : chacun avec un nom libre
+  (20 caractères max), sa propre durée et coupure optionnelle. Migration Room additive (v7→v8).
+- **Notifications instantanées (ntfy)** — 2026-07-29 : option opt-in, désactivée par défaut, qui
+  fait notifier **l'appareil lui-même** (`HTTP.Request` vers `ntfy.sh`, jamais `HTTP.POST` qui ne
+  permet pas d'en-têtes personnalisés donc pas de titre) au lieu du téléphone via WorkManager —
+  supprime le délai de 0 à 15 min. Sujet ntfy stocké chiffré (Android Keystore,
+  `androidx.security:security-crypto`). Un script dédié, nouveau, est déployé uniquement pour
+  notifier la fin naturelle d'un minuteur Manuel/Perso **sans** coupure (seul cas sans aucun
+  script associé jusque-là) ; nettoyé systématiquement avant toute extinction manuelle pour ne
+  jamais notifier une action utilisateur (bug trouvé et corrigé avant la mise en usage réel).
+  Bascule automatiquement l'ancien système (WorkManager) en repli si désactivé. **Rattrapage** :
+  un appareil injoignable au moment du bascule est resynchronisé silencieusement dès que le
+  Tableau le recontacte (déjà interrogé en boucle toutes les 5 s), via une génération comparée
+  en préférences — pas de tâche de fond dédiée. Revu et corrigé les textes vie privée (À propos,
+  fiche F-Droid, README, `CLAUDE.md`) qui promettaient encore « rien ne quitte jamais le réseau
+  local » pour refléter cette exception explicite et opt-in.
+- **Barre de statut système illisible en thème clair** (icônes blanches sur fond blanc) :
+  `enableEdgeToEdge()` ne fixait la couleur des icônes qu'au démarrage selon le thème système,
+  sans suivre le réglage propre à l'app (Réglages → Apparence) ni ses changements en direct.
+  Recalée à chaque changement de thème effectif via `WindowInsetsControllerCompat`.

@@ -16,7 +16,7 @@
     <!-- Écran À propos (lot 7) -->
     <string name="about_version">Version %1$s</string>
     <string name="about_name_origin_title">Origin of the name</string>
-    <string name="about_name_origin">In Greek mythology, Hestia is the goddess of the hearth and domestic fire. She watches over the home, quietly, never leaving it.</string>
+    <string name="about_name_origin">In Greek mythology, Hestia is the goddess of the hearth and domestic fire. She watches over the home, quietly.</string>
     <string name="about_positioning_title">Local control by default</string>
     <string name="about_positioning">Hestia controls your devices entirely on the local network, with no cloud and no account. One separate, off-by-default option — instant notifications via ntfy, in Settings — sends the text of your notifications to an external service of your choice, and only if you turn it on yourself.</string>
     <string name="about_permission_title">Local network permission</string>
@@ -85,6 +85,17 @@
          pas laquelle a déclenché au moment de la bascule — pas d'horaire, contrairement au planning. -->
     <string name="notif_ntfy_presence_started">Presence simulation started</string>
     <string name="notif_ntfy_presence_ended">Presence simulation ended</string>
+    <string name="notif_button_timer_ended">Button timer ended</string>
+
+    <!-- Minuteur déclenché par le bouton physique -->
+    <string name="detail_button_timer_section">Physical button</string>
+    <string name="detail_button_timer_desc">Pressing the button starts a timer instead of a plain switch — same "on for X, cutoff at Y W" idea as Perso, but triggered by the button itself, whether or not Hestia is open.</string>
+    <string name="detail_button_timer_configure">Configure the physical button</string>
+    <string name="detail_button_timer_dialog_title">Physical button timer</string>
+    <string name="detail_button_timer_row_label">On press: %1$s</string>
+    <string name="detail_button_timer_disable">Disable</string>
+    <string name="detail_button_timer_disable_confirm_title">Disable the physical button timer?</string>
+    <string name="detail_button_timer_disable_confirm_message">The button will go back to a plain on/off switch.</string>
 
     <string name="settings_security_section">Security</string>
     <string name="settings_security_password_hint">Device password</string>

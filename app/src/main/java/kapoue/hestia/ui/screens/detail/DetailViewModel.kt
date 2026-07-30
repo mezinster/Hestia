@@ -68,6 +68,10 @@ class DetailViewModel @Inject constructor(
     private val _plannings = MutableStateFlow<List<Planning>>(emptyList())
     val plannings: StateFlow<List<Planning>> = _plannings.asStateFlow()
 
+    /** Minuteur du bouton physique, réellement déployé sur l'appareil (jamais stocké par Hestia). */
+    private val _buttonTimerConfig = MutableStateFlow<DeviceRepository.ButtonTimerConfig?>(null)
+    val buttonTimerConfig: StateFlow<DeviceRepository.ButtonTimerConfig?> = _buttonTimerConfig.asStateFlow()
+
     /** Résultat de la dernière tentative d'ajout (conflit, limite…), consommé par l'UI. */
     private val _addPlanningResult = MutableStateFlow<CreatePlanningResult?>(null)
     val addPlanningResult: StateFlow<CreatePlanningResult?> = _addPlanningResult.asStateFlow()
@@ -313,7 +317,10 @@ class DetailViewModel @Inject constructor(
         val dev = repository.getDevice(deviceId) ?: return
         _status.value = repository.getStatus(dev).toTileStatus()
         _pendingThresholdW.value = appPreferences.pendingTimers().firstOrNull { it.deviceId == deviceId }?.thresholdW
-        if (dev.hasScripting) loadPresence(dev)
+        if (dev.hasScripting) {
+            loadPresence(dev)
+            loadButtonTimer(dev)
+        }
         if (dev.supportsSwitch) loadPlannings(dev)
     }
 
@@ -325,5 +332,18 @@ class DetailViewModel @Inject constructor(
         val windows = repository.getPresenceWindows(dev).getOrNull().orEmpty()
         _presenceWindows.value = windows
         _presenceActive.value = windows.isNotEmpty()
+    }
+
+    private suspend fun loadButtonTimer(dev: Device) {
+        _buttonTimerConfig.value = repository.getButtonTimerConfig(dev)
+    }
+
+    /** Active/reconfigure ou désactive le minuteur du bouton physique. */
+    fun setButtonTimer(enabled: Boolean, durationSeconds: Int, thresholdW: Int?) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            repository.setButtonTimer(dev, enabled, durationSeconds, thresholdW)
+            loadButtonTimer(dev)
+        }
     }
 }

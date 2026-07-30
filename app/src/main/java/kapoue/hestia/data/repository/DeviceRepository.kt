@@ -11,6 +11,7 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PresenceConfig
 import kapoue.hestia.data.notifications.PendingTimer
 import kapoue.hestia.data.prefs.AppPreferences
+import kapoue.hestia.data.presence.ButtonTimerScriptGenerator
 import kapoue.hestia.data.presence.ChargeScriptGenerator
 import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
@@ -298,6 +299,61 @@ class DeviceRepository @Inject constructor(
             rpcClient.scriptStop(ip, entry.id)
             rpcClient.scriptDelete(ip, entry.id).errorOrNull()?.let { return it }
         }
+        return RpcResult.Success(Unit)
+    }
+
+    // --- Minuteur déclenché par le bouton physique ---
+
+    data class ButtonTimerConfig(val enabled: Boolean, val durationSeconds: Int, val thresholdW: Int?)
+
+    /** Lit la config réellement déployée sur l'appareil (jamais supposée, jamais stockée par Hestia). */
+    suspend fun getButtonTimerConfig(device: Device): ButtonTimerConfig {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
+        val ip = device.ipAddress
+        val entry = rpcClient.scriptList(ip).getOrNull()?.scripts
+            ?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME }
+            ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
+        val code = rpcClient.scriptGetCode(ip, entry.id).getOrNull()?.data
+            ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
+        val parsed = ButtonTimerScriptGenerator.parse(code) ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
+        return ButtonTimerConfig(true, parsed.first, parsed.second)
+    }
+
+    /**
+     * Active/reconfigure (script créé ou réécrit) ou désactive (script supprimé, comportement
+     * natif du bouton retrouvé) le minuteur déclenché par le bouton physique.
+     */
+    suspend fun setButtonTimer(device: Device, enabled: Boolean, durationSeconds: Int, thresholdW: Int?): RpcResult<Unit> {
+        val ip = device.ipAddress
+        val existing = rpcClient.scriptList(ip).getOrNull()?.scripts
+            ?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME }
+
+        if (!enabled) {
+            existing?.let {
+                rpcClient.scriptStop(ip, it.id)
+                rpcClient.scriptDelete(ip, it.id).errorOrNull()?.let { e -> return e }
+            }
+            return RpcResult.Success(Unit)
+        }
+
+        val scriptId = existing?.id ?: run {
+            val create = rpcClient.scriptCreate(ip, ButtonTimerScriptGenerator.SCRIPT_NAME)
+            create.errorOrNull()?.let { return it }
+            create.getOrNull()!!.id
+        }
+        rpcClient.scriptStop(ip, scriptId)
+        val topic = ntfyTopic()
+        val code = ButtonTimerScriptGenerator.generate(
+            device.switchId, durationSeconds, thresholdW,
+            ntfyTopic = topic, ntfyTitle = device.name,
+            ntfyEndBody = if (topic != null) context.getString(R.string.notif_button_timer_ended) else "",
+            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
+        )
+        rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
+        // enable:true (contrairement au script de coupure d'un planning) : doit redémarrer seul
+        // après un redémarrage de l'appareil, la fonctionnalité ne doit pas se couper en silence.
+        rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
+        rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
         return RpcResult.Success(Unit)
     }
 
@@ -785,6 +841,12 @@ class DeviceRepository @Inject constructor(
                 is RpcResult.Success -> if (r.value.isNotEmpty()) setPresenceWindows(device, r.value)
                 is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
             }
+            if (reachable) {
+                val buttonConfig = getButtonTimerConfig(device)
+                if (buttonConfig.enabled) {
+                    setButtonTimer(device, true, buttonConfig.durationSeconds, buttonConfig.thresholdW)
+                }
+            }
         }
         return reachable
     }
@@ -838,5 +900,6 @@ class DeviceRepository @Inject constructor(
         const val DEMO_IP_PREFIX = "203.0.113." // RFC 5737 TEST-NET-3, jamais routable
         // Chaque planning = 2 programmes cron ; la prise en tient ~20, on plafonne à 10 plannings.
         const val MAX_PLANNINGS = 10
+        const val DEFAULT_BUTTON_TIMER_SEC = 1800
     }
 }
