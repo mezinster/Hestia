@@ -6,6 +6,7 @@
 # bibliothèque native tirée de Compose ne pesant qu'une quarantaine de kilo-octets.
 Categories:
   - Connectivity
+  - Remote Controller
 License: GPL-3.0-or-later
 AuthorName: kapoue
 SourceCode: https://codeberg.org/kapoue/Hestia
@@ -23,8 +24,20 @@ Builds:
     subdir: app
     gradle:
       - yes
+  - versionName: 1.1.0
+    versionCode: 31
+    commit: 00e3e82c143c8834addf82a45272c83a16ede5ec
+    subdir: app
+    gradle:
+      - yes
+  - versionName: 2.0.0
+    versionCode: 32
+    commit: b3c33133b5250e3d8f5d4f11e4a83a6842d006a0
+    subdir: app
+    gradle:
+      - yes
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: 1.0.0
-CurrentVersionCode: 30
+CurrentVersion: 2.0.0
+CurrentVersionCode: 32
