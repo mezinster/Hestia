@@ -15,8 +15,13 @@ import kapoue.hestia.data.local.MIGRATION_4_5
 import kapoue.hestia.data.local.MIGRATION_5_6
 import kapoue.hestia.data.local.MIGRATION_6_7
 import kapoue.hestia.data.local.MIGRATION_7_8
+import kapoue.hestia.data.local.MIGRATION_8_9
+import kapoue.hestia.data.local.MIGRATION_9_10
+import kapoue.hestia.data.local.MIGRATION_10_11
+import kapoue.hestia.data.local.MIGRATION_11_12
 import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.dao.DiagnosticLogDao
+import kapoue.hestia.data.local.dao.PausedPlanningDao
 import kapoue.hestia.data.local.dao.PresenceConfigDao
 import javax.inject.Singleton
 
@@ -28,7 +33,11 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): HestiaDatabase =
         Room.databaseBuilder(context, HestiaDatabase::class.java, HestiaDatabase.NAME)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+                MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+                MIGRATION_11_12,
+            )
             .build()
 
     @Provides
@@ -39,4 +48,7 @@ object DatabaseModule {
 
     @Provides
     fun provideDiagnosticLogDao(db: HestiaDatabase): DiagnosticLogDao = db.diagnosticLogDao()
+
+    @Provides
+    fun providePausedPlanningDao(db: HestiaDatabase): PausedPlanningDao = db.pausedPlanningDao()
 }

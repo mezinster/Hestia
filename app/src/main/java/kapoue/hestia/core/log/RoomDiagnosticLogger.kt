@@ -45,6 +45,6 @@ class RoomDiagnosticLogger @Inject constructor(
 
     private companion object {
         const val LOG_TAG = "Hestia"
-        const val MAX_ENTRIES = 2000
+        const val MAX_ENTRIES = 250
     }
 }

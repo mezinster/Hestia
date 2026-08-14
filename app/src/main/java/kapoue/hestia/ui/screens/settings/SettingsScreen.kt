@@ -20,16 +20,19 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
@@ -97,6 +100,7 @@ fun SettingsScreen(
 ) {
     val devices by viewModel.devices.collectAsStateWithLifecycle()
     val connectivity by viewModel.connectivity.collectAsStateWithLifecycle()
+    val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
     val backupMessage by viewModel.backupMessage.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
@@ -105,6 +109,8 @@ fun SettingsScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var deviceToDelete by remember { mutableStateOf<Device?>(null) }
+    var groupToDelete by remember { mutableStateOf<List<Device>?>(null) }
+    var channelToRename by remember { mutableStateOf<Device?>(null) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
 
     // À chaque reprise, revérifier la connectivité (si la permission le permet) et réconcilier
@@ -182,17 +188,54 @@ fun SettingsScreen(
                     )
                 }
             } else {
-                itemsIndexed(devices, key = { _, d -> d.id }) { index, device ->
-                    DeviceRow(
-                        device = device,
-                        online = connectivity[device.id],
-                        isFirst = index == 0,
-                        isLast = index == devices.lastIndex,
-                        onEdit = { onEditDevice(device.id) },
-                        onDelete = { deviceToDelete = device },
-                        onMoveUp = { viewModel.moveUp(device) },
-                        onMoveDown = { viewModel.moveDown(device) },
-                    )
+                // Regroupé par appareil physique (même IP) — `devices` est déjà dans cet ordre
+                // contigu (voir SettingsViewModel). Une prise seule garde sa ligne unique
+                // d'aujourd'hui ; un bloc multi-canaux devient un en-tête + une ligne par canal.
+                val groups = devices.groupBy { it.ipAddress }.entries.toList()
+                groups.forEachIndexed { groupIndex, entry ->
+                    val members = entry.value
+                    val isFirst = groupIndex == 0
+                    val isLast = groupIndex == groups.lastIndex
+                    if (members.size == 1) {
+                        val device = members[0]
+                        item(key = device.id) {
+                            DeviceRow(
+                                device = device,
+                                online = connectivity[device.id],
+                                displayIp = activeIp[device.id] ?: device.ipAddress,
+                                isFirst = isFirst,
+                                isLast = isLast,
+                                onEdit = { onEditDevice(device.id) },
+                                onDelete = { deviceToDelete = device },
+                                onMoveUp = { viewModel.moveUp(device) },
+                                onMoveDown = { viewModel.moveDown(device) },
+                            )
+                        }
+                    } else {
+                        val head = members.first()
+                        item(key = "group-${head.ipAddress}") {
+                            DeviceGroupHeaderRow(
+                                deviceName = head.deviceName.ifBlank { head.name },
+                                channelCount = members.size,
+                                online = connectivity[head.id],
+                                displayIp = activeIp[head.id] ?: head.ipAddress,
+                                isFirst = isFirst,
+                                isLast = isLast,
+                                onEdit = { onEditDevice(head.id) },
+                                onMoveUp = { viewModel.moveUp(head) },
+                                onMoveDown = { viewModel.moveDown(head) },
+                                onDeleteGroup = { groupToDelete = members },
+                            )
+                        }
+                        items(members, key = { it.id }) { channel ->
+                            ChannelSubRow(
+                                device = channel,
+                                online = connectivity[channel.id],
+                                onRename = { channelToRename = channel },
+                                onDelete = { deviceToDelete = channel },
+                            )
+                        }
+                    }
                 }
             }
 
@@ -257,6 +300,29 @@ fun SettingsScreen(
             onDismiss = { deviceToDelete = null },
         )
     }
+
+    groupToDelete?.let { members ->
+        DeleteDeviceGroupDialog(
+            deviceName = members.first().deviceName.ifBlank { members.first().name },
+            channelCount = members.size,
+            onConfirm = {
+                viewModel.deleteDeviceGroup(members)
+                groupToDelete = null
+            },
+            onDismiss = { groupToDelete = null },
+        )
+    }
+
+    channelToRename?.let { device ->
+        RenameChannelDialog(
+            initialName = device.name,
+            onConfirm = { newName ->
+                viewModel.renameChannel(device, newName)
+                channelToRename = null
+            },
+            onDismiss = { channelToRename = null },
+        )
+    }
 }
 
 @Composable
@@ -283,6 +349,8 @@ private fun SectionTitle(text: String) {
 private fun DeviceRow(
     device: Device,
     online: Boolean?,
+    /** IP effectivement utilisée (1ᵉʳ ou 2ᵉ emplacement) — jamais `device.ipAddress` en dur ici. */
+    displayIp: String,
     isFirst: Boolean,
     isLast: Boolean,
     onEdit: () -> Unit,
@@ -311,7 +379,7 @@ private fun DeviceRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(device.name, style = MaterialTheme.typography.titleSmall)
                 Text(
-                    text = "${device.ipAddress} · ${stringResource(R.string.settings_device_channel, device.switchId)} · $connectivityLabel",
+                    text = "$displayIp · ${stringResource(R.string.settings_device_channel, device.switchId)} · $connectivityLabel",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontFamily = FontFamily.Monospace,
@@ -333,7 +401,7 @@ private fun DeviceRow(
                         text = { Text(stringResource(R.string.settings_open_web)) },
                         onClick = {
                             menuExpanded = false
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://${device.ipAddress}")))
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://$displayIp")))
                         },
                     )
                     DropdownMenuItem(
@@ -354,6 +422,169 @@ private fun DeviceRow(
             }
         }
     }
+}
+
+/**
+ * En-tête d'un bloc multi-canaux (ex. Strip 4) : nom de l'appareil (partagé, jamais un nom de
+ * canal), IP partagée, et les actions communes à tout le bloc — monter/descendre une seule fois
+ * (déplace le groupe entier), un crayon dédié pour modifier nom/IP/type (plutôt que caché dans le
+ * menu, pour bien distinguer « modifier l'appareil » de « renommer un canal », voir [ChannelSubRow]).
+ */
+@Composable
+private fun DeviceGroupHeaderRow(
+    deviceName: String,
+    channelCount: Int,
+    online: Boolean?,
+    displayIp: String,
+    isFirst: Boolean,
+    isLast: Boolean,
+    onEdit: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onDeleteGroup: () -> Unit,
+) {
+    val context = LocalContext.current
+    var menuExpanded by remember { mutableStateOf(false) }
+
+    val connectivityLabel = when (online) {
+        true -> stringResource(R.string.settings_connectivity_online)
+        false -> stringResource(R.string.settings_connectivity_offline)
+        null -> stringResource(R.string.settings_connectivity_checking)
+    }
+
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.ViewModule,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.size(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(deviceName, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    text = "$displayIp · ${stringResource(R.string.settings_group_channels, channelCount)} · $connectivityLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontFamily = FontFamily.Monospace,
+                )
+            }
+            IconButton(onClick = onMoveUp, enabled = !isFirst) {
+                Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.settings_move_up))
+            }
+            IconButton(onClick = onMoveDown, enabled = !isLast) {
+                Icon(Icons.Filled.ArrowDownward, contentDescription = stringResource(R.string.settings_move_down))
+            }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = null)
+                }
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.settings_open_web)) },
+                        onClick = {
+                            menuExpanded = false
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://$displayIp")))
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.settings_edit_device)) },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.settings_delete_group)) },
+                        onClick = {
+                            menuExpanded = false
+                            onDeleteGroup()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Ligne d'un canal au sein d'un bloc multi-canaux : juste son propre nom (renommable
+ * individuellement, ex. « Frigo ») et sa suppression — l'IP et l'ouverture web sont communes au
+ * bloc, affichées une seule fois sur son en-tête ([DeviceGroupHeaderRow]).
+ */
+@Composable
+private fun ChannelSubRow(device: Device, online: Boolean?, onRename: () -> Unit, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 34.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ConnectivityIndicator(online)
+        Spacer(Modifier.size(10.dp))
+        Text(device.name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        IconButton(onClick = onRename) {
+            Icon(
+                Icons.Filled.Edit,
+                contentDescription = stringResource(R.string.settings_rename_channel),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        IconButton(onClick = onDelete) {
+            Icon(
+                Icons.Filled.Delete,
+                contentDescription = stringResource(R.string.settings_delete_device),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeleteDeviceGroupDialog(deviceName: String, channelCount: Int, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.delete_group_title)) },
+        text = { Text(stringResource(R.string.delete_group_message, deviceName, channelCount)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.delete_device_confirm)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.delete_device_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun RenameChannelDialog(initialName: String, onConfirm: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf(initialName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_rename_channel_title)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.add_device_name_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { if (name.isNotBlank()) onConfirm(name.trim()) }, enabled = name.isNotBlank()) {
+                Text(stringResource(R.string.action_ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }
 
 /**

@@ -30,8 +30,16 @@ data class ChannelSelection(
 
 data class AddEditUiState(
     val isEditMode: Boolean = false,
+    /** Vrai si l'appareil édité a plusieurs canaux : le champ [name] représente alors le nom
+     * de l'appareil physique (partagé), pas le nom d'un canal individuel. */
+    val isGroupEdit: Boolean = false,
     val name: String = "",
     val ipAddress: String = "",
+    /** Nom du 1ᵉʳ emplacement IP. Null = nom par défaut affiché (traduit, jamais stocké tel quel). */
+    val ipName: String? = null,
+    /** Deuxième adresse IP optionnelle. Null = un seul emplacement configuré. */
+    val ip2Address: String? = null,
+    val ip2Name: String? = null,
     val type: DeviceType = DeviceType.PLUG,
     val isTesting: Boolean = false,
     val nameError: UserMessage? = null,
@@ -61,19 +69,39 @@ class AddEditDeviceViewModel @Inject constructor(
     private var initialName = ""
     private var initialIp = ""
     private var initialType = DeviceType.PLUG
+    private var initialIpName: String? = null
+    private var initialIp2Address: String? = null
+    private var initialIp2Name: String? = null
 
     // Capacités détectées par la dernière sonde réussie, persistées à l'ajout.
     private var capabilities: DeviceCapabilities? = null
+
+    // Tous les canaux du même appareil physique (même IP), y compris celui édité — un seul élément
+    // hors mode groupé. Utilisé pour appliquer nom/IP/type à l'ensemble à l'enregistrement.
+    private var groupMembers: List<Device> = emptyList()
 
     init {
         editingDeviceId?.let { id ->
             viewModelScope.launch {
                 repository.getDevice(id)?.let { device ->
-                    initialName = device.name
+                    val siblings = repository.getDevicesOnce().filter { it.ipAddress == device.ipAddress && it.id != device.id }
+                    groupMembers = listOf(device) + siblings
+                    val isGroupEdit = siblings.isNotEmpty()
+                    // Mode groupé : le champ Nom porte le nom de l'appareil physique (partagé),
+                    // jamais le nom d'un canal individuel — celui-ci se modifie ailleurs (Réglages).
+                    val editedName = if (isGroupEdit) device.deviceName else device.name
+                    initialName = editedName
                     initialIp = device.ipAddress
                     initialType = device.type
+                    initialIpName = device.ipName
+                    initialIp2Address = device.ip2Address
+                    initialIp2Name = device.ip2Name
                     _uiState.update {
-                        it.copy(name = device.name, ipAddress = device.ipAddress, type = device.type)
+                        it.copy(
+                            isGroupEdit = isGroupEdit,
+                            name = editedName, ipAddress = device.ipAddress, type = device.type,
+                            ipName = device.ipName, ip2Address = device.ip2Address, ip2Name = device.ip2Name,
+                        )
                     }
                 }
             }
@@ -81,19 +109,41 @@ class AddEditDeviceViewModel @Inject constructor(
     }
 
     fun onNameChange(value: String) = _uiState.update {
-        it.copy(name = value, nameError = null, error = null, isDirty = isDirty(value, it.ipAddress, it.type))
+        val next = it.copy(name = value, nameError = null, error = null)
+        next.copy(isDirty = isDirty(next))
     }
 
     fun onIpChange(value: String) = _uiState.update {
-        it.copy(ipAddress = value, ipError = null, error = null, isDirty = isDirty(it.name, value, it.type))
+        val next = it.copy(ipAddress = value, ipError = null, error = null)
+        next.copy(isDirty = isDirty(next))
     }
 
     fun onTypeChange(value: DeviceType) = _uiState.update {
-        it.copy(type = value, isDirty = isDirty(it.name, it.ipAddress, value))
+        val next = it.copy(type = value)
+        next.copy(isDirty = isDirty(next))
     }
 
-    private fun isDirty(name: String, ip: String, type: DeviceType): Boolean =
-        name != initialName || ip != initialIp || type != initialType
+    /** Modifie (ou nomme pour la première fois) le 1ᵉʳ emplacement IP. Toujours présent. */
+    fun onEditIpSlot1(name: String, ip: String) = _uiState.update {
+        val next = it.copy(ipAddress = ip, ipName = name.ifBlank { null }, ipError = null, error = null)
+        next.copy(isDirty = isDirty(next))
+    }
+
+    /** Ajoute ou modifie le 2ᵉ emplacement IP optionnel. */
+    fun onEditIpSlot2(name: String, ip: String) = _uiState.update {
+        val next = it.copy(ip2Address = ip, ip2Name = name.ifBlank { null })
+        next.copy(isDirty = isDirty(next))
+    }
+
+    /** Supprime le 2ᵉ emplacement IP. Le 1ᵉʳ reste toujours présent (appareil jamais sans IP). */
+    fun onDeleteIpSlot2() = _uiState.update {
+        val next = it.copy(ip2Address = null, ip2Name = null)
+        next.copy(isDirty = isDirty(next))
+    }
+
+    private fun isDirty(state: AddEditUiState): Boolean =
+        state.name != initialName || state.ipAddress != initialIp || state.type != initialType ||
+            state.ipName != initialIpName || state.ip2Address != initialIp2Address || state.ip2Name != initialIp2Name
 
     /** Valide les champs (public pour gater la demande de permission avant tout contact réseau). */
     fun validate(): Boolean = validateFields()
@@ -197,16 +247,46 @@ class AddEditDeviceViewModel @Inject constructor(
         val id = editingDeviceId ?: return
         viewModelScope.launch {
             val existing = repository.getDevice(id) ?: return@launch
+            val state = _uiState.value
+            if (state.isGroupEdit) {
+                // Champs partagés (nom d'appareil, IP, type) appliqués à tous les canaux d'un
+                // coup — jamais le nom de canal individuel, laissé tel quel sur chacun.
+                val outcome = runCatching {
+                    repository.updateDeviceGroup(
+                        members = groupMembers,
+                        deviceName = state.name.trim(),
+                        ipAddress = state.ipAddress.trim(),
+                        ip2Address = state.ip2Address,
+                        ipName = state.ipName,
+                        ip2Name = state.ip2Name,
+                        type = state.type,
+                    )
+                }
+                if (outcome.isFailure) {
+                    _uiState.update { it.copy(error = UserMessage(R.string.error_device_exists)) }
+                } else {
+                    _uiState.update { it.copy(done = true) }
+                }
+                return@launch
+            }
+            val nameChanged = state.name.trim() != existing.name
             val updated = existing.copy(
-                name = _uiState.value.name.trim(),
-                ipAddress = _uiState.value.ipAddress.trim(),
-                type = _uiState.value.type,
+                name = state.name.trim(),
+                deviceName = state.name.trim(),
+                ipAddress = state.ipAddress.trim(),
+                type = state.type,
+                ipName = state.ipName,
+                ip2Address = state.ip2Address,
+                ip2Name = state.ip2Name,
             )
             val outcome = runCatching { repository.updateDevice(updated) }
             if (outcome.isFailure) {
                 // Violation de la contrainte d'unicité (ipAddress, switchId).
                 _uiState.update { it.copy(error = UserMessage(R.string.error_device_exists)) }
             } else {
+                // Le nom est écrit en dur dans les scripts déployés (notifs ntfy) : les redéployer
+                // avec le nouveau nom si besoin, sans bloquer la fermeture de l'écran là-dessus.
+                if (nameChanged) viewModelScope.launch { repository.resyncDeviceName(updated) }
                 _uiState.update { it.copy(done = true) }
             }
         }

@@ -6,21 +6,27 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -37,6 +43,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -161,26 +169,39 @@ fun DashboardScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
-                        items(uiState.tiles, key = { it.device.id }) { tile ->
-                            DeviceTile(
-                                tile = tile,
-                                elapsedNow = elapsedNow,
-                                onToggle = { turnOn ->
-                                    // Une simulation en cours reprendrait la main : on demande
-                                    // d'abord si l'on doit l'arrêter, plutôt que de laisser
-                                    // l'utilisateur croire à un interrupteur défaillant.
-                                    val running = tile.presence
-                                    if (running != null) {
-                                        pendingToggle = PendingToggle(tile.device, turnOn, running)
-                                    } else {
-                                        viewModel.toggle(tile.device, turnOn)
-                                    }
-                                },
-                                onRetry = { viewModel.retry(tile.device) },
-                                onGrantPermission = { showPermissionDialog = true },
-                                onOpenDetail = { onOpenDetail(tile.device.id) },
-                                onPlanningWindowEnded = { viewModel.refresh(force = true) },
-                            )
+                        uiState.tiles.forEach { tile ->
+                            if (tile.isFirstInGroup) {
+                                item(
+                                    key = "group-${tile.device.id}",
+                                    span = { GridItemSpan(maxLineSpan) },
+                                ) {
+                                    DeviceGroupHeader(
+                                        label = tile.groupLabel,
+                                        icon = if (tile.isMultiChannel) Icons.Filled.ViewModule else iconFor(tile.device.type),
+                                    )
+                                }
+                            }
+                            item(key = tile.device.id) {
+                                DeviceTile(
+                                    tile = tile,
+                                    elapsedNow = elapsedNow,
+                                    onToggle = { turnOn ->
+                                        // Une simulation en cours reprendrait la main : on demande
+                                        // d'abord si l'on doit l'arrêter, plutôt que de laisser
+                                        // l'utilisateur croire à un interrupteur défaillant.
+                                        val running = tile.presence
+                                        if (running != null) {
+                                            pendingToggle = PendingToggle(tile.device, turnOn, running)
+                                        } else {
+                                            viewModel.toggle(tile.device, turnOn)
+                                        }
+                                    },
+                                    onRetry = { viewModel.retry(tile.device) },
+                                    onGrantPermission = { showPermissionDialog = true },
+                                    onOpenDetail = { onOpenDetail(tile.device.id) },
+                                    onPlanningWindowEnded = { viewModel.refresh(force = true) },
+                                )
+                            }
                         }
                     }
                 }
@@ -258,6 +279,36 @@ private fun PresenceToggleDialog(
             }
         },
     )
+}
+
+/**
+ * En-tête au-dessus du ou des canaux d'un appareil physique : son nom (celui de Réglages, pas le
+ * modèle technique) + un picto — le picto « bloc groupé » pour un appareil multi-canaux (ex.
+ * Strip 4), le picto du type d'appareil (prise/lampe/capteur) sinon. Étalé sur toute la largeur
+ * de la grille (span), juste au-dessus de son ou ses canaux.
+ */
+@Composable
+private fun DeviceGroupHeader(label: String, icon: ImageVector) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp, bottom = 2.dp, start = 4.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(16.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontFamily = FontFamily.Monospace,
+        )
+    }
 }
 
 @Composable

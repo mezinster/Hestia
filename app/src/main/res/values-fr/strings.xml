@@ -28,6 +28,9 @@
     <string name="about_license">Distribué sous licence GPLv3.</string>
     <string name="about_license_link">(en savoir plus)</string>
     <string name="about_share_title">Partager l\'application</string>
+    <string name="about_share_button">Partager</string>
+    <string name="about_share_or">ou</string>
+    <string name="about_share_text">Hestia — pilote tes prises Shelly en local, sans cloud : %1$s</string>
     <string name="about_qr_hint">Scannez pour télécharger Hestia — Appuyez pour augmenter la luminosité</string>
     <string name="about_qr_hint_max">Luminosité au maximum — Appuyez pour réduire</string>
 
@@ -36,9 +39,15 @@
     <string name="settings_devices_empty">Aucun appareil pour l\'instant.\nAjoute ton premier appareil Shelly avec le bouton +.</string>
     <string name="settings_add_device">Ajouter un appareil</string>
     <string name="settings_device_channel">Canal %1$d</string>
+    <string name="settings_group_channels">%1$d canaux</string>
     <string name="settings_open_web">Ouvrir l\'interface web</string>
     <string name="settings_edit_device">Modifier</string>
     <string name="settings_delete_device">Supprimer</string>
+    <string name="settings_delete_group">Supprimer cet appareil</string>
+    <string name="settings_rename_channel">Renommer ce canal</string>
+    <string name="settings_rename_channel_title">Renommer ce canal</string>
+    <string name="delete_group_title">Supprimer cet appareil ?</string>
+    <string name="delete_group_message">« %1$s » et ses %2$d canaux seront retirés de Hestia. Ça n\'affecte pas l\'appareil lui-même ni sa configuration.</string>
     <string name="settings_permission_section">Permission réseau local</string>
     <string name="settings_permission_granted">Accordée</string>
     <string name="settings_permission_denied">Refusée</string>
@@ -87,10 +96,11 @@
 
     <!-- Minuteur déclenché par le bouton physique -->
     <string name="detail_button_timer_section">Bouton physique</string>
-    <string name="detail_button_timer_desc">Un appui sur le bouton lance un minuteur au lieu d\'une simple bascule — même principe "actif pour X, coupure à Y W" que Perso, mais déclenché par le bouton lui-même, qu\'Hestia soit ouverte ou non.</string>
+    <string name="detail_button_timer_desc">Tu peux donner un comportement particulier au bouton physique de la prise (comme les réglages Perso : durée, coupure sur seuil en option), qui s\'applique même si Hestia est fermée.\n\nSans réglage, le bouton reste un simple interrupteur : on/off à chaque appui.</string>
     <string name="detail_button_timer_configure">Configurer le bouton physique</string>
     <string name="detail_button_timer_dialog_title">Minuteur du bouton physique</string>
     <string name="detail_button_timer_row_label">À l\'appui : %1$s</string>
+    <string name="detail_button_timer_row_label_unlimited">À l\'appui : sans limite de durée</string>
     <string name="detail_button_timer_disable">Désactiver</string>
     <string name="detail_button_timer_disable_confirm_title">Désactiver le minuteur du bouton ?</string>
     <string name="detail_button_timer_disable_confirm_message">Le bouton redevient une simple bascule marche/arrêt.</string>
@@ -104,8 +114,17 @@
     <string name="edit_device_title">Modifier l\'appareil</string>
     <string name="add_device_name_label">Nom</string>
     <string name="add_device_name_hint">Ex. : Prise scooter</string>
+    <string name="add_device_name_group_hint">S\'applique à tous les canaux de cet appareil. Renomme un canal précis depuis Réglages.</string>
     <string name="add_device_ip_label">Adresse IP</string>
     <string name="add_device_ip_hint">Ex. : 192.168.1.96</string>
+    <string name="add_device_ip_locations_title">Adresses IP</string>
+    <string name="add_device_ip_location_default_name_1">Première adresse IP</string>
+    <string name="add_device_ip_location_default_name_2">Deuxième adresse IP</string>
+    <string name="add_device_add_second_ip">Ajouter une deuxième IP</string>
+    <string name="add_device_ip_location_dialog_title">Modifier cette adresse</string>
+    <string name="add_device_ip_location_name_label">Nom (facultatif)</string>
+    <string name="add_device_ip_location_edit">Modifier</string>
+    <string name="add_device_ip_location_delete">Supprimer</string>
     <string name="add_device_type_label">Type</string>
     <string name="device_type_plug">Prise</string>
     <string name="device_type_lamp">Lampe</string>
@@ -204,6 +223,7 @@
     <string name="duration_picker_start">Démarrer</string>
     <string name="timer_cutoff_label">Couper si la consommation passe sous</string>
     <string name="duration_picker_min_error">La durée minimale est de 1 minute.</string>
+    <string name="duration_picker_unlimited_label">Sans limite de durée</string>
 
     <!-- Deux réglages personnalisés enregistrables (puces nommées sous 1h/2h/3h/Manuel) -->
     <string name="timer_preset_chip">Perso</string>
@@ -215,6 +235,7 @@
     <string name="timer_preset_name_error">Donne un nom à ce réglage.</string>
     <string name="timer_preset_save">Enregistrer</string>
     <string name="timer_preset_cutoff_detail">Coupure à %1$d W</string>
+    <string name="timer_preset_unlimited_detail">Jusqu\'à coupure à %1$d W</string>
     <string name="timer_preset_no_cutoff">Sans coupure sur seuil</string>
     <string name="timer_preset_delete">Supprimer le réglage perso</string>
     <string name="timer_preset_row_label">%1$s - %2$s</string>
@@ -309,6 +330,17 @@
     <string name="planning_edit_blocked_title">Planning en cours</string>
     <string name="planning_edit_blocked_message">Ce planning est en cours (il a allumé la prise). Modifie-le en dehors de son créneau, ou supprime-le.</string>
     <string name="planning_delete_active_warning">Ce planning est en cours : sa suppression éteindra la prise.</string>
+    <string name="planning_pause">Mettre en pause</string>
+    <string name="planning_pause_title">Mettre ce planning en pause ?</string>
+    <string name="planning_pause_message">Le planning %1$s sera retiré de la prise jusqu\'à ce que tu le réactives — rien à ressaisir.</string>
+    <string name="planning_pause_active_warning">Ce planning est en cours : le mettre en pause éteindra la prise.</string>
+    <string name="planning_pause_confirm">Mettre en pause</string>
+    <string name="planning_paused_section">En pause</string>
+    <string name="planning_resume">Réactiver</string>
+    <string name="planning_paused_delete">Oublier ce planning en pause</string>
+    <string name="planning_paused_delete_title">Oublier ce planning en pause ?</string>
+    <string name="planning_paused_delete_message">Le planning %1$s sera définitivement oublié, sans possibilité de le réactiver.</string>
+    <string name="planning_resume_error_title">Impossible de réactiver ce planning</string>
     <string name="planning_ok">Compris</string>
     <string name="planning_start">Début</string>
     <string name="planning_end">Fin</string>

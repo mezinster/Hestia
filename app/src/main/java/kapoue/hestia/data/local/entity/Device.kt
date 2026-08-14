@@ -64,4 +64,31 @@ data class Device(
     val preset2DurationSeconds: Int? = null,
     val preset2ThresholdW: Int? = null,
     val preset2Name: String? = null,
+    /**
+     * Deuxième adresse IP optionnelle (ex. domicile / lieu de vacances) : Hestia bascule
+     * automatiquement dessus si la première est injoignable. Null = un seul emplacement configuré.
+     */
+    val ip2Address: String? = null,
+    /** Nom du 1ᵉʳ emplacement IP. Null = « Première adresse IP » affiché par défaut (traduit). */
+    val ipName: String? = null,
+    /** Nom du 2ᵉ emplacement IP. Null = « Deuxième adresse IP » affiché par défaut (traduit). */
+    val ip2Name: String? = null,
+    /** Dernier emplacement (1 ou 2) qui a répondu, essayé en premier au prochain appel. Null = 1. */
+    val lastWorkingIpSlot: Int? = null,
+    /**
+     * Vrai = le 1ᵉʳ réglage Perso n'a pas de limite de durée (coupure sur seuil uniquement,
+     * [presetThresholdW] alors obligatoire). [presetDurationSeconds] reste ignoré dans ce cas.
+     */
+    @ColumnInfo(defaultValue = "0")
+    val presetUnlimited: Boolean = false,
+    @ColumnInfo(defaultValue = "0")
+    val preset2Unlimited: Boolean = false,
+    /**
+     * Nom de l'appareil physique (ex. « Shelly Strip 4 »), enregistré une fois à l'ajout et
+     * identique sur tous les canaux d'un même appareil — sert d'en-tête stable, jamais modifié
+     * par le renommage d'un canal individuel (ex. « Frigo »). Pour un appareil mono-canal,
+     * toujours identique à [name]. Vide = pas encore migré (voir `fixLegacyChannelNames`).
+     */
+    @ColumnInfo(defaultValue = "")
+    val deviceName: String = "",
 )

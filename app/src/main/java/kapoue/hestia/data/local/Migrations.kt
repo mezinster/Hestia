@@ -91,3 +91,62 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
         db.execSQL("ALTER TABLE devices ADD COLUMN preset2Name TEXT")
     }
 }
+
+/**
+ * v8 → v9 : deuxième adresse IP nommable par appareil (ex. domicile / vacances), avec bascule
+ * automatique. Colonnes nullables : absence de 2ᵉ emplacement = comportement inchangé (une seule
+ * adresse, comme avant cette version).
+ */
+val MIGRATION_8_9 = object : Migration(8, 9) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN ip2Address TEXT")
+        db.execSQL("ALTER TABLE devices ADD COLUMN ipName TEXT")
+        db.execSQL("ALTER TABLE devices ADD COLUMN ip2Name TEXT")
+        db.execSQL("ALTER TABLE devices ADD COLUMN lastWorkingIpSlot INTEGER")
+    }
+}
+
+/**
+ * v9 → v10 : plannings mis en pause (mémo local le temps de la pause — voir [PausedPlanning]).
+ * Nouvelle table, aucune colonne existante touchée.
+ */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `paused_plannings` (" +
+                "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `deviceId` INTEGER NOT NULL, " +
+                "`startHour` INTEGER NOT NULL, `startMinute` INTEGER NOT NULL, " +
+                "`endHour` INTEGER NOT NULL, `endMinute` INTEGER NOT NULL, " +
+                "`days` TEXT NOT NULL, `date` TEXT, `cutoffThresholdW` INTEGER, " +
+                "`pausedAt` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`deviceId`) REFERENCES `devices`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)",
+        )
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_paused_plannings_deviceId` ON `paused_plannings` (`deviceId`)",
+        )
+    }
+}
+
+/**
+ * v10 → v11 : réglages Perso sans limite de durée (coupure sur seuil uniquement). Colonnes
+ * booléennes non nulles : défaut à 0 (faux) pour les réglages déjà enregistrés, comportement
+ * inchangé pour eux.
+ */
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN presetUnlimited INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE devices ADD COLUMN preset2Unlimited INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+/**
+ * v11 → v12 : nom d'appareil stable, distinct du nom (renommable) de chaque canal — voir
+ * [kapoue.hestia.data.local.entity.Device.deviceName]. Vide par défaut pour les appareils déjà
+ * enregistrés ; rempli au premier lancement suivant par `DeviceRepository.fixLegacyChannelNames`
+ * (logique Kotlin, pas faisable proprement en SQL pur ici).
+ */
+val MIGRATION_11_12 = object : Migration(11, 12) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN deviceName TEXT NOT NULL DEFAULT ''")
+    }
+}

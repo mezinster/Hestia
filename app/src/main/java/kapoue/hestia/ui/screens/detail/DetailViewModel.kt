@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kapoue.hestia.R
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.RpcResult
@@ -43,6 +44,10 @@ class DetailViewModel @Inject constructor(
 
     private val _status = MutableStateFlow<TileStatus>(TileStatus.Loading)
     val status: StateFlow<TileStatus> = _status.asStateFlow()
+
+    /** IP effectivement utilisée lors du dernier appel réussi (1ᵉʳ ou 2ᵉ emplacement). */
+    private val _activeIp = MutableStateFlow<String?>(null)
+    val activeIp: StateFlow<String?> = _activeIp.asStateFlow()
 
     /**
      * Seuil du minuteur actuellement en attente pour cet appareil, ou null. Lu à chaque relevé ;
@@ -165,13 +170,18 @@ class DetailViewModel @Inject constructor(
 
     /**
      * Démarre le minuteur (autonome sur l'appareil), puis relit l'état réel. Si [thresholdW] est
-     * fourni, ajoute la coupure sur seuil de consommation.
+     * fourni, ajoute la coupure sur seuil de consommation. [seconds] null = sans limite de durée
+     * (coupure sur seuil uniquement, [thresholdW] alors obligatoire, imposé côté écran).
      */
-    fun startTimer(seconds: Int, detail: String, thresholdW: Int? = null) {
+    fun startTimer(seconds: Int?, detail: String, thresholdW: Int? = null) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            if (thresholdW != null) repository.startChargeTimer(dev, seconds, thresholdW, detail)
-            else repository.startTimer(dev, seconds, detail)
+            when {
+                seconds == null && thresholdW != null -> repository.startUnlimitedChargeTimer(dev, thresholdW)
+                seconds != null && thresholdW != null -> repository.startChargeTimer(dev, seconds, thresholdW, detail)
+                seconds != null -> repository.startTimer(dev, seconds, detail)
+                else -> Unit // sans durée ni seuil : rien à lancer, ne devrait pas arriver (imposé côté écran).
+            }
             fetch()
         }
     }
@@ -179,15 +189,16 @@ class DetailViewModel @Inject constructor(
     /**
      * Enregistre (ou remplace) l'un des deux réglages personnalisés du minuteur ([slot] = 1 ou
      * 2) — confort propre à Hestia, jamais envoyé à la prise avant que l'utilisateur ne le lance
-     * via sa puce nommée.
+     * via sa puce nommée. [seconds] null = sans limite de durée ([thresholdW] alors obligatoire,
+     * imposé côté écran).
      */
-    fun savePreset(slot: Int, name: String, seconds: Int, thresholdW: Int?) {
+    fun savePreset(slot: Int, name: String, seconds: Int?, thresholdW: Int?) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
             val updated = if (slot == 1) {
-                dev.copy(presetName = name, presetDurationSeconds = seconds, presetThresholdW = thresholdW)
+                dev.copy(presetName = name, presetDurationSeconds = seconds, presetThresholdW = thresholdW, presetUnlimited = seconds == null)
             } else {
-                dev.copy(preset2Name = name, preset2DurationSeconds = seconds, preset2ThresholdW = thresholdW)
+                dev.copy(preset2Name = name, preset2DurationSeconds = seconds, preset2ThresholdW = thresholdW, preset2Unlimited = seconds == null)
             }
             repository.updateDevice(updated)
         }
@@ -198,9 +209,9 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
             val updated = if (slot == 1) {
-                dev.copy(presetName = null, presetDurationSeconds = null, presetThresholdW = null)
+                dev.copy(presetName = null, presetDurationSeconds = null, presetThresholdW = null, presetUnlimited = false)
             } else {
-                dev.copy(preset2Name = null, preset2DurationSeconds = null, preset2ThresholdW = null)
+                dev.copy(preset2Name = null, preset2DurationSeconds = null, preset2ThresholdW = null, preset2Unlimited = false)
             }
             repository.updateDevice(updated)
         }
@@ -215,14 +226,18 @@ class DetailViewModel @Inject constructor(
     }
 
     /** Résolution du conflit : arrête la simulation de présence puis lance le minuteur. */
-    fun stopPresenceThenStartTimer(seconds: Int, detail: String, thresholdW: Int? = null) {
+    fun stopPresenceThenStartTimer(seconds: Int?, detail: String, thresholdW: Int? = null) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
             repository.stopPresence(dev)
             _presenceActive.value = false
             _presenceWindows.value = emptyList()
-            if (thresholdW != null) repository.startChargeTimer(dev, seconds, thresholdW, detail)
-            else repository.startTimer(dev, seconds, detail)
+            when {
+                seconds == null && thresholdW != null -> repository.startUnlimitedChargeTimer(dev, thresholdW)
+                seconds != null && thresholdW != null -> repository.startChargeTimer(dev, seconds, thresholdW, detail)
+                seconds != null -> repository.startTimer(dev, seconds, detail)
+                else -> Unit
+            }
             fetch()
         }
     }
@@ -267,6 +282,42 @@ class DetailViewModel @Inject constructor(
             repository.deletePlanning(dev, planning)
             loadPlannings(dev)
         }
+    }
+
+    /** Plannings mis en pause pour cet appareil (mémo local, voir [DeviceRepository.pausePlanning]). */
+    val pausedPlannings: StateFlow<List<PausedPlanning>> = repository.observePausedPlannings(deviceId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Résultat d'une réactivation ratée (conflit, appareil injoignable…), consommé par l'UI. */
+    private val _resumePlanningError = MutableStateFlow<CreatePlanningResult?>(null)
+    val resumePlanningError: StateFlow<CreatePlanningResult?> = _resumePlanningError.asStateFlow()
+
+    fun consumeResumePlanningError() {
+        _resumePlanningError.value = null
+    }
+
+    fun pausePlanning(planning: Planning) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            repository.pausePlanning(dev, planning)
+            loadPlannings(dev)
+        }
+    }
+
+    fun resumePlanning(paused: PausedPlanning) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            val result = repository.resumePlanning(dev, paused)
+            if (result !is CreatePlanningResult.Success) {
+                _resumePlanningError.value = result
+            } else {
+                loadPlannings(dev)
+            }
+        }
+    }
+
+    fun deletePausedPlanning(paused: PausedPlanning) {
+        viewModelScope.launch { repository.deletePausedPlanning(paused) }
     }
 
     /** Ajoute une plage de présence ; refusée si elle chevauche un planning. */
@@ -316,6 +367,7 @@ class DetailViewModel @Inject constructor(
     private suspend fun fetch() {
         val dev = repository.getDevice(deviceId) ?: return
         _status.value = repository.getStatus(dev).toTileStatus()
+        _activeIp.value = repository.activeIp(dev)
         _pendingThresholdW.value = appPreferences.pendingTimers().firstOrNull { it.deviceId == deviceId }?.thresholdW
         if (dev.hasScripting) {
             loadPresence(dev)
@@ -338,8 +390,8 @@ class DetailViewModel @Inject constructor(
         _buttonTimerConfig.value = repository.getButtonTimerConfig(dev)
     }
 
-    /** Active/reconfigure ou désactive le minuteur du bouton physique. */
-    fun setButtonTimer(enabled: Boolean, durationSeconds: Int, thresholdW: Int?) {
+    /** Active/reconfigure ou désactive le minuteur du bouton physique. [durationSeconds] null = sans limite de durée. */
+    fun setButtonTimer(enabled: Boolean, durationSeconds: Int?, thresholdW: Int?) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
             repository.setButtonTimer(dev, enabled, durationSeconds, thresholdW)

@@ -37,6 +37,10 @@ interface DeviceDao {
     @Update
     suspend fun update(device: Device)
 
+    /** Mémorise l'emplacement IP (1 ou 2) qui a répondu, sans repasser par un [update] complet. */
+    @Query("UPDATE devices SET lastWorkingIpSlot = :slot WHERE id = :deviceId")
+    suspend fun updateLastWorkingIpSlot(deviceId: Long, slot: Int)
+
     @Delete
     suspend fun delete(device: Device)
 

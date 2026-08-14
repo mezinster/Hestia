@@ -28,6 +28,9 @@
     <string name="about_license">Distributed under the GPLv3 license.</string>
     <string name="about_license_link">(learn more)</string>
     <string name="about_share_title">Share the app</string>
+    <string name="about_share_button">Share</string>
+    <string name="about_share_or">or</string>
+    <string name="about_share_text">Hestia — control your Shelly plugs locally, no cloud: %1$s</string>
     <string name="about_qr_hint">Scan to download Hestia — Tap to raise brightness</string>
     <string name="about_qr_hint_max">Brightness at maximum — Tap to lower</string>
     <string name="gpl_url" translatable="false">https://www.gnu.org/licenses/gpl-3.0.html</string>
@@ -38,9 +41,15 @@
     <string name="settings_devices_empty">No devices yet.\nAdd your first Shelly device with the + button.</string>
     <string name="settings_add_device">Add a device</string>
     <string name="settings_device_channel">Channel %1$d</string>
+    <string name="settings_group_channels">%1$d channels</string>
     <string name="settings_open_web">Open web interface</string>
     <string name="settings_edit_device">Edit</string>
     <string name="settings_delete_device">Delete</string>
+    <string name="settings_delete_group">Delete this device</string>
+    <string name="settings_rename_channel">Rename this channel</string>
+    <string name="settings_rename_channel_title">Rename this channel</string>
+    <string name="delete_group_title">Delete this device?</string>
+    <string name="delete_group_message">\"%1$s\" and its %2$d channels will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</string>
     <string name="settings_permission_section">Local network permission</string>
     <string name="settings_permission_granted">Granted</string>
     <string name="settings_permission_denied">Denied</string>
@@ -89,10 +98,11 @@
 
     <!-- Minuteur déclenché par le bouton physique -->
     <string name="detail_button_timer_section">Physical button</string>
-    <string name="detail_button_timer_desc">Pressing the button starts a timer instead of a plain switch — same "on for X, cutoff at Y W" idea as Perso, but triggered by the button itself, whether or not Hestia is open.</string>
+    <string name="detail_button_timer_desc">You can give the plug\'s physical button a specific behavior (like Perso presets: duration, optional cutoff threshold), which applies even if Hestia is closed.\n\nWith no configuration, the button stays a plain switch: on/off on each press.</string>
     <string name="detail_button_timer_configure">Configure the physical button</string>
     <string name="detail_button_timer_dialog_title">Physical button timer</string>
     <string name="detail_button_timer_row_label">On press: %1$s</string>
+    <string name="detail_button_timer_row_label_unlimited">On press: no duration limit</string>
     <string name="detail_button_timer_disable">Disable</string>
     <string name="detail_button_timer_disable_confirm_title">Disable the physical button timer?</string>
     <string name="detail_button_timer_disable_confirm_message">The button will go back to a plain on/off switch.</string>
@@ -106,8 +116,17 @@
     <string name="edit_device_title">Edit device</string>
     <string name="add_device_name_label">Name</string>
     <string name="add_device_name_hint">E.g.: Scooter outlet</string>
+    <string name="add_device_name_group_hint">Applies to all channels of this device. Rename a specific channel from Settings.</string>
     <string name="add_device_ip_label">IP address</string>
     <string name="add_device_ip_hint">E.g.: 192.168.1.96</string>
+    <string name="add_device_ip_locations_title">IP addresses</string>
+    <string name="add_device_ip_location_default_name_1">First IP address</string>
+    <string name="add_device_ip_location_default_name_2">Second IP address</string>
+    <string name="add_device_add_second_ip">Add a second IP</string>
+    <string name="add_device_ip_location_dialog_title">Edit this address</string>
+    <string name="add_device_ip_location_name_label">Name (optional)</string>
+    <string name="add_device_ip_location_edit">Edit</string>
+    <string name="add_device_ip_location_delete">Delete</string>
     <string name="add_device_type_label">Type</string>
     <string name="device_type_plug">Plug</string>
     <string name="device_type_lamp">Lamp</string>
@@ -209,6 +228,7 @@
     <string name="duration_picker_start">Start</string>
     <string name="timer_cutoff_label">Switch off if power drops below</string>
     <string name="duration_picker_min_error">The minimum duration is 1 minute.</string>
+    <string name="duration_picker_unlimited_label">No duration limit</string>
 
     <!-- Deux réglages personnalisés enregistrables (puces nommées sous 1h/2h/3h/Manuel) -->
     <string name="timer_preset_chip">Preset</string>
@@ -220,6 +240,7 @@
     <string name="timer_preset_name_error">Give this setting a name.</string>
     <string name="timer_preset_save">Save</string>
     <string name="timer_preset_cutoff_detail">Cutoff at %1$d W</string>
+    <string name="timer_preset_unlimited_detail">Runs until cutoff at %1$d W</string>
     <string name="timer_preset_no_cutoff">No cutoff threshold</string>
     <string name="timer_preset_delete">Delete preset</string>
     <string name="timer_preset_row_label">%1$s - %2$s</string>
@@ -314,6 +335,17 @@
     <string name="planning_edit_blocked_title">Planning in progress</string>
     <string name="planning_edit_blocked_message">This planning is currently active (it switched the outlet on). Edit it outside its time window, or delete it.</string>
     <string name="planning_delete_active_warning">This planning is currently active: deleting it will switch off the outlet.</string>
+    <string name="planning_pause">Pause planning</string>
+    <string name="planning_pause_title">Pause this planning?</string>
+    <string name="planning_pause_message">The %1$s planning will be removed from the outlet until you resume it — nothing to re-enter.</string>
+    <string name="planning_pause_active_warning">This planning is currently active: pausing it will switch off the outlet.</string>
+    <string name="planning_pause_confirm">Pause</string>
+    <string name="planning_paused_section">Paused</string>
+    <string name="planning_resume">Resume</string>
+    <string name="planning_paused_delete">Forget paused planning</string>
+    <string name="planning_paused_delete_title">Forget this paused planning?</string>
+    <string name="planning_paused_delete_message">The %1$s planning will be permanently forgotten, with no way to resume it.</string>
+    <string name="planning_resume_error_title">Couldn\'t resume this planning</string>
     <string name="planning_ok">Got it</string>
     <string name="planning_start">Start</string>
     <string name="planning_end">End</string>

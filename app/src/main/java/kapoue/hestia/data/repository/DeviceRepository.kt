@@ -6,8 +6,10 @@ import kapoue.hestia.R
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.core.util.formatClockTime
 import kapoue.hestia.data.local.dao.DeviceDao
+import kapoue.hestia.data.local.dao.PausedPlanningDao
 import kapoue.hestia.data.local.dao.PresenceConfigDao
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.local.entity.PresenceConfig
 import kapoue.hestia.data.notifications.PendingTimer
 import kapoue.hestia.data.prefs.AppPreferences
@@ -49,11 +51,64 @@ import javax.inject.Singleton
 class DeviceRepository @Inject constructor(
     private val deviceDao: DeviceDao,
     private val presenceConfigDao: PresenceConfigDao,
+    private val pausedPlanningDao: PausedPlanningDao,
     private val rpcClient: ShellyRpcClient,
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
     @ApplicationContext private val context: Context,
 ) {
+    // --- Bascule automatique entre les 1 ou 2 adresses IP d'un appareil ---
+
+    /** Cache mémoire de l'emplacement (1 ou 2) qui a répondu en dernier, pour ne pas relire la base à chaque appel. */
+    private val workingIpSlot = java.util.concurrent.ConcurrentHashMap<Long, Int>()
+
+    private fun currentSlot(device: Device): Int = workingIpSlot[device.id] ?: device.lastWorkingIpSlot ?: 1
+
+    /** IP de l'emplacement actuellement jugé fonctionnel, sans aucun appel réseau. */
+    private fun currentIp(device: Device): String =
+        if (currentSlot(device) == 2 && device.ip2Address != null) device.ip2Address else device.ipAddress
+
+    /**
+     * IP réellement utilisée lors du dernier appel RPC réussi pour cet appareil (peut différer de
+     * [Device.ipAddress] si la bascule a eu lieu sur le 2ᵉ emplacement) — pour affichage UI
+     * seulement, aucun appel réseau. À lire après un appel comme [getStatus] pour être à jour.
+     */
+    fun activeIp(device: Device): String = currentIp(device)
+
+    private suspend fun rememberWorkingSlot(device: Device, slot: Int) {
+        if (workingIpSlot[device.id] == slot && device.lastWorkingIpSlot == slot) return
+        workingIpSlot[device.id] = slot
+        deviceDao.updateLastWorkingIpSlot(device.id, slot)
+    }
+
+    private fun RpcResult<*>.isConnectivityFailure(): Boolean =
+        this is RpcResult.Failure && (kind == RpcFailure.TIMEOUT || kind == RpcFailure.UNREACHABLE)
+
+    /**
+     * Exécute [call] sur l'emplacement IP jugé fonctionnel ; en cas d'échec réseau (pas une erreur
+     * applicative de l'appareil, qui elle prouve que l'adresse est la bonne) et si une deuxième
+     * adresse existe, retente automatiquement dessus. Mémorise le changement d'emplacement pour
+     * les appels suivants. Retourne l'IP effectivement utilisée, pour que l'appelant enchaîne
+     * dessus le reste d'une séquence d'appels sans repasser par cette résolution à chaque fois.
+     */
+    private suspend fun <T> withIp(device: Device, call: suspend (ip: String) -> RpcResult<T>): Pair<String, RpcResult<T>> {
+        val slots = if (currentSlot(device) == 2 && device.ip2Address != null) {
+            listOf(2 to device.ip2Address, 1 to device.ipAddress)
+        } else {
+            listOfNotNull(1 to device.ipAddress, device.ip2Address?.let { 2 to it })
+        }
+        var last: Pair<String, RpcResult<T>>? = null
+        for ((slot, ip) in slots) {
+            val result = call(ip)
+            last = ip to result
+            if (!result.isConnectivityFailure()) {
+                rememberWorkingSlot(device, slot)
+                return last
+            }
+        }
+        return last!!
+    }
+
     fun observeDevices(): Flow<List<Device>> = deviceDao.observeAll()
 
     fun observeDevice(id: Long): Flow<Device?> = deviceDao.observeById(id)
@@ -65,7 +120,7 @@ class DeviceRepository @Inject constructor(
     /** Lit l'état courant d'un canal (allumé/éteint, minuteur, puissance). */
     suspend fun getStatus(device: Device): RpcResult<SwitchStatusResult> {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return demoStatus(device)
-        return rpcClient.getSwitchStatus(device.ipAddress, device.switchId)
+        return withIp(device) { ip -> rpcClient.getSwitchStatus(ip, device.switchId) }.second
     }
 
     /** Bascule d'un canal déclenchée par l'utilisateur. */
@@ -76,7 +131,7 @@ class DeviceRepository @Inject constructor(
         // contrairement au script de coupure, il ne sait pas distinguer une fin naturelle d'une
         // extinction manuelle ; le supprimer avant l'extinction est ce qui l'empêche de se déclencher.
         if (!on) removeTimerNotifyScript(device)
-        val result = rpcClient.setSwitch(device.ipAddress, device.switchId, on)
+        val (_, result) = withIp(device) { ip -> rpcClient.setSwitch(ip, device.switchId, on) }
         if (result is RpcResult.Success) {
             // Extinction manuelle : un éventuel minuteur en attente est interrompu → pas de notif de fin.
             if (!on) appPreferences.removePendingTimer(device.id)
@@ -94,7 +149,7 @@ class DeviceRepository @Inject constructor(
      * le bouton physique — se coupait tout seul.
      */
     suspend fun startTimer(device: Device, seconds: Int, detail: String?): RpcResult<Unit> {
-        val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = true, toggleAfterSec = seconds)
+        val (_, set) = withIp(device) { ip -> rpcClient.setSwitch(ip, device.switchId, on = true, toggleAfterSec = seconds) }
         if (set is RpcResult.RpcError) return set
         if (set is RpcResult.Failure) return set
         // Notification de fin best-effort : un souci ici ne doit jamais remettre en cause le
@@ -115,8 +170,8 @@ class DeviceRepository @Inject constructor(
      * échouer l'appelant.
      */
     private suspend fun deployTimerNotifyScript(device: Device, topic: String, body: String) {
-        val ip = device.ipAddress
-        val scripts = rpcClient.scriptList(ip).getOrNull()?.scripts ?: return
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        val scripts = listResult.getOrNull()?.scripts ?: return
         val scriptId = scripts.firstOrNull { it.name == TimerNotifyScriptGenerator.SCRIPT_NAME }?.id
             ?: rpcClient.scriptCreate(ip, TimerNotifyScriptGenerator.SCRIPT_NAME).getOrNull()?.id
             ?: return
@@ -129,8 +184,8 @@ class DeviceRepository @Inject constructor(
 
     /** Supprime le script de notif de fin de minuteur s'il existe (best-effort). */
     private suspend fun removeTimerNotifyScript(device: Device) {
-        val ip = device.ipAddress
-        rpcClient.scriptList(ip).getOrNull()?.scripts?.firstOrNull { it.name == TimerNotifyScriptGenerator.SCRIPT_NAME }?.let {
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        listResult.getOrNull()?.scripts?.firstOrNull { it.name == TimerNotifyScriptGenerator.SCRIPT_NAME }?.let {
             rpcClient.scriptStop(ip, it.id)
             rpcClient.scriptDelete(ip, it.id)
         }
@@ -142,11 +197,43 @@ class DeviceRepository @Inject constructor(
      * [thresholdW] pendant 60 s. Réservé aux prises qui mesurent la puissance.
      */
     suspend fun startChargeTimer(device: Device, seconds: Int, thresholdW: Int, detail: String?): RpcResult<Unit> {
-        val ip = device.ipAddress
         // 1. Minuteur natif (durée max + compte à rebours).
-        rpcClient.setSwitch(ip, device.switchId, on = true, toggleAfterSec = seconds).errorOrNull()?.let { return it }
+        val (ip, set) = withIp(device) { i -> rpcClient.setSwitch(i, device.switchId, on = true, toggleAfterSec = seconds) }
+        set.errorOrNull()?.let { return it }
 
         // 2. Script de coupure conso, réutilisé ou créé.
+        val topic = ntfyTopic()
+        val deployed = deployChargeCutoffScript(
+            ip, device.switchId, device.name, thresholdW, graceSec = 0,
+            ntfyEndBody = if (topic != null) context.getString(R.string.notif_timer_ended, detail.orEmpty()) else "",
+        )
+        deployed.errorOrNull()?.let { return it }
+
+        rememberPendingTimer(device.id, seconds, detail, thresholdW = thresholdW)
+        return RpcResult.Success(Unit)
+    }
+
+    /**
+     * Comme [startChargeTimer], mais **sans limite de durée** : aucun minuteur natif armé, la
+     * prise reste allumée jusqu'à la coupure sur seuil. Période de grâce fixe de 15 minutes avant
+     * toute surveillance de la consommation (voir [ChargeScriptGenerator]) — sans elle, un
+     * appareil qui met un instant à vraiment tirer du courant risquerait une coupure immédiate,
+     * plus gênant ici qu'avec une durée maximale en filet de sécurité comme dans [startChargeTimer].
+     */
+    suspend fun startUnlimitedChargeTimer(device: Device, thresholdW: Int): RpcResult<Unit> {
+        val (ip, set) = withIp(device) { i -> rpcClient.setSwitch(i, device.switchId, on = true) }
+        set.errorOrNull()?.let { return it }
+        val deployed = deployChargeCutoffScript(
+            ip, device.switchId, device.name, thresholdW, graceSec = UNLIMITED_CHARGE_GRACE_SEC, ntfyEndBody = "",
+        )
+        deployed.errorOrNull()?.let { return it }
+        return RpcResult.Success(Unit)
+    }
+
+    /** Déploie (ou réutilise) le script de coupure sur seuil partagé, commun à [startChargeTimer]/[startUnlimitedChargeTimer]. */
+    private suspend fun deployChargeCutoffScript(
+        ip: String, switchId: Int, deviceName: String, thresholdW: Int, graceSec: Int, ntfyEndBody: String,
+    ): RpcResult<Int> {
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
         val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }
@@ -158,16 +245,15 @@ class DeviceRepository @Inject constructor(
         rpcClient.scriptStop(ip, scriptId)
         val topic = ntfyTopic()
         val code = ChargeScriptGenerator.generate(
-            device.switchId, thresholdW, belowSec = 60, selfId = scriptId,
-            ntfyTopic = topic, ntfyTitle = device.name,
+            switchId, thresholdW, belowSec = 60, selfId = scriptId, graceSec = graceSec,
+            ntfyTopic = topic, ntfyTitle = deviceName,
             ntfyBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
+            ntfyEndBody = ntfyEndBody,
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
         rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
-
-        rememberPendingTimer(device.id, seconds, detail, thresholdW = thresholdW)
-        return RpcResult.Success(Unit)
+        return RpcResult.Success(scriptId)
     }
 
     /** Mémorise un minuteur en attente pour la notification de fin (voir [PendingTimer]). */
@@ -183,7 +269,8 @@ class DeviceRepository @Inject constructor(
      * d'une extinction manuelle ou par le bouton physique (où le script tournerait encore).
      */
     suspend fun cutoffScriptFired(device: Device): Boolean {
-        val entry = rpcClient.scriptList(device.ipAddress).getOrNull()?.scripts
+        val (_, listResult) = withIp(device) { ip -> rpcClient.scriptList(ip) }
+        val entry = listResult.getOrNull()?.scripts
             ?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }
         return entry != null && !entry.running
     }
@@ -193,13 +280,13 @@ class DeviceRepository @Inject constructor(
      * un éventuel script de coupure conso resté actif.
      */
     suspend fun cancelTimer(device: Device): RpcResult<Unit> {
-        val ip = device.ipAddress
-        rpcClient.scriptList(ip).getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }?.let {
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        listResult.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }?.let {
             rpcClient.scriptStop(ip, it.id)
             rpcClient.scriptDelete(ip, it.id)
         }
         removeTimerNotifyScript(device)
-        return when (val set = rpcClient.setSwitch(device.ipAddress, device.switchId, on = false)) {
+        return when (val set = rpcClient.setSwitch(ip, device.switchId, on = false)) {
             is RpcResult.Success -> {
                 appPreferences.removePendingTimer(device.id)
                 RpcResult.Success(Unit)
@@ -215,8 +302,9 @@ class DeviceRepository @Inject constructor(
         presenceConfigDao.getForDevice(deviceId)
 
     /** Horloge de l'appareil pour le contrôle de dérive (epoch + heure rapportée). */
-    suspend fun getDeviceClock(device: Device): RpcResult<DeviceClock?> =
-        when (val r = rpcClient.getFullStatus(device.ipAddress)) {
+    suspend fun getDeviceClock(device: Device): RpcResult<DeviceClock?> {
+        val (_, r) = withIp(device) { ip -> rpcClient.getFullStatus(ip) }
+        return when (r) {
             is RpcResult.Success -> {
                 val sys = r.value.sys
                 RpcResult.Success(sys?.unixtime?.let { DeviceClock(it, sys.time) })
@@ -224,10 +312,12 @@ class DeviceRepository @Inject constructor(
             is RpcResult.RpcError -> r
             is RpcResult.Failure -> r
         }
+    }
 
     /** État réel de la présence, lu via Script.List (jamais supposé). */
-    suspend fun getPresenceState(device: Device): RpcResult<PresenceState> =
-        when (val r = rpcClient.scriptList(device.ipAddress)) {
+    suspend fun getPresenceState(device: Device): RpcResult<PresenceState> {
+        val (_, r) = withIp(device) { ip -> rpcClient.scriptList(ip) }
+        return when (r) {
             is RpcResult.Success -> {
                 val entry = r.value.scripts.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
                 RpcResult.Success(
@@ -237,12 +327,12 @@ class DeviceRepository @Inject constructor(
             is RpcResult.RpcError -> r
             is RpcResult.Failure -> r
         }
+    }
 
     /** Lit les plages de présence réellement embarquées dans le script (jamais supposées). */
     suspend fun getPresenceWindows(device: Device): RpcResult<List<PresenceWindow>> {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(emptyList())
-        val ip = device.ipAddress
-        val list = rpcClient.scriptList(ip)
+        val (ip, list) = withIp(device) { i -> rpcClient.scriptList(i) }
         list.errorOrNull()?.let { return it }
         val entry = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
             ?: return RpcResult.Success(emptyList())
@@ -260,8 +350,8 @@ class DeviceRepository @Inject constructor(
      */
     suspend fun setPresenceWindows(device: Device, windows: List<PresenceWindow>): RpcResult<Unit> {
         if (windows.isEmpty()) return stopPresence(device)
-        val ip = device.ipAddress
-        rpcClient.clearAutoOff(ip, device.switchId).errorOrNull()?.let { return it }
+        val (ip, clear) = withIp(device) { i -> rpcClient.clearAutoOff(i, device.switchId) }
+        clear.errorOrNull()?.let { return it }
 
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
@@ -291,8 +381,7 @@ class DeviceRepository @Inject constructor(
 
     /** Arrête et supprime le script de présence. Ne touche jamais un script d'un autre nom. */
     suspend fun stopPresence(device: Device): RpcResult<Unit> {
-        val ip = device.ipAddress
-        val list = rpcClient.scriptList(ip)
+        val (ip, list) = withIp(device) { i -> rpcClient.scriptList(i) }
         list.errorOrNull()?.let { return it }
         val entry = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
         if (entry != null) {
@@ -304,13 +393,14 @@ class DeviceRepository @Inject constructor(
 
     // --- Minuteur déclenché par le bouton physique ---
 
-    data class ButtonTimerConfig(val enabled: Boolean, val durationSeconds: Int, val thresholdW: Int?)
+    /** [durationSeconds] null = sans limite de durée (seuil alors obligatoire, voir [ButtonTimerScriptGenerator]). */
+    data class ButtonTimerConfig(val enabled: Boolean, val durationSeconds: Int?, val thresholdW: Int?)
 
     /** Lit la config réellement déployée sur l'appareil (jamais supposée, jamais stockée par Hestia). */
     suspend fun getButtonTimerConfig(device: Device): ButtonTimerConfig {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
-        val ip = device.ipAddress
-        val entry = rpcClient.scriptList(ip).getOrNull()?.scripts
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        val entry = listResult.getOrNull()?.scripts
             ?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME }
             ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
         val code = rpcClient.scriptGetCode(ip, entry.id).getOrNull()?.data
@@ -321,11 +411,12 @@ class DeviceRepository @Inject constructor(
 
     /**
      * Active/reconfigure (script créé ou réécrit) ou désactive (script supprimé, comportement
-     * natif du bouton retrouvé) le minuteur déclenché par le bouton physique.
+     * natif du bouton retrouvé) le minuteur déclenché par le bouton physique. [durationSeconds]
+     * null = sans limite de durée ([thresholdW] alors obligatoire, imposé côté appelant).
      */
-    suspend fun setButtonTimer(device: Device, enabled: Boolean, durationSeconds: Int, thresholdW: Int?): RpcResult<Unit> {
-        val ip = device.ipAddress
-        val existing = rpcClient.scriptList(ip).getOrNull()?.scripts
+    suspend fun setButtonTimer(device: Device, enabled: Boolean, durationSeconds: Int?, thresholdW: Int?): RpcResult<Unit> {
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        val existing = listResult.getOrNull()?.scripts
             ?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME }
 
         if (!enabled) {
@@ -384,9 +475,9 @@ class DeviceRepository @Inject constructor(
     suspend fun getPlannings(device: Device): RpcResult<List<Planning>> {
         // Appareils démo : aucun réseau (évite un timeout par tuile fictive à chaque relevé).
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(emptyList())
-        return when (val r = rpcClient.scheduleList(device.ipAddress)) {
+        val (ip, r) = withIp(device) { i -> rpcClient.scheduleList(i) }
+        return when (r) {
             is RpcResult.Success -> {
-                val ip = device.ipAddress
                 val all = reconstructPlannings(r.value.jobs, device.switchId)
                 val (expired, active) = all.partition { it.isExpiredOnce() }
                 if (expired.isNotEmpty()) {
@@ -507,7 +598,8 @@ class DeviceRepository @Inject constructor(
             return CreatePlanningResult.PresenceOverlap
         }
 
-        val ip = device.ipAddress
+        // getPlannings ci-dessus vient de réussir : l'emplacement IP qui fonctionne est à jour.
+        val ip = currentIp(device)
         val scriptId = if (cutoffThresholdW != null) {
             createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name) ?: return CreatePlanningResult.Error
         } else {
@@ -626,7 +718,8 @@ class DeviceRepository @Inject constructor(
             return CreatePlanningResult.PresenceOverlap
         }
 
-        val ip = device.ipAddress
+        // getPlannings ci-dessus vient de réussir : l'emplacement IP qui fonctionne est à jour.
+        val ip = currentIp(device)
         val scriptId = if (cutoffThresholdW != null) {
             createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name) ?: return CreatePlanningResult.Error
         } else {
@@ -680,14 +773,68 @@ class DeviceRepository @Inject constructor(
      * supprimer l'allumeur sans éteindre laisserait la prise allumée sans extinction prévue.
      */
     suspend fun deletePlanning(device: Device, planning: Planning): RpcResult<Unit> {
-        val ip = device.ipAddress
-        rpcClient.scheduleDelete(ip, planning.onJobId).errorOrNull()?.let { return it }
+        val (ip, first) = withIp(device) { i -> rpcClient.scheduleDelete(i, planning.onJobId) }
+        first.errorOrNull()?.let { return it }
         rpcClient.scheduleDelete(ip, planning.offJobId).errorOrNull()?.let { return it }
         planning.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
         if (planning.isActiveNow()) {
             rpcClient.setSwitch(ip, device.switchId, on = false)
         }
         return RpcResult.Success(Unit)
+    }
+
+    // --- Pause d'un planning (retiré de l'appareil, mémorisé le temps de la pause) ---
+
+    fun observePausedPlannings(deviceId: Long): Flow<List<PausedPlanning>> =
+        pausedPlanningDao.observeForDevice(deviceId)
+
+    /**
+     * Met en pause : retire réellement le planning de l'appareil (mêmes appels que
+     * [deletePlanning], y compris l'extinction s'il est en cours), puis mémorise sa config
+     * localement pour pouvoir le recréer à l'identique. Le mémo n'est écrit **qu'après** le succès
+     * du retrait sur l'appareil — en cas d'échec (appareil injoignable), rien n'est mémorisé et le
+     * planning reste tel quel, comme pour une suppression ratée.
+     */
+    suspend fun pausePlanning(device: Device, planning: Planning): RpcResult<Unit> {
+        val result = deletePlanning(device, planning)
+        if (result is RpcResult.Success) {
+            pausedPlanningDao.insert(
+                PausedPlanning(
+                    deviceId = device.id,
+                    startHour = planning.startHour,
+                    startMinute = planning.startMinute,
+                    endHour = planning.endHour,
+                    endMinute = planning.endMinute,
+                    days = planning.days.sorted().joinToString(","),
+                    date = planning.date?.toString(),
+                    cutoffThresholdW = planning.cutoffThresholdW,
+                ),
+            )
+        }
+        return result
+    }
+
+    /**
+     * Réactive : recrée le planning sur l'appareil (mêmes contrôles de conflit qu'une création
+     * normale — un autre planning ou une présence a pu apparaître entre-temps). Le mémo local
+     * n'est effacé qu'en cas de succès ; sinon il reste en attente, réessayable.
+     */
+    suspend fun resumePlanning(device: Device, paused: PausedPlanning): CreatePlanningResult {
+        val days = paused.days.split(",").filter { it.isNotBlank() }.map { it.toInt() }.toSet()
+        val date = paused.date?.let { LocalDate.parse(it) }
+        val result = createPlanning(
+            device, paused.startHour, paused.startMinute, paused.endHour, paused.endMinute,
+            days, date, paused.cutoffThresholdW,
+        )
+        if (result is CreatePlanningResult.Success) {
+            pausedPlanningDao.delete(paused)
+        }
+        return result
+    }
+
+    /** Oublie définitivement un planning en pause, sans le recréer sur l'appareil. */
+    suspend fun deletePausedPlanning(paused: PausedPlanning) {
+        pausedPlanningDao.delete(paused)
     }
 
     /** Teste la connexion et déduit les capacités de l'appareil (rejette les Gen1). */
@@ -707,13 +854,14 @@ class DeviceRepository @Inject constructor(
      */
     suspend fun getInstalledFirmwareVersion(device: Device): String? {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return null
-        return rpcClient.getDeviceInfo(device.ipAddress).getOrNull()?.ver
+        val (_, r) = withIp(device) { ip -> rpcClient.getDeviceInfo(ip) }
+        return r.getOrNull()?.ver
     }
 
     suspend fun checkFirmwareUpdate(device: Device): FirmwareCheckResult {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return FirmwareCheckResult.UpToDate("démo")
-        val ip = device.ipAddress
-        val installed = (rpcClient.getDeviceInfo(ip).getOrNull()?.ver) ?: return FirmwareCheckResult.Error
+        val (ip, infoResult) = withIp(device) { i -> rpcClient.getDeviceInfo(i) }
+        val installed = infoResult.getOrNull()?.ver ?: return FirmwareCheckResult.Error
         val update = rpcClient.checkForUpdate(ip).getOrNull() ?: return FirmwareCheckResult.Error
         return when {
             update.stable != null -> FirmwareCheckResult.UpdateAvailable(installed, update.stable.version)
@@ -729,7 +877,8 @@ class DeviceRepository @Inject constructor(
      */
     suspend fun installFirmwareUpdate(device: Device): RpcResult<Unit> {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(Unit)
-        return when (val r = rpcClient.updateFirmware(device.ipAddress)) {
+        val (_, r) = withIp(device) { ip -> rpcClient.updateFirmware(ip) }
+        return when (r) {
             is RpcResult.Success -> RpcResult.Success(Unit)
             is RpcResult.RpcError -> r
             is RpcResult.Failure -> r
@@ -742,7 +891,8 @@ class DeviceRepository @Inject constructor(
      */
     suspend fun rebootDevice(device: Device): RpcResult<Unit> {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(Unit)
-        return when (val r = rpcClient.reboot(device.ipAddress)) {
+        val (_, r) = withIp(device) { ip -> rpcClient.reboot(ip) }
+        return when (r) {
             is RpcResult.Success -> RpcResult.Success(Unit)
             is RpcResult.RpcError -> r
             is RpcResult.Failure -> r
@@ -767,10 +917,11 @@ class DeviceRepository @Inject constructor(
         var added = 0
         for (switchId in switchIds) {
             if (deviceDao.exists(ip, switchId)) continue
-            val channelName = if (switchIds.size > 1) "$name ${switchId + 1}" else name
+            val channelName = if (switchIds.size > 1) "$name · ${switchId + 1}" else name
             deviceDao.insert(
                 Device(
                     name = channelName,
+                    deviceName = name,
                     ipAddress = ip,
                     switchId = switchId,
                     type = type,
@@ -790,15 +941,115 @@ class DeviceRepository @Inject constructor(
 
     suspend fun updateDevice(device: Device) = deviceDao.update(device)
 
+    /**
+     * Met à jour les champs partagés d'un appareil physique (nom, adresses IP, type) sur **tous**
+     * ses canaux d'un coup — jamais leurs noms de canal individuels ([Device.name], laissés tels
+     * quels). Évite qu'une IP modifiée sur un seul canal d'un bloc multi-canaux laisse les autres
+     * pointer sur l'ancienne (ils partagent tous la même prise physique).
+     */
+    suspend fun updateDeviceGroup(
+        members: List<Device>,
+        deviceName: String,
+        ipAddress: String,
+        ip2Address: String?,
+        ipName: String?,
+        ip2Name: String?,
+        type: DeviceType,
+    ) {
+        for (device in members) {
+            deviceDao.update(
+                device.copy(
+                    deviceName = deviceName,
+                    ipAddress = ipAddress,
+                    ip2Address = ip2Address,
+                    ipName = ipName,
+                    ip2Name = ip2Name,
+                    type = type,
+                ),
+            )
+        }
+    }
+
     suspend fun deleteDevice(device: Device) {
         deviceDao.delete(device)
         logger.info(DiagnosticLogger.DB, "Suppression appareil ${device.ipAddress} canal ${device.switchId}")
     }
 
-    /** Échange l'ordre d'affichage de deux appareils (réordonnancement). */
-    suspend fun swapPositions(a: Device, b: Device) {
-        deviceDao.update(a.copy(position = b.position))
-        deviceDao.update(b.copy(position = a.position))
+    /** Supprime tous les canaux d'un même appareil physique d'un coup. */
+    suspend fun deleteDeviceGroup(members: List<Device>) {
+        for (device in members) deleteDevice(device)
+    }
+
+    /**
+     * Réordonne pour l'affichage : les canaux d'un même appareil physique (même IP) restent
+     * toujours groupés côte à côte, jamais mélangés avec un autre appareil entre eux — l'ordre
+     * brut de `position` par canal individuel ne garantit pas cette contiguïté (ex. un canal
+     * isolé d'un bloc de 4 prises pris en sandwich entre deux appareils sans rapport). Le groupe
+     * prend la place du premier de ses canaux dans l'ordre existant ; à l'intérieur du groupe,
+     * tri par canal (`switchId`). Ne modifie jamais `position` en base, uniquement l'affichage —
+     * partagé entre le Tableau et Réglages pour un ordre toujours identique entre les deux écrans.
+     */
+    fun groupedForDisplay(devices: List<Device>): List<Device> {
+        val firstIndexByIp = LinkedHashMap<String, Int>()
+        devices.forEachIndexed { index, d -> firstIndexByIp.putIfAbsent(d.ipAddress, index) }
+        return devices
+            .groupBy { it.ipAddress }
+            .entries
+            .sortedBy { (ip, _) -> firstIndexByIp.getValue(ip) }
+            .flatMap { (_, members) -> members.sortedBy { it.switchId } }
+    }
+
+    /**
+     * Réordonnancement (Réglages, monter/descendre) : reçoit la liste complète déjà réordonnée
+     * (groupes entiers déplacés en bloc, jamais un seul canal isolé) et réécrit `position` de
+     * façon strictement séquentielle pour refléter ce nouvel ordre.
+     */
+    suspend fun reorderDevices(orderedDevices: List<Device>) {
+        orderedDevices.forEachIndexed { index, device ->
+            if (device.position != index) deviceDao.update(device.copy(position = index))
+        }
+    }
+
+    /**
+     * Corrige une fois pour toutes, au lancement (sans effet si déjà à jour, sûr à rappeler) :
+     * 1. Noms de canaux ajoutés avant l'adoption du séparateur « · » (ex. « Shelly Strip 4 1 » →
+     *    « Shelly Strip 4 · 1 »), uniquement les appareils multi-canaux.
+     * 2. [Device.deviceName] non renseigné (appareils ajoutés avant ce champ) : pour un appareil
+     *    seul, son propre nom. Pour un multi-canaux, le nom de base déduit d'un canal qui suit
+     *    encore le format « Base · N » (peu importe lequel), ou à défaut le nom du 1ᵉʳ canal.
+     */
+    suspend fun fixLegacyChannelNames() {
+        val byIp = getDevicesOnce().groupBy { it.ipAddress }
+        for (members in byIp.values) {
+            if (members.size <= 1) {
+                val solo = members.first()
+                if (solo.deviceName.isBlank()) deviceDao.update(solo.copy(deviceName = solo.name))
+                continue
+            }
+            // Corrige d'abord le séparateur, en gardant trace des noms à jour localement (la
+            // liste `members` ne reflète pas encore les écritures ci-dessous).
+            val upToDateNames = HashMap<Long, String>()
+            for (device in members) {
+                val n = device.switchId + 1
+                val correctSuffix = " · $n"
+                val fixedName = if (!device.name.endsWith(correctSuffix) && device.name.endsWith(" $n")) {
+                    device.name.removeSuffix(" $n") + correctSuffix
+                } else {
+                    device.name
+                }
+                upToDateNames[device.id] = fixedName
+                if (fixedName != device.name) deviceDao.update(device.copy(name = fixedName))
+            }
+            if (members.any { it.deviceName.isBlank() }) {
+                val patterned = members.sortedBy { it.switchId }
+                    .firstOrNull { upToDateNames.getValue(it.id).endsWith(" · ${it.switchId + 1}") }
+                val baseName = patterned?.let { upToDateNames.getValue(it.id).removeSuffix(" · ${it.switchId + 1}") }
+                    ?: (members.minByOrNull { it.switchId } ?: members.first()).let { upToDateNames.getValue(it.id) }
+                for (device in members) {
+                    if (device.deviceName.isBlank()) deviceDao.update(device.copy(deviceName = baseName, name = upToDateNames.getValue(device.id)))
+                }
+            }
+        }
     }
 
     /**
@@ -811,6 +1062,18 @@ class DeviceRepository @Inject constructor(
         for (device in getDevicesOnce()) {
             if (resyncNtfyForDevice(device)) appPreferences.markNtfySynced(device.id)
         }
+    }
+
+    /**
+     * Redéploie (planning, présence, minuteur bouton) avec le nom actuel de l'appareil — le nom
+     * affiché dans les notifications ntfy est écrit en dur dans les scripts au moment de leur
+     * déploiement, pas relu dynamiquement par la prise. Sans ce réappel après un renommage, les
+     * notifications garderaient l'ancien nom indéfiniment. Best-effort : si l'appareil est
+     * injoignable au moment du renommage, l'ancien nom reste dans les scripts jusqu'à la prochaine
+     * modification qui les redéploie (limite connue, non résolue automatiquement pour l'instant).
+     */
+    suspend fun resyncDeviceName(device: Device) {
+        resyncNtfyForDevice(device)
     }
 
     /**
@@ -901,5 +1164,7 @@ class DeviceRepository @Inject constructor(
         // Chaque planning = 2 programmes cron ; la prise en tient ~20, on plafonne à 10 plannings.
         const val MAX_PLANNINGS = 10
         const val DEFAULT_BUTTON_TIMER_SEC = 1800
+        /** Grâce avant surveillance en mode « sans limite de durée » (voir [ChargeScriptGenerator]). */
+        const val UNLIMITED_CHARGE_GRACE_SEC = 15 * 60
     }
 }

@@ -18,7 +18,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -125,9 +129,27 @@ fun AboutScreen() {
             modifier = Modifier.clickable { context.openUrl(gplUrl) },
         )
 
-        // Partage : le QR code pointe vers la fiche F-Droid de l'application.
+        // Partage : bouton (texte + lien F-Droid via le système Android) ou QR code, au choix.
         Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.about_share_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.height(12.dp))
+        val shareText = stringResource(R.string.about_share_text, fdroidUrl)
+        Button(onClick = {
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, shareText)
+            }
+            context.startActivity(Intent.createChooser(sendIntent, null))
+        }) {
+            Icon(Icons.Filled.Share, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text(stringResource(R.string.about_share_button))
+        }
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = stringResource(R.string.about_share_or),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(12.dp))
         Surface(
             color = androidx.compose.ui.graphics.Color.White,

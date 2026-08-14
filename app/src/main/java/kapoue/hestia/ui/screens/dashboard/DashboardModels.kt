@@ -42,9 +42,8 @@ data class PresenceInfo(
     val endMinute: Int,
 )
 
-/** Une tuile = un canal, avec son numéro d'affichage et son état courant. */
+/** Une tuile = un canal, avec son état courant. */
 data class TileUiState(
-    val number: Int,
     val device: Device,
     val status: TileStatus,
     val presence: PresenceInfo? = null,
@@ -52,6 +51,15 @@ data class TileUiState(
     val plannings: List<Planning> = emptyList(),
     /** Seuil du minuteur en attente (mémo local), affiché à côté du décompte si actif. */
     val pendingThresholdW: Int? = null,
+    /**
+     * Nom de l'appareil physique (celui de Réglages, pas le modèle technique), affiché dans
+     * l'en-tête au-dessus du canal — pour tous les appareils, mono ou multi-canaux.
+     */
+    val groupLabel: String = "",
+    /** Vrai pour le premier canal du groupe dans l'ordre d'affichage : affiche l'en-tête au-dessus. */
+    val isFirstInGroup: Boolean = false,
+    /** Vrai si l'appareil physique a plusieurs canaux (ex. Strip 4) : change le picto de l'en-tête. */
+    val isMultiChannel: Boolean = false,
 )
 
 data class DashboardUiState(

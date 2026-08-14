@@ -37,6 +37,12 @@ class DashboardViewModel @Inject constructor(
     private val ntfyClient: NtfyClient,
 ) : ViewModel() {
 
+    init {
+        // Correctif ponctuel, sûr à rappeler à chaque lancement (sans effet une fois les noms
+        // déjà au bon format) : voir DeviceRepository.fixLegacyChannelNames.
+        viewModelScope.launch { repository.fixLegacyChannelNames() }
+    }
+
     /**
      * Outil de support (pas une fonctionnalité) : envoie d'un coup tous les textes de notif
      * possibles, pour les relire et les valider sans attendre que chaque cas réel se produise.
@@ -84,15 +90,24 @@ class DashboardViewModel @Inject constructor(
 
     val uiState: StateFlow<DashboardUiState> =
         combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, (presenceMap, planningMap, thresholdMap) ->
+            val ordered = repository.groupedForDisplay(devices)
+            val byIp = ordered.groupBy { it.ipAddress }
+            var lastIp: String? = null
             DashboardUiState(
-                tiles = devices.mapIndexed { index, device ->
+                tiles = ordered.map { device ->
+                    val members = byIp.getValue(device.ipAddress)
+                    val isMultiChannel = members.size > 1
+                    val isFirstInGroup = device.ipAddress != lastIp
+                    lastIp = device.ipAddress
                     TileUiState(
-                        number = index + 1,
                         device = device,
                         status = statusMap[device.id] ?: TileStatus.Loading,
                         presence = presenceMap[device.id],
                         plannings = planningMap[device.id].orEmpty(),
                         pendingThresholdW = thresholdMap[device.id],
+                        groupLabel = groupDisplayName(members),
+                        isFirstInGroup = isFirstInGroup,
+                        isMultiChannel = isMultiChannel,
                     )
                 },
                 isRefreshing = isRefreshing,
@@ -110,11 +125,10 @@ class DashboardViewModel @Inject constructor(
     /**
      * Interroge tous les appareils en parallèle. Ne relance jamais tout seul en boucle.
      *
-     * L'indicateur de rafraîchissement apparaît immédiatement pour un **tirage manuel**
-     * (`userInitiated`). Pour un cycle **automatique** (arrivée, polling), il n'apparaît que
-     * si la lecture traîne (> [INDICATOR_DELAY_MS]) : quand les appareils répondent vite, la
-     * lecture se termine avant et aucun picto ne clignote ; quand ils ne répondent pas, le
-     * picto s'affiche et joue son rôle de « recherche en cours ».
+     * L'indicateur de rafraîchissement (spinner « pull to refresh ») n'apparaît **que** pour un
+     * tirage manuel (`userInitiated`) — jamais pour un cycle automatique (arrivée, polling toutes
+     * les 5 s, `force`), quelle que soit sa durée. Un cycle automatique lent ne doit jamais se
+     * traduire par un spinner qui clignote tout seul sans action de l'utilisateur.
      */
     fun refresh(userInitiated: Boolean = false, force: Boolean = false) {
         // Ne pas empiler les cycles de polling ; un tirage manuel (ou un relevé forcé) relance
@@ -168,18 +182,9 @@ class DashboardViewModel @Inject constructor(
                     .toMap()
                 loaded.value = true
             }
-            val indicator = if (userInitiated) {
-                refreshing.value = true
-                null
-            } else {
-                launch {
-                    delay(INDICATOR_DELAY_MS)
-                    if (isActive) refreshing.value = true
-                }
-            }
+            if (userInitiated) refreshing.value = true
             fetch.join()
-            indicator?.cancel()
-            refreshing.value = false
+            if (userInitiated) refreshing.value = false
         }
     }
 
@@ -259,8 +264,16 @@ class DashboardViewModel @Inject constructor(
     private fun setStatus(deviceId: Long, status: TileStatus) {
         statuses.value = statuses.value + (deviceId to status)
     }
+}
 
-    private companion object {
-        const val INDICATOR_DELAY_MS = 600L
-    }
+/**
+ * Nom affiché dans l'en-tête : [Device.deviceName], stable et identique sur tous les canaux d'un
+ * même appareil (renseigné une fois à l'ajout, jamais affecté par le renommage d'un canal
+ * individuel — voir `DeviceRepository.fixLegacyChannelNames` pour les appareils enregistrés
+ * avant l'existence de ce champ). Repli sur le nom du 1ᵉʳ canal dans le cas résiduel où il serait
+ * encore vide (ne devrait pas arriver après le correctif de démarrage).
+ */
+private fun groupDisplayName(members: List<Device>): String {
+    val deviceName = members.first().deviceName
+    return deviceName.ifBlank { (members.minByOrNull { it.switchId } ?: members.first()).name }
 }

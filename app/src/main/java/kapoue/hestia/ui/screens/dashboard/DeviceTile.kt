@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
@@ -51,8 +50,8 @@ import kapoue.hestia.ui.theme.StateColorSet
 import kapoue.hestia.ui.theme.stateColors
 
 /**
- * Tuile d'un canal sur le Tableau. Métaphore « tableau électrique » : numéro monospace,
- * LED d'état **toujours doublée d'un libellé texte**, interrupteur rectangulaire.
+ * Tuile d'un canal sur le Tableau. LED d'état **toujours doublée d'un libellé texte**,
+ * interrupteur rectangulaire.
  *
  * @param elapsedNow SystemClock.elapsedRealtime() courant, rafraîchi à la seconde par le parent
  *   pour décrémenter le compte à rebours localement.
@@ -96,14 +95,6 @@ fun DeviceTile(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = "%02d".format(tile.number),
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Spacer(Modifier.size(8.dp))
                 Icon(
                     imageVector = iconFor(tile.device.type),
                     contentDescription = null,
@@ -307,7 +298,7 @@ private fun StatusLed(style: LedStyle, color: Color) {
     }
 }
 
-private fun iconFor(type: DeviceType): ImageVector = when (type) {
+internal fun iconFor(type: DeviceType): ImageVector = when (type) {
     DeviceType.PLUG -> Icons.Filled.Power
     DeviceType.LAMP -> Icons.Filled.Lightbulb
     DeviceType.SENSOR -> Icons.Filled.Sensors

@@ -29,10 +29,12 @@ import kapoue.hestia.ui.components.TimeWheelPicker
 import kapoue.hestia.ui.components.ValueWheelPicker
 
 /**
- * Sélecteur de durée en bottom sheet : molette heures/minutes, coupure sur seuil optionnelle.
- * Réutilisé pour trois usages distincts (titre/bouton/valeurs initiales fournis par l'appelant) :
- * le minuteur « Manuel » (démarre tout de suite) et les deux réglages « Perso » enregistrables
- * (sauvegarde sans rien envoyer à la prise, nommés). Durée minimale : 1 minute.
+ * Sélecteur de durée en bottom sheet : molette heures/minutes, coupure sur seuil optionnelle, et
+ * « sans limite de durée » (coupure sur seuil uniquement, alors obligatoire). Réutilisé pour
+ * quatre usages distincts (titre/bouton/valeurs initiales fournis par l'appelant) : le minuteur
+ * « Manuel » (démarre tout de suite), les deux réglages « Perso » enregistrables (sauvegarde sans
+ * rien envoyer à la prise, nommés), et le minuteur du bouton physique. Durée minimale : 1 minute
+ * (non applicable en mode sans limite).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,19 +47,21 @@ fun DurationPickerSheet(
     initialMinutes: Int = 30,
     initialCutoffEnabled: Boolean = false,
     initialThresholdW: Int = DEFAULT_THRESHOLD_W,
+    initialUnlimited: Boolean = false,
     showNameField: Boolean = false,
     initialName: String = "",
     onDismiss: () -> Unit,
-    onConfirm: (seconds: Int, label: String, thresholdW: Int?, name: String) -> Unit,
+    onConfirm: (seconds: Int?, label: String, thresholdW: Int?, name: String) -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState()
     var hours by remember { mutableStateOf(initialHours) }
     var minutes by remember { mutableStateOf(initialMinutes) }
     var showError by remember { mutableStateOf(false) }
     var showNameError by remember { mutableStateOf(false) }
-    var cutoffEnabled by remember { mutableStateOf(initialCutoffEnabled) }
+    var cutoffEnabled by remember { mutableStateOf(initialCutoffEnabled || initialUnlimited) }
     var threshold by remember { mutableStateOf(initialThresholdW) }
     var name by remember { mutableStateOf(initialName) }
+    var unlimited by remember { mutableStateOf(initialUnlimited) }
 
     val totalSeconds = hours * 3600 + minutes * 60
     val label = durationLabel(totalSeconds)
@@ -88,12 +92,34 @@ fun DurationPickerSheet(
                 )
             }
 
-            // Molette heures/minutes (00–23 / 00–59), lue comme une durée.
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                TimeWheelPicker(hours, minutes) { h, m -> hours = h; minutes = m; showError = false }
+            // Sans limite de durée : seule la coupure sur seuil arrête la prise (uniquement si
+            // l'appareil mesure la puissance — sinon rien ne pourrait jamais l'éteindre).
+            if (hasPowerMetering) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = stringResource(R.string.duration_picker_unlimited_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = unlimited,
+                        onCheckedChange = { unlimited = it; if (it) { cutoffEnabled = true; showError = false } },
+                    )
+                }
+            }
+
+            if (!unlimited) {
+                // Molette heures/minutes (00–23 / 00–59), lue comme une durée.
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                    TimeWheelPicker(hours, minutes) { h, m -> hours = h; minutes = m; showError = false }
+                }
             }
 
             // Coupure sur seuil de consommation (uniquement si la prise mesure la puissance).
+            // Obligatoire et non désactivable en mode sans limite (voir switch ci-dessus).
             if (hasPowerMetering) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -104,7 +130,11 @@ fun DurationPickerSheet(
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f),
                     )
-                    Switch(checked = cutoffEnabled, onCheckedChange = { cutoffEnabled = it })
+                    Switch(
+                        checked = cutoffEnabled,
+                        enabled = !unlimited,
+                        onCheckedChange = { cutoffEnabled = it },
+                    )
                 }
                 if (cutoffEnabled) {
                     Row(
@@ -128,9 +158,14 @@ fun DurationPickerSheet(
             Button(
                 onClick = {
                     when {
-                        totalSeconds < 60 -> showError = true
+                        !unlimited && totalSeconds < 60 -> showError = true
                         showNameField && name.isBlank() -> showNameError = true
-                        else -> onConfirm(totalSeconds, label, if (cutoffEnabled) threshold else null, name.trim())
+                        else -> onConfirm(
+                            if (unlimited) null else totalSeconds,
+                            if (unlimited) "" else label,
+                            if (cutoffEnabled) threshold else null,
+                            name.trim(),
+                        )
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

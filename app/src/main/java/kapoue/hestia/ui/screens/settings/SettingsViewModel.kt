@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -36,7 +37,10 @@ class SettingsViewModel @Inject constructor(
     private val ntfyClient: NtfyClient,
 ) : ViewModel() {
 
+    // Même ordre que le Tableau (canaux d'un même appareil physique toujours groupés) — un
+    // « monter »/« descendre » ci-dessous déplace donc bien un groupe entier, jamais un seul canal.
     val devices: StateFlow<List<Device>> = repository.observeDevices()
+        .map { repository.groupedForDisplay(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val themeMode: StateFlow<ThemeMode> = appPreferences.themeMode
@@ -106,8 +110,22 @@ class SettingsViewModel @Inject constructor(
     private val _connectivity = MutableStateFlow<Map<Long, Boolean?>>(emptyMap())
     val connectivity: StateFlow<Map<Long, Boolean?>> = _connectivity.asStateFlow()
 
+    /** IP effectivement utilisée par appareil (1ᵉʳ ou 2ᵉ emplacement selon la bascule automatique). */
+    private val _activeIp = MutableStateFlow<Map<Long, String>>(emptyMap())
+    val activeIp: StateFlow<Map<Long, String>> = _activeIp.asStateFlow()
+
     fun deleteDevice(device: Device) {
         viewModelScope.launch { repository.deleteDevice(device) }
+    }
+
+    /** Supprime tous les canaux d'un même appareil physique (bloc multi-canaux) d'un coup. */
+    fun deleteDeviceGroup(members: List<Device>) {
+        viewModelScope.launch { repository.deleteDeviceGroup(members) }
+    }
+
+    /** Renomme un seul canal (ex. « Frigo ») — sans toucher au nom partagé de l'appareil. */
+    fun renameChannel(device: Device, newName: String) {
+        viewModelScope.launch { repository.updateDevice(device.copy(name = newName)) }
     }
 
     /** Message transitoire (résultat export/import) à afficher puis consommer. */
@@ -149,6 +167,7 @@ class SettingsViewModel @Inject constructor(
             for (device in current) {
                 val online = repository.getStatus(device) is RpcResult.Success
                 _connectivity.value = _connectivity.value + (device.id to online)
+                _activeIp.value = _activeIp.value + (device.id to repository.activeIp(device))
             }
         }
     }
@@ -157,11 +176,20 @@ class SettingsViewModel @Inject constructor(
 
     fun moveDown(device: Device) = move(device, +1)
 
+    /**
+     * Déplace le **groupe entier** (tous les canaux du même appareil physique, même IP) auquel
+     * appartient [device], jamais un seul canal isolé — sinon un bloc multi-canaux (ex. Strip 4)
+     * se retrouverait de nouveau mélangé avec un autre appareil au premier réordonnancement.
+     */
     private fun move(device: Device, delta: Int) {
-        val ordered = devices.value
-        val index = ordered.indexOfFirst { it.id == device.id }
-        val target = index + delta
-        if (index < 0 || target < 0 || target >= ordered.size) return
-        viewModelScope.launch { repository.swapPositions(ordered[index], ordered[target]) }
+        val groups = devices.value.groupBy { it.ipAddress }.entries.toList()
+        val groupIndex = groups.indexOfFirst { (ip, _) -> ip == device.ipAddress }
+        val targetIndex = groupIndex + delta
+        if (groupIndex < 0 || targetIndex < 0 || targetIndex >= groups.size) return
+        val reordered = groups.toMutableList()
+        val moved = reordered.removeAt(groupIndex)
+        reordered.add(targetIndex, moved)
+        val flat = reordered.flatMap { it.value }
+        viewModelScope.launch { repository.reorderDevices(flat) }
     }
 }

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
@@ -64,6 +65,7 @@ import kapoue.hestia.R
 import kapoue.hestia.core.util.formatCountdown
 import kapoue.hestia.core.util.formatDate
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.domain.model.CreatePlanningResult
@@ -90,12 +92,15 @@ fun DetailScreen(
 ) {
     val device by viewModel.device.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
+    val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
     val pendingThresholdW by viewModel.pendingThresholdW.collectAsStateWithLifecycle()
     val presenceActive by viewModel.presenceActive.collectAsStateWithLifecycle()
     val presenceWindows by viewModel.presenceWindows.collectAsStateWithLifecycle()
     val addPresenceResult by viewModel.addPresenceResult.collectAsStateWithLifecycle()
     val plannings by viewModel.plannings.collectAsStateWithLifecycle()
     val addPlanningResult by viewModel.addPlanningResult.collectAsStateWithLifecycle()
+    val pausedPlannings by viewModel.pausedPlannings.collectAsStateWithLifecycle()
+    val resumePlanningError by viewModel.resumePlanningError.collectAsStateWithLifecycle()
     val buttonTimerConfig by viewModel.buttonTimerConfig.collectAsStateWithLifecycle()
     val firmwareCheck by viewModel.firmwareCheck.collectAsStateWithLifecycle()
     val firmwareChecking by viewModel.firmwareChecking.collectAsStateWithLifecycle()
@@ -129,6 +134,10 @@ fun DetailScreen(
     var blockedEditPlanning by remember { mutableStateOf<Planning?>(null) }
     // Planning en attente de confirmation de suppression.
     var planningToDelete by remember { mutableStateOf<Planning?>(null) }
+    // Planning en attente de confirmation de mise en pause (uniquement s'il est en cours).
+    var planningToPause by remember { mutableStateOf<Planning?>(null) }
+    // Planning en pause en attente de confirmation d'oubli définitif.
+    var pausedPlanningToDelete by remember { mutableStateOf<PausedPlanning?>(null) }
     // Confirmation avant de lancer l'installation d'une mise à jour firmware.
     var showFirmwareInstallConfirm by remember { mutableStateOf(false) }
     // Confirmation avant de redémarrer l'appareil (dépannage).
@@ -162,7 +171,7 @@ fun DetailScreen(
     // un conflit, il reprendra la main à sa prochaine occurrence).
     var planningWarning by remember { mutableStateOf<Pair<PendingTimer, Planning>?>(null) }
 
-    fun requestStartTimer(seconds: Int, label: String, thresholdW: Int? = null) {
+    fun requestStartTimer(seconds: Int?, label: String, thresholdW: Int? = null) {
         val activePlanning = plannings.firstOrNull { it.isActiveNow() }
         when {
             // La présence est un vrai conflit (elle pilote la prise en continu) : on la traite d'abord.
@@ -215,14 +224,14 @@ fun DetailScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            DeviceHeader(dev)
+            DeviceHeader(dev, activeIp ?: dev.ipAddress)
             StatusBadge(status = status, elapsedNow = elapsedNow)
 
             if (dev.supportsSwitch) {
                 HorizontalDivider()
                 val presets = listOf(
-                    PersonalPreset(1, dev.presetName, dev.presetDurationSeconds, dev.presetThresholdW),
-                    PersonalPreset(2, dev.preset2Name, dev.preset2DurationSeconds, dev.preset2ThresholdW),
+                    PersonalPreset(1, dev.presetName, dev.presetDurationSeconds, dev.presetThresholdW, dev.presetUnlimited),
+                    PersonalPreset(2, dev.preset2Name, dev.preset2DurationSeconds, dev.preset2ThresholdW, dev.preset2Unlimited),
                 )
                 // Repli si un réglage existant (migré) n'a pas encore de nom — résolu ici (contexte
                 // composable, stringResource) puis capturé par le callback, qui lui ne l'est pas.
@@ -237,8 +246,12 @@ fun DetailScreen(
                     onCancel = { viewModel.cancelTimer() },
                     onLaunchPreset = { slot ->
                         val p = presets.first { it.slot == slot }
-                        val seconds = p.durationSeconds
-                        if (seconds != null) requestStartTimer(seconds, p.name ?: presetFallbackLabels[slot].orEmpty(), p.thresholdW)
+                        val label = p.name ?: presetFallbackLabels[slot].orEmpty()
+                        if (p.unlimited) {
+                            p.thresholdW?.let { requestStartTimer(null, label, it) }
+                        } else {
+                            p.durationSeconds?.let { requestStartTimer(it, label, p.thresholdW) }
+                        }
                     },
                     onAddPreset = { slot -> editingPresetSlot = slot },
                     onEditPreset = { slot -> editingPresetSlot = slot },
@@ -259,6 +272,10 @@ fun DetailScreen(
                         showAddPlanning = true
                     },
                     onDelete = { planningToDelete = it },
+                    onPause = { p -> if (p.isActiveNow()) planningToPause = p else viewModel.pausePlanning(p) },
+                    pausedPlannings = pausedPlannings,
+                    onResume = { viewModel.resumePlanning(it) },
+                    onDeletePaused = { pausedPlanningToDelete = it },
                 )
             }
 
@@ -337,17 +354,18 @@ fun DetailScreen(
         val existingName = if (slot == 1) device?.presetName else device?.preset2Name
         val existingSeconds = if (slot == 1) device?.presetDurationSeconds else device?.preset2DurationSeconds
         val existingThreshold = if (slot == 1) device?.presetThresholdW else device?.preset2ThresholdW
+        val existingUnlimited = if (slot == 1) device?.presetUnlimited else device?.preset2Unlimited
+        val isNew = existingSeconds == null && existingUnlimited != true
         DurationPickerSheet(
             hasPowerMetering = device?.hasPowerMetering ?: false,
-            title = stringResource(
-                if (existingSeconds == null) R.string.timer_preset_new_title else R.string.timer_preset_edit_title,
-            ),
+            title = stringResource(if (isNew) R.string.timer_preset_new_title else R.string.timer_preset_edit_title),
             confirmLabel = stringResource(R.string.timer_preset_save),
             confirmIcon = Icons.Filled.Save,
             initialHours = (existingSeconds ?: 1800) / 3600,
             initialMinutes = ((existingSeconds ?: 1800) % 3600) / 60,
             initialCutoffEnabled = existingThreshold != null,
             initialThresholdW = existingThreshold ?: 10,
+            initialUnlimited = existingUnlimited ?: false,
             showNameField = true,
             initialName = existingName.orEmpty(),
             onDismiss = { editingPresetSlot = null },
@@ -460,6 +478,80 @@ fun DetailScreen(
         )
     }
 
+    // Confirmation de mise en pause : uniquement pour un planning en cours (même avertissement
+    // que la suppression, la prise s'éteint puisque le programme est retiré de l'appareil).
+    planningToPause?.let { p ->
+        AlertDialog(
+            onDismissRequest = { planningToPause = null },
+            title = { Text(stringResource(R.string.planning_pause_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        stringResource(
+                            R.string.planning_pause_message,
+                            "%02d:%02d – %02d:%02d".format(p.startHour, p.startMinute, p.endHour, p.endMinute),
+                        ),
+                    )
+                    Text(
+                        text = stringResource(R.string.planning_pause_active_warning),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.pausePlanning(p)
+                    planningToPause = null
+                }) { Text(stringResource(R.string.planning_pause_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { planningToPause = null }) {
+                    Text(stringResource(R.string.conflict_cancel))
+                }
+            },
+        )
+    }
+
+    pausedPlanningToDelete?.let { p ->
+        AlertDialog(
+            onDismissRequest = { pausedPlanningToDelete = null },
+            title = { Text(stringResource(R.string.planning_paused_delete_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.planning_paused_delete_message,
+                        "%02d:%02d – %02d:%02d".format(p.startHour, p.startMinute, p.endHour, p.endMinute),
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deletePausedPlanning(p)
+                    pausedPlanningToDelete = null
+                }) { Text(stringResource(R.string.planning_delete_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pausedPlanningToDelete = null }) {
+                    Text(stringResource(R.string.conflict_cancel))
+                }
+            },
+        )
+    }
+
+    resumePlanningError?.let { result ->
+        AlertDialog(
+            onDismissRequest = { viewModel.consumeResumePlanningError() },
+            title = { Text(stringResource(R.string.planning_resume_error_title)) },
+            text = { createPlanningResultMessage(result)?.let { Text(it) } },
+            confirmButton = {
+                TextButton(onClick = { viewModel.consumeResumePlanningError() }) {
+                    Text(stringResource(R.string.planning_ok))
+                }
+            },
+        )
+    }
+
     if (showAddPresence || editingPresence != null) {
         AddPresenceDialog(
             initial = editingPresence,
@@ -523,6 +615,7 @@ fun DetailScreen(
             initialMinutes = ((existing?.durationSeconds ?: 1800) % 3600) / 60,
             initialCutoffEnabled = existing?.thresholdW != null,
             initialThresholdW = existing?.thresholdW ?: 10,
+            initialUnlimited = existing?.enabled == true && existing.durationSeconds == null,
             onDismiss = { showButtonTimerSheet = false },
             onConfirm = { seconds, _, thresholdW, _ ->
                 showButtonTimerSheet = false
@@ -629,9 +722,16 @@ private fun ButtonTimerSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (config?.enabled == true) {
+            val seconds = config.durationSeconds
             PersonalPresetRow(
-                label = stringResource(R.string.detail_button_timer_row_label, durationLabel(config.durationSeconds)),
-                detail = if (config.thresholdW != null) {
+                label = if (seconds != null) {
+                    stringResource(R.string.detail_button_timer_row_label, durationLabel(seconds))
+                } else {
+                    stringResource(R.string.detail_button_timer_row_label_unlimited)
+                },
+                detail = if (seconds == null) {
+                    stringResource(R.string.timer_preset_unlimited_detail, config.thresholdW ?: 0)
+                } else if (config.thresholdW != null) {
                     stringResource(R.string.timer_preset_cutoff_detail, config.thresholdW)
                 } else {
                     stringResource(R.string.timer_preset_no_cutoff)
@@ -723,7 +823,7 @@ private fun AddPresenceDialog(
 }
 
 /** Minuteur en attente de résolution du conflit présence (durée, libellé, seuil de coupure). */
-private data class PendingTimer(val seconds: Int, val label: String, val thresholdW: Int?)
+private data class PendingTimer(val seconds: Int?, val label: String, val thresholdW: Int?)
 
 @Composable
 private fun ConflictDialog(
@@ -792,6 +892,10 @@ private fun PlanningSection(
     onEdit: (Planning) -> Unit,
     onAdd: () -> Unit,
     onDelete: (Planning) -> Unit,
+    onPause: (Planning) -> Unit,
+    pausedPlannings: List<PausedPlanning>,
+    onResume: (PausedPlanning) -> Unit,
+    onDeletePaused: (PausedPlanning) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -799,14 +903,16 @@ private fun PlanningSection(
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
         )
-        if (plannings.isEmpty()) {
+        if (plannings.isEmpty() && pausedPlannings.isEmpty()) {
             Text(
                 text = stringResource(R.string.planning_empty),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
-            plannings.forEach { p -> PlanningRow(p, onEdit = { onEdit(p) }, onDelete = { onDelete(p) }) }
+            plannings.forEach { p ->
+                PlanningRow(p, onEdit = { onEdit(p) }, onDelete = { onDelete(p) }, onPause = { onPause(p) })
+            }
         }
         val atLimit = plannings.size >= 10
         OutlinedButton(onClick = onAdd, enabled = !atLimit) {
@@ -821,11 +927,21 @@ private fun PlanningSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (pausedPlannings.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.planning_paused_section),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            pausedPlannings.forEach { p ->
+                PausedPlanningRow(p, onResume = { onResume(p) }, onDelete = { onDeletePaused(p) })
+            }
+        }
     }
 }
 
 @Composable
-private fun PlanningRow(planning: Planning, onEdit: () -> Unit, onDelete: () -> Unit) {
+private fun PlanningRow(planning: Planning, onEdit: () -> Unit, onDelete: () -> Unit, onPause: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         // Un tap sur les horaires ouvre l'édition (sauf si le planning est en cours).
         Column(
@@ -853,8 +969,55 @@ private fun PlanningRow(planning: Planning, onEdit: () -> Unit, onDelete: () -> 
                 )
             }
         }
+        IconButton(onClick = onPause) {
+            Icon(Icons.Filled.Pause, contentDescription = stringResource(R.string.planning_pause))
+        }
         IconButton(onClick = onDelete) {
             Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.planning_delete))
+        }
+    }
+}
+
+/** Config identique à un [Planning], juste pour réutiliser [daysSummary] et le formatage horaire. */
+private fun PausedPlanning.toDisplayPlanning(): Planning = Planning(
+    startHour = startHour, startMinute = startMinute, endHour = endHour, endMinute = endMinute,
+    days = days.split(",").filter { it.isNotBlank() }.map { it.toInt() }.toSet(),
+    onJobId = 0, offJobId = 0,
+    date = date?.let { LocalDate.parse(it) },
+    cutoffThresholdW = cutoffThresholdW,
+)
+
+@Composable
+private fun PausedPlanningRow(paused: PausedPlanning, onResume: () -> Unit, onDelete: () -> Unit) {
+    val display = remember(paused) { paused.toDisplayPlanning() }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "%02d:%02d – %02d:%02d".format(
+                    display.startHour, display.startMinute, display.endHour, display.endMinute,
+                ),
+                style = MaterialTheme.typography.bodyLarge,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = daysSummary(display),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            display.cutoffThresholdW?.let {
+                Text(
+                    text = stringResource(R.string.timer_preset_cutoff_detail, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        IconButton(onClick = onResume) {
+            Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.planning_resume))
+        }
+        IconButton(onClick = onDelete) {
+            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.planning_paused_delete))
         }
     }
 }
@@ -896,6 +1059,23 @@ private fun dayLabel(day: Int): String = stringResource(
     },
 )
 
+/** Message associé à un résultat de création/modification/réactivation de planning, s'il y en a un. */
+@Composable
+private fun createPlanningResultMessage(result: CreatePlanningResult): String? = when (result) {
+    is CreatePlanningResult.Conflict -> stringResource(
+        R.string.planning_conflict,
+        "%02d:%02d – %02d:%02d".format(
+            result.existing.startHour, result.existing.startMinute,
+            result.existing.endHour, result.existing.endMinute,
+        ),
+    )
+    CreatePlanningResult.PresenceOverlap -> stringResource(R.string.planning_conflict_presence)
+    CreatePlanningResult.PastOnce -> stringResource(R.string.planning_error_past)
+    CreatePlanningResult.LimitReached -> stringResource(R.string.planning_limit_reached)
+    CreatePlanningResult.Error -> stringResource(R.string.planning_error_generic)
+    CreatePlanningResult.Success -> null
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AddPlanningDialog(
@@ -927,18 +1107,9 @@ private fun AddPlanningDialog(
     // Début == fin interdit (créneau nul ou de 24 h, ambigu) ; fin < début = créneau de nuit, OK.
     val valid = (once || everyDay || days.isNotEmpty()) && startMin != endMin
 
+    val resultMessage = result?.let { createPlanningResultMessage(it) }
     val errorText: String? = when {
-        result is CreatePlanningResult.Conflict -> stringResource(
-            R.string.planning_conflict,
-            "%02d:%02d – %02d:%02d".format(
-                result.existing.startHour, result.existing.startMinute,
-                result.existing.endHour, result.existing.endMinute,
-            ),
-        )
-        result is CreatePlanningResult.PresenceOverlap -> stringResource(R.string.planning_conflict_presence)
-        result is CreatePlanningResult.PastOnce -> stringResource(R.string.planning_error_past)
-        result is CreatePlanningResult.LimitReached -> stringResource(R.string.planning_limit_reached)
-        result is CreatePlanningResult.Error -> stringResource(R.string.planning_error_generic)
+        resultMessage != null -> resultMessage
         !once && !everyDay && days.isEmpty() -> stringResource(R.string.planning_error_no_day)
         startMin == endMin -> stringResource(R.string.planning_error_range)
         else -> null
@@ -1084,7 +1255,7 @@ private fun AddPlanningDialog(
 }
 
 @Composable
-private fun DeviceHeader(device: Device) {
+private fun DeviceHeader(device: Device, displayIp: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             imageVector = iconFor(device.type),
@@ -1096,7 +1267,7 @@ private fun DeviceHeader(device: Device) {
         Column {
             Text(device.name, style = MaterialTheme.typography.titleLarge)
             Text(
-                text = device.ipAddress,
+                text = displayIp,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontFamily = FontFamily.Monospace,
@@ -1113,8 +1284,20 @@ private fun DeviceHeader(device: Device) {
     }
 }
 
-/** Un des deux emplacements « Perso » ([slot] = 1 ou 2). Null = emplacement vide. */
-private data class PersonalPreset(val slot: Int, val name: String?, val durationSeconds: Int?, val thresholdW: Int?)
+/**
+ * Un des deux emplacements « Perso » ([slot] = 1 ou 2). Emplacement vide = ni [durationSeconds]
+ * ni [unlimited]. [unlimited] = sans limite de durée, coupure sur seuil uniquement ([thresholdW]
+ * alors toujours non nul) ; [durationSeconds] est alors ignoré (valeur résiduelle possible).
+ */
+private data class PersonalPreset(
+    val slot: Int,
+    val name: String?,
+    val durationSeconds: Int?,
+    val thresholdW: Int?,
+    val unlimited: Boolean = false,
+) {
+    val configured: Boolean get() = durationSeconds != null || unlimited
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1177,7 +1360,7 @@ private fun TimerSection(
                 }
                 // Se glissent juste avant "Manuel" : lancement direct, comme 1h/2h/3h.
                 presets.forEach { p ->
-                    if (p.durationSeconds != null) {
+                    if (p.configured) {
                         OutlinedButton(onClick = { onLaunchPreset(p.slot) }) {
                             Text(p.name ?: stringResource(R.string.timer_preset_chip))
                         }
@@ -1189,10 +1372,16 @@ private fun TimerSection(
             }
 
             presets.forEach { p ->
-                if (p.durationSeconds != null) {
+                if (p.configured) {
                     PersonalPresetRow(
-                        label = stringResource(R.string.timer_preset_row_label, p.name.orEmpty(), durationLabel(p.durationSeconds)),
-                        detail = if (p.thresholdW != null) {
+                        label = if (p.unlimited) {
+                            p.name.orEmpty()
+                        } else {
+                            stringResource(R.string.timer_preset_row_label, p.name.orEmpty(), durationLabel(p.durationSeconds!!))
+                        },
+                        detail = if (p.unlimited) {
+                            stringResource(R.string.timer_preset_unlimited_detail, p.thresholdW ?: 0)
+                        } else if (p.thresholdW != null) {
                             stringResource(R.string.timer_preset_cutoff_detail, p.thresholdW)
                         } else {
                             stringResource(R.string.timer_preset_no_cutoff)
