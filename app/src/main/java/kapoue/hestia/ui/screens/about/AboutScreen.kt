@@ -58,6 +58,8 @@ fun AboutScreen() {
     val activity = context as? Activity
     val fdroidUrl = stringResource(R.string.fdroid_url)
     val gplUrl = stringResource(R.string.gpl_url)
+    val mastodonUrl = stringResource(R.string.mastodon_url)
+    val telegramUrl = stringResource(R.string.telegram_url)
 
     val qrSizePx = with(LocalDensity.current) { 200.dp.roundToPx() }
     val qrBitmap = remember(fdroidUrl) { QrGenerator.generate(fdroidUrl, qrSizePx) }
@@ -127,6 +129,23 @@ fun AboutScreen() {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable { context.openUrl(gplUrl) },
+        )
+
+        // Contact : réseaux sociaux, mêmes liens texte que la licence (pas d'icône de marque).
+        Spacer(Modifier.height(16.dp))
+        Text(stringResource(R.string.about_contact_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+        Text(stringResource(R.string.about_contact_body), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = stringResource(R.string.about_contact_mastodon),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { context.openUrl(mastodonUrl) },
+        )
+        Text(
+            text = stringResource(R.string.about_contact_telegram),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { context.openUrl(telegramUrl) },
         )
 
         // Partage : bouton (texte + lien F-Droid via le système Android) ou QR code, au choix.

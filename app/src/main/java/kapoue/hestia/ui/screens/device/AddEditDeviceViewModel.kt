@@ -11,6 +11,7 @@ import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.LedNightModeState
 import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.common.toUserMessageOrNull
 import kapoue.hestia.ui.navigation.StackedRoutes
@@ -51,6 +52,8 @@ data class AddEditUiState(
     /** True quand l'opération est terminée : l'écran peut se refermer. */
     val done: Boolean = false,
     val isDirty: Boolean = false,
+    /** LED d'état de l'appareil. Null = lecture en cours (mode édition seulement). */
+    val ledState: LedNightModeState? = null,
 )
 
 @HiltViewModel
@@ -80,6 +83,10 @@ class AddEditDeviceViewModel @Inject constructor(
     // hors mode groupé. Utilisé pour appliquer nom/IP/type à l'ensemble à l'enregistrement.
     private var groupMembers: List<Device> = emptyList()
 
+    // Nom du composant LED détecté par le dernier getLedState() réussi — nécessaire pour écrire
+    // avec setLedState() sans re-détecter (nom et casse varient selon le modèle, voir DeviceRepository).
+    private var ledComponent: String? = null
+
     init {
         editingDeviceId?.let { id ->
             viewModelScope.launch {
@@ -103,8 +110,22 @@ class AddEditDeviceViewModel @Inject constructor(
                             ipName = device.ipName, ip2Address = device.ip2Address, ip2Name = device.ip2Name,
                         )
                     }
+                    val (component, ledState) = repository.getLedState(groupMembers)
+                    ledComponent = component
+                    _uiState.update { it.copy(ledState = ledState) }
                 }
             }
+        }
+    }
+
+    /** Bascule la LED — relit l'état réel ensuite plutôt que de le supposer, en cas d'échec compris. */
+    fun onToggleLed(enabled: Boolean) {
+        val component = ledComponent ?: return
+        viewModelScope.launch {
+            repository.setLedState(groupMembers, component, enabled)
+            val (refreshedComponent, ledState) = repository.getLedState(groupMembers)
+            ledComponent = refreshedComponent
+            _uiState.update { it.copy(ledState = ledState) }
         }
     }
 

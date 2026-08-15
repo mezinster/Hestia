@@ -32,6 +32,7 @@ import kapoue.hestia.data.rpc.model.SwitchStatusResult
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.FirmwareCheckResult
+import kapoue.hestia.domain.model.LedNightModeState
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.PresenceWindow
 import kapoue.hestia.domain.model.isActiveNow
@@ -970,6 +971,66 @@ class DeviceRepository @Inject constructor(
         }
     }
 
+    // --- LED d'état (nuit) ---
+
+    /**
+     * Détecte le composant LED réel de l'appareil physique et lit son état — jamais mémorisé
+     * au-delà de l'appel, relu à chaque ouverture de l'écran comme tout le reste chez Hestia. Le
+     * composant n'existe qu'une fois par appareil physique, jamais par canal ([members] sert
+     * uniquement à choisir l'ordre de détection le plus probable — bloc multi-canaux vs prise
+     * solo — et à résoudre l'IP courante). Nom **et casse** du composant variables selon le modèle
+     * (`plugs_ui` en minuscules sur Plug M Gen3, `POWERSTRIP_UI` en majuscules sur Shelly Strip 4,
+     * validé en direct le 2026-08-15) : essaie les combinaisons plausibles jusqu'à la première qui
+     * répond, jamais supposée à l'avance.
+     */
+    suspend fun getLedState(members: List<Device>): Pair<String?, LedNightModeState> {
+        val device = members.first()
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return null to LedNightModeState.UNAVAILABLE
+        for (component in ledComponentCandidates(members.size > 1)) {
+            val (_, result) = withIp(device) { ip -> rpcClient.ledUiGetConfig(ip, component) }
+            when (result) {
+                is RpcResult.Success -> {
+                    val nightMode = result.value.leds?.nightMode
+                    val state = if (nightMode?.enable == true && nightMode.brightness <= 0.0) {
+                        LedNightModeState.OFF
+                    } else {
+                        LedNightModeState.ON
+                    }
+                    return component to state
+                }
+                // Injoignable : inutile d'essayer les autres noms, l'appareil ne répondra pas plus.
+                is RpcResult.Failure -> return null to LedNightModeState.UNAVAILABLE
+                // Mauvais nom/casse pour ce composant sur ce modèle : essai suivant.
+                is RpcResult.RpcError -> continue
+            }
+        }
+        return null to LedNightModeState.UNAVAILABLE
+    }
+
+    /**
+     * Réécrit `night_mode` en entier. [enabled] = « allumée, réduite à [LED_NIGHT_BRIGHTNESS] %
+     * de [LED_NIGHT_WINDOW] » ; sinon éteinte en permanence (0 %, fenêtre couvrant toute la
+     * journée). [component] doit provenir d'un appel [getLedState] réussi pour ce même appareil.
+     */
+    suspend fun setLedState(members: List<Device>, component: String, enabled: Boolean): RpcResult<Unit> {
+        val device = members.first()
+        val brightness = if (enabled) LED_NIGHT_BRIGHTNESS else 0
+        val window = if (enabled) LED_NIGHT_WINDOW else LED_ALWAYS_WINDOW
+        val (_, result) = withIp(device) { ip -> rpcClient.ledUiSetConfig(ip, component, brightness, window) }
+        return when (result) {
+            is RpcResult.Success -> RpcResult.Success(Unit)
+            is RpcResult.RpcError -> result
+            is RpcResult.Failure -> result
+        }
+    }
+
+    /** Ordre d'essai : nom probable en premier selon solo/bloc, casse basse puis haute. */
+    private fun ledComponentCandidates(isGroup: Boolean): List<String> {
+        val primary = if (isGroup) "powerstrip_ui" else "plugs_ui"
+        val secondary = if (isGroup) "plugs_ui" else "powerstrip_ui"
+        return listOf(primary, primary.uppercase(), secondary, secondary.uppercase())
+    }
+
     suspend fun deleteDevice(device: Device) {
         deviceDao.delete(device)
         logger.info(DiagnosticLogger.DB, "Suppression appareil ${device.ipAddress} canal ${device.switchId}")
@@ -1166,5 +1227,10 @@ class DeviceRepository @Inject constructor(
         const val DEFAULT_BUTTON_TIMER_SEC = 1800
         /** Grâce avant surveillance en mode « sans limite de durée » (voir [ChargeScriptGenerator]). */
         const val UNLIMITED_CHARGE_GRACE_SEC = 15 * 60
+        /** LED d'état : intensité et fenêtre nocturne quand allumée (voir [getLedState]). */
+        const val LED_NIGHT_BRIGHTNESS = 30
+        val LED_NIGHT_WINDOW = listOf("22:00", "08:00")
+        /** LED éteinte en permanence : même mécanisme `night_mode`, fenêtre couvrant toute la journée. */
+        val LED_ALWAYS_WINDOW = listOf("00:00", "23:59")
     }
 }

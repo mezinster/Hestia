@@ -1,0 +1,1 @@
+Version 2.1.0. Fixes two issues affecting multi-outlet strips (such as the Shelly Strip 4): the physical button did not always trigger the scheduled timer, and one outlet's settings could in rare cases get mixed up with another outlet's on the same strip. Recommended update if you use this type of device.

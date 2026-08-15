@@ -175,6 +175,28 @@ data class SysStatus(
 )
 
 /**
+ * Réponse de `<composant>.GetConfig` pour le composant LED d'un appareil (`plugs_ui` sur une prise
+ * solo, `powerstrip_ui` sur un bloc multi-canaux — un seul réglage par appareil physique, jamais
+ * par canal). Seul `night_mode` nous intéresse (validé en direct le 2026-08-15 sur Plug M Gen3 et
+ * Shelly Strip 4) : couleurs/mode d'affichage ignorés, jamais modifiés par Hestia.
+ */
+@Serializable
+data class LedUiConfigResult(
+    val leds: LedUiLeds? = null,
+)
+
+@Serializable
+data class LedUiLeds(
+    @SerialName("night_mode") val nightMode: LedNightMode? = null,
+)
+
+@Serializable
+data class LedNightMode(
+    val enable: Boolean = false,
+    val brightness: Double = 100.0,
+)
+
+/**
  * Réponse de Switch.GetStatus (sous-ensemble). Champs du minuteur validés sur Plug M Gen3 :
  * l'appareil ne renvoie PAS de `timer_remaining`, mais `timer_started_at` (epoch Unix, s) et
  * `timer_duration` (s) — le temps restant se calcule à partir de ces deux valeurs.

@@ -1,0 +1,1 @@
+Version 1.1.0. New: schedule a plug for a single date (with optional automatic cutoff), two savable personal presets per plug, optional instant notifications (via ntfy, always off by default), a redesigned presence simulation with multiple time windows, a light/dark theme choice, manual firmware update check, and the app is now available in English.

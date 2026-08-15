@@ -113,24 +113,24 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   aussi fonctionner). Chantier de taille comparable à ntfy en son temps — plusieurs lots à prévoir
   (deep link, cycle de vie des tags, écran de gestion, export PDF pour impression via l'API PDF
   native Android, pas de nouvelle dépendance nécessaire).
-- **Gestion des LED du bloc de prises** (2026-08-14) : un interrupteur LED ON/OFF sur le bloc
-  multi-canaux (ex. Strip 4), et si ON, une intensité réduite (30 %) sur la plage 22h-8h, 100 % le
-  reste du temps. À vérifier avant tout : ce que le composant `PLUGS_UI`/LED de ce matériel expose
-  réellement en RPC (mode, couleur, **intensité variable ou seulement on/off** — utilisé cette
-  session pour changer la couleur/le mode, jamais testé pour une intensité programmable dans le
-  temps). Si l'intensité seule est réglable mais pas planifiable nativement par plage horaire, il
-  faudrait un mécanisme équivalent au planning (deux appels programmés, un à 22h un à 8h) plutôt
-  qu'un simple réglage statique.
-- **Canal de communication Mastodon + Telegram** (2026-08-14) : un compte unique pour tout le
-  portefeuille d'applications (Agora, Telos, Épione, MainTask, Hestia…), avec publication
-  automatique d'un changelog reformulé en langage simple à chaque **release publiée** (jamais à
-  chaque commit), et un point de contact utilisateur accessible sans compétence technique
-  (message privé Telegram, mention Mastodon). Formulation validée pour l'écran À propos :
-  « Signaler un bug ou une suggestion » plutôt qu'une invitation générique façon réseaux sociaux.
-  **Blocage identifié** : la création du compte Mastodon et du bot Telegram (via BotFather) ne peut
-  pas être faite par Claude Code (création de comptes = toujours refusée) — étape manuelle pour
-  David, jetons d'API ensuite fournis pour la publication. Chantier transversal à tout le
-  portefeuille, pas propre à Hestia — probablement une conversation à part plutôt qu'un lot Hestia.
+- **LED d'état par appareil (fait, 2026-08-15)** : interrupteur dans la boîte « Modifier » (solo
+  et bloc), un seul réglage par appareil physique. **ON** = 100 % le jour, réduite à 30 % de 22h à
+  8h ; **OFF** = éteinte en permanence. Entièrement natif au firmware (`night_mode` du composant
+  `plugs_ui`/`powerstrip_ui`), réutilisé pour les deux états (fenêtre 22h-8h à 30 % pour ON, fenêtre
+  toute la journée à 0 % pour OFF) — aucun script, aucune configuration stockée par Hestia. Deux
+  pièges confirmés en direct sur le Strip 4 et le Plug M avant d'écrire le code : le nom du
+  composant diffère selon le modèle (solo vs bloc), **et sa casse aussi** (`plugs_ui` en
+  minuscules, `POWERSTRIP_UI` en majuscules) — `DeviceRepository.getLedState`/`setLedState`
+  essaient les combinaisons plausibles plutôt que d'en figer une.
+- **Canal de communication Mastodon + Telegram (fait, 2026-08-15)** : finalement un **compte
+  dédié par application** plutôt qu'un compte unique pour tout le portefeuille (décision prise en
+  cours de route) — `@hestia_app@mastodon.social` et canal public Telegram `Hestia_app` (posté via
+  le bot `@hestia_app_bot`), même modèle prévu pour les autres applis (Agora, MainTask, Kartapuss,
+  Ignis). Création des comptes forcément manuelle (David) — Claude Code ne crée jamais de compte.
+  Section « Contact » ajoutée à l'À propos (FR/EN) avec liens vers les deux. Publication
+  automatisée en place (jetons API dans `~/.hestia-social.env`, hors dépôt), toujours avec
+  confirmation explicite avant chaque envoi réel — jamais silencieux. Changelogs F-Droid par
+  version rédigés en parallèle (`fastlane/metadata/android/*/changelogs/<versionCode>.txt`).
 
 ## Fait — pour mémoire
 

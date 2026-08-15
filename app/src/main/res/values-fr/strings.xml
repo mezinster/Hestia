@@ -27,6 +27,10 @@
     <string name="about_license_title">Licence</string>
     <string name="about_license">Distribué sous licence GPLv3.</string>
     <string name="about_license_link">(en savoir plus)</string>
+    <string name="about_contact_title">Contact</string>
+    <string name="about_contact_body">Questions, retours, signalements de bug — vous pouvez aussi me joindre ici :</string>
+    <string name="about_contact_mastodon">Mastodon</string>
+    <string name="about_contact_telegram">Telegram</string>
     <string name="about_share_title">Partager l\'application</string>
     <string name="about_share_button">Partager</string>
     <string name="about_share_or">ou</string>
@@ -126,6 +130,10 @@
     <string name="add_device_ip_location_edit">Modifier</string>
     <string name="add_device_ip_location_delete">Supprimer</string>
     <string name="add_device_type_label">Type</string>
+    <string name="add_device_led_title">LED</string>
+    <string name="add_device_led_hint">Allumée à intensité normale le jour, réduite à 30 % de 22h à 8h. Sur Éteint, elle reste éteinte en permanence.</string>
+    <string name="add_device_led_loading">Vérification…</string>
+    <string name="add_device_led_unavailable">Indisponible sur cet appareil, ou injoignable.</string>
     <string name="device_type_plug">Prise</string>
     <string name="device_type_lamp">Lampe</string>
     <string name="device_type_sensor">Capteur</string>

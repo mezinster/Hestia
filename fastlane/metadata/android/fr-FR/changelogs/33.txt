@@ -1,0 +1,1 @@
+Version 2.1.0. Corrige deux problèmes touchant les blocs à plusieurs prises (comme le Shelly Strip 4) : le bouton physique ne déclenchait pas toujours le minuteur programmé, et les réglages d'une prise pouvaient dans de rares cas se mélanger avec ceux d'une autre prise du même bloc. Mise à jour recommandée si vous utilisez ce type d'appareil.

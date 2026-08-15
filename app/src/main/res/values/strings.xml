@@ -27,6 +27,10 @@
     <string name="about_license_title">License</string>
     <string name="about_license">Distributed under the GPLv3 license.</string>
     <string name="about_license_link">(learn more)</string>
+    <string name="about_contact_title">Contact</string>
+    <string name="about_contact_body">Questions, feedback, bug reports — you can also reach me here:</string>
+    <string name="about_contact_mastodon">Mastodon</string>
+    <string name="about_contact_telegram">Telegram</string>
     <string name="about_share_title">Share the app</string>
     <string name="about_share_button">Share</string>
     <string name="about_share_or">or</string>
@@ -35,6 +39,8 @@
     <string name="about_qr_hint_max">Brightness at maximum — Tap to lower</string>
     <string name="gpl_url" translatable="false">https://www.gnu.org/licenses/gpl-3.0.html</string>
     <string name="fdroid_url" translatable="false">https://f-droid.org/packages/kapoue.hestia/</string>
+    <string name="mastodon_url" translatable="false">https://mastodon.social/@hestia_app</string>
+    <string name="telegram_url" translatable="false">https://t.me/Hestia_app</string>
 
     <!-- Réglages -->
     <string name="settings_devices_title">Devices</string>
@@ -128,6 +134,10 @@
     <string name="add_device_ip_location_edit">Edit</string>
     <string name="add_device_ip_location_delete">Delete</string>
     <string name="add_device_type_label">Type</string>
+    <string name="add_device_led_title">LED</string>
+    <string name="add_device_led_hint">Lit at normal brightness during the day, dimmed to 30% from 10pm to 8am. Off toggles it off permanently.</string>
+    <string name="add_device_led_loading">Checking…</string>
+    <string name="add_device_led_unavailable">Unavailable on this device, or unreachable.</string>
     <string name="device_type_plug">Plug</string>
     <string name="device_type_lamp">Lamp</string>
     <string name="device_type_sensor">Sensor</string>

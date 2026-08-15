@@ -4,6 +4,7 @@ import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.rpc.model.CheckForUpdateResult
 import kapoue.hestia.data.rpc.model.ComponentsResult
 import kapoue.hestia.data.rpc.model.DeviceInfoResult
+import kapoue.hestia.data.rpc.model.LedUiConfigResult
 import kapoue.hestia.data.rpc.model.RpcEnvelope
 import kapoue.hestia.data.rpc.model.RpcRequest
 import kapoue.hestia.data.rpc.model.ScheduleCreateResult
@@ -136,6 +137,49 @@ class ShellyRpcClient @Inject constructor(
     /** État complet de l'appareil ; on n'exploite que la section `sys` (horloge). */
     suspend fun getFullStatus(ip: String): RpcResult<ShellyFullStatus> =
         call(ip, "Shelly.GetStatus", null, ShellyFullStatus.serializer())
+
+    // --- LED d'état (composant `plugs_ui`/`powerstrip_ui`, nom et casse variables selon le modèle) ---
+
+    /** [component] = nom exact du composant (ex. `plugs_ui`, `POWERSTRIP_UI`) — voir [DeviceRepository]. */
+    suspend fun ledUiGetConfig(ip: String, component: String): RpcResult<LedUiConfigResult> =
+        call(ip, "$component.GetConfig", null, LedUiConfigResult.serializer())
+
+    /**
+     * Réécrit entièrement `night_mode` (jamais de mise à jour partielle) : [brightness] (0-100) et
+     * [activeBetween] (`["HH:MM","HH:MM"]`) couvrent aussi bien le mode « allumée, réduite la nuit »
+     * (30 %, 22h-8h) que « éteinte en permanence » (0 %, toute la journée) — un seul mécanisme
+     * natif réutilisé pour les deux, validé en direct le 2026-08-15.
+     */
+    suspend fun ledUiSetConfig(
+        ip: String,
+        component: String,
+        brightness: Int,
+        activeBetween: List<String>,
+    ): RpcResult<SetConfigResult> = call(
+        ip,
+        "$component.SetConfig",
+        buildJsonObject {
+            put(
+                "config",
+                buildJsonObject {
+                    put(
+                        "leds",
+                        buildJsonObject {
+                            put(
+                                "night_mode",
+                                buildJsonObject {
+                                    put("enable", true)
+                                    put("brightness", brightness)
+                                    put("active_between", buildJsonArray { activeBetween.forEach { add(it) } })
+                                },
+                            )
+                        },
+                    )
+                },
+            )
+        },
+        SetConfigResult.serializer(),
+    )
 
     // --- Scripting (simulation de présence) ---
 

@@ -30,6 +30,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -56,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.core.util.isValidIpv4
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.LedNightModeState
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.permission.LocalNetworkPermissionStatus
 import kapoue.hestia.ui.permission.PermissionExplanationDialog
@@ -191,6 +193,11 @@ fun AddEditDeviceScreen(
                 selected = state.type,
                 onSelected = viewModel::onTypeChange,
             )
+
+            if (state.isEditMode) {
+                HorizontalDivider()
+                LedSection(state = state.ledState, onToggle = viewModel::onToggleLed)
+            }
 
             // Erreur globale (réseau / RPC / doublon) — message actionnable.
             state.error?.let { message ->
@@ -366,6 +373,37 @@ private fun ChannelSelectionBlock(
                     onCheckedChange = { onToggle(channelId) },
                 )
                 Text(stringResource(R.string.add_device_channel_label, channelId))
+            }
+        }
+    }
+}
+
+/** Interrupteur LED : allumée (réduite la nuit) ou éteinte en permanence, un seul réglage par appareil physique. */
+@Composable
+private fun LedSection(state: LedNightModeState?, onToggle: (Boolean) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = stringResource(R.string.add_device_led_title),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        when (state) {
+            null -> Text(
+                text = stringResource(R.string.add_device_led_loading),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LedNightModeState.UNAVAILABLE -> Text(
+                text = stringResource(R.string.add_device_led_unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.add_device_led_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = state == LedNightModeState.ON, onCheckedChange = onToggle)
             }
         }
     }

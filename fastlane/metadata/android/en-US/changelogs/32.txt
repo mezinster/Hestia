@@ -1,0 +1,1 @@
+Version 2.0.0. New: each device can have a backup second IP address, used automatically if the first stops responding; settings are now grouped by device for multi-outlet strips; a schedule can be paused and resumed later without recreating it; and the timer can now cut power based on consumption only, with no fixed duration limit.
