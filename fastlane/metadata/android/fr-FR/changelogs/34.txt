@@ -1,0 +1,1 @@
+Version 2.2.0. Nouveau : un interrupteur LED par appareil, dans l'écran de modification — allumée à intensité normale le jour et automatiquement réduite la nuit (22h-8h), ou éteinte en permanence si vous préférez. Vous pouvez désormais aussi nous suivre et nous contacter sur Mastodon et Telegram, liens dans l'écran À propos.

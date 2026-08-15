@@ -1,0 +1,1 @@
+Version 2.2.0. New: a per-device LED toggle in the edit screen — lit at normal brightness during the day and automatically dimmed at night (10pm-8am), or off permanently if you prefer. You can now also follow and contact us on Mastodon and Telegram, links in the About screen.

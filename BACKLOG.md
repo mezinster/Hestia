@@ -122,6 +122,16 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   composant diffère selon le modèle (solo vs bloc), **et sa casse aussi** (`plugs_ui` en
   minuscules, `POWERSTRIP_UI` en majuscules) — `DeviceRepository.getLedState`/`setLedState`
   essaient les combinaisons plausibles plutôt que d'en figer une.
+- **Build F-Droid cassé par R8 (trouvé et corrigé, 2026-08-15)** : le build release de la 2.0.0
+  a échoué sur l'infrastructure F-Droid (CI `checkupdates-bot-fdroiddata`) — R8 refusait de
+  continuer sur 4 classes manquantes de `com.google.errorprone.annotations`, référencées par
+  Google Tink (dépendance interne de `androidx.security:security-crypto`, utilisée pour chiffrer
+  le sujet ntfy). Jamais vu en local car seul `assembleDebug` avait été testé — R8 ne tourne que
+  sur la variante `release`. Corrigé par une règle `-dontwarn` dans `proguard-rules.pro` (annotations
+  de compilation uniquement, jamais utilisées à l'exécution), validé ensuite par un vrai
+  `assembleRelease` local réussi. **Conséquence** : les tags 2.0.0 et 2.1.0 resteront cassés sur
+  F-Droid (commit figé, non corrigeable rétroactivement) — la 2.2.0 est la première version à
+  intégrer le correctif.
 - **Canal de communication Mastodon + Telegram (fait, 2026-08-15)** : finalement un **compte
   dédié par application** plutôt qu'un compte unique pour tout le portefeuille (décision prise en
   cours de route) — `@hestia_app@mastodon.social` et canal public Telegram `Hestia_app` (posté via
