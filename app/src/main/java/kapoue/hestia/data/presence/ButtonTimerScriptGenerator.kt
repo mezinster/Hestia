@@ -6,9 +6,15 @@ import kotlinx.serialization.json.Json
 /**
  * Script **persistant** : veille en permanence un appui sur le bouton physique et arme un
  * minuteur natif par-dessus (avec coupure sur seuil optionnelle), sans toucher au comportement
- * natif du bouton — repose sur le champ `source` de `Switch.GetStatus` (`"button"`), pas sur un
- * composant Input (absent sur ce modèle, validé en direct : pas d'appui long/double possible sur
- * ce matériel, le bouton est câblé en dur au relais).
+ * natif du bouton — repose sur le champ `source` de `Switch.GetStatus`, pas sur un composant
+ * Input (absent sur les modèles mono-canal validés en direct : pas d'appui long/double possible
+ * sur ce matériel, le bouton est câblé en dur au relais).
+ *
+ * **La valeur exacte de `source` varie selon le modèle** : `"button"` sur Plug M Gen3 (validé en
+ * direct), `"short_push"` sur Strip 4 (validé en direct après un bug où le script ne s'armait
+ * jamais — la comparaison ne matchait pas). [isButtonSource] accepte les deux, plus les variantes
+ * de pression plausibles (`long_push`, `double_push`, `triple_push`) par prudence, même non
+ * confirmées sur du matériel réel.
  *
  * Contrairement aux autres scripts de coupure (déployés une fois, se désactivent après usage),
  * celui-ci ne se supprime jamais lui-même : après chaque cycle (fin naturelle, coupure sur
@@ -18,7 +24,12 @@ import kotlinx.serialization.json.Json
  */
 object ButtonTimerScriptGenerator {
 
-    const val SCRIPT_NAME = "hestia_button_timer"
+    /**
+     * Nom **par canal** — un appareil multi-canaux (ex. Strip 4) partage un seul moteur de
+     * scripts entre tous ses relais : un nom fixe ferait retrouver/écraser le script d'un autre
+     * canal du même appareil au lieu du sien (bug vécu en direct, corrigé).
+     */
+    fun scriptName(switchId: Int): String = "hestia_button_timer_$switchId"
 
     private const val MARKER = "// hestia_button_timer:"
     private const val BELOW_SEC = 60
@@ -32,8 +43,9 @@ object ButtonTimerScriptGenerator {
      * surveillance, absente sinon (comportement historique inchangé avec une durée).
      *
      * [ntfyTopic] non nul = notifie via ntfy à la fin ([ntfyEndBody]) et à une coupure sur seuil
-     * ([ntfyCutoffBody]). Un appui bouton qui annule le minuteur en cours (source à nouveau
-     * "button" au moment de l'extinction) ne notifie jamais — c'est une action manuelle délibérée.
+     * ([ntfyCutoffBody]). Un appui bouton qui annule le minuteur en cours (source de nouveau un
+     * appui bouton au moment de l'extinction, voir `isButtonSource`) ne notifie jamais — c'est
+     * une action manuelle délibérée.
      */
     fun generate(
         switchId: Int,
@@ -59,6 +71,12 @@ object ButtonTimerScriptGenerator {
         let belowSince = null;
         let onSince = null;
 
+        // La valeur exacte de "source" pour un appui bouton varie selon le modèle de prise
+        // (ex. "button" sur Plug M, "short_push" sur Strip 4) — accepte les variantes plausibles.
+        function isButtonSource(src) {
+          return src === "button" || src === "short_push" || src === "long_push" || src === "double_push" || src === "triple_push";
+        }
+
         Timer.set(1000, true, function () {
           let st = Shelly.getComponentStatus("switch", CFG.switchId);
           if (!st) return;
@@ -66,7 +84,7 @@ object ButtonTimerScriptGenerator {
           if (!armed) {
             // En veille : un appui qui vient d'allumer arme le minuteur par-dessus (ou, sans
             // durée, laisse simplement l'allumage natif du bouton tel quel).
-            if (st.output && !wasOn && st.source === "button") {
+            if (st.output && !wasOn && isButtonSource(st.source)) {
               armed = true;
               belowSince = null;
               onSince = null;
@@ -81,7 +99,7 @@ object ButtonTimerScriptGenerator {
           if (wasOn && !st.output) {
             // Éteinte pendant que le minuteur tournait : fin naturelle, coupure, ou action
             // manuelle. Un nouvel appui bouton pour annuler ne notifie jamais (délibéré).
-            if (st.source !== "button") {
+            if (!isButtonSource(st.source)) {
               $ntfyEnd
             }
             armed = false;

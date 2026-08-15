@@ -15,14 +15,19 @@ import kapoue.hestia.data.notifications.NtfyScriptSupport
  */
 object ChargeScriptGenerator {
 
-    /** Script partagé du minuteur (Manuel/Perso) : un seul à la fois, réutilisé par nom. */
-    const val SCRIPT_NAME = "hestia_charge"
+    /**
+     * Script du minuteur (Manuel/Perso), **par canal** — un seul à la fois par canal, réutilisé
+     * par nom. Un appareil multi-canaux (ex. Strip 4) partage un seul moteur de scripts entre
+     * tous ses relais : un nom fixe ferait retrouver/écraser le script d'un autre canal du même
+     * appareil au lieu du sien (bug vécu en direct avec Bouton physique/Présence, corrigé partout).
+     */
+    fun scriptName(switchId: Int): String = "hestia_charge_$switchId"
 
     private const val MARKER = "// hestia_threshold:"
 
     /**
      * Nom **unique** pour un script de coupure dédié à un planning (jamais partagé, ni entre
-     * plannings, ni avec [SCRIPT_NAME]) : un timestamp suffit à éviter toute collision de nom,
+     * plannings, ni avec [scriptName]) : un timestamp suffit à éviter toute collision de nom,
      * seul l'id du script (retourné par `Script.Create`) compte ensuite pour Hestia.
      */
     fun uniquePlanningScriptName(): String = "hestia_pcut_${System.currentTimeMillis()}"

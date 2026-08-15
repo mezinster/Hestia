@@ -172,8 +172,8 @@ class DeviceRepository @Inject constructor(
     private suspend fun deployTimerNotifyScript(device: Device, topic: String, body: String) {
         val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
         val scripts = listResult.getOrNull()?.scripts ?: return
-        val scriptId = scripts.firstOrNull { it.name == TimerNotifyScriptGenerator.SCRIPT_NAME }?.id
-            ?: rpcClient.scriptCreate(ip, TimerNotifyScriptGenerator.SCRIPT_NAME).getOrNull()?.id
+        val scriptId = scripts.firstOrNull { it.name == TimerNotifyScriptGenerator.scriptName(device.switchId) }?.id
+            ?: rpcClient.scriptCreate(ip, TimerNotifyScriptGenerator.scriptName(device.switchId)).getOrNull()?.id
             ?: return
         rpcClient.scriptStop(ip, scriptId)
         val code = TimerNotifyScriptGenerator.generate(device.switchId, scriptId, topic, device.name, body)
@@ -185,7 +185,7 @@ class DeviceRepository @Inject constructor(
     /** Supprime le script de notif de fin de minuteur s'il existe (best-effort). */
     private suspend fun removeTimerNotifyScript(device: Device) {
         val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
-        listResult.getOrNull()?.scripts?.firstOrNull { it.name == TimerNotifyScriptGenerator.SCRIPT_NAME }?.let {
+        listResult.getOrNull()?.scripts?.firstOrNull { it.name == TimerNotifyScriptGenerator.scriptName(device.switchId) }?.let {
             rpcClient.scriptStop(ip, it.id)
             rpcClient.scriptDelete(ip, it.id)
         }
@@ -236,9 +236,9 @@ class DeviceRepository @Inject constructor(
     ): RpcResult<Int> {
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
-        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }
+        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.scriptName(switchId) }
         val scriptId = existing?.id ?: run {
-            val create = rpcClient.scriptCreate(ip, ChargeScriptGenerator.SCRIPT_NAME)
+            val create = rpcClient.scriptCreate(ip, ChargeScriptGenerator.scriptName(switchId))
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
         }
@@ -271,7 +271,7 @@ class DeviceRepository @Inject constructor(
     suspend fun cutoffScriptFired(device: Device): Boolean {
         val (_, listResult) = withIp(device) { ip -> rpcClient.scriptList(ip) }
         val entry = listResult.getOrNull()?.scripts
-            ?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }
+            ?.firstOrNull { it.name == ChargeScriptGenerator.scriptName(device.switchId) }
         return entry != null && !entry.running
     }
 
@@ -281,7 +281,7 @@ class DeviceRepository @Inject constructor(
      */
     suspend fun cancelTimer(device: Device): RpcResult<Unit> {
         val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
-        listResult.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SCRIPT_NAME }?.let {
+        listResult.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.scriptName(device.switchId) }?.let {
             rpcClient.scriptStop(ip, it.id)
             rpcClient.scriptDelete(ip, it.id)
         }
@@ -319,7 +319,7 @@ class DeviceRepository @Inject constructor(
         val (_, r) = withIp(device) { ip -> rpcClient.scriptList(ip) }
         return when (r) {
             is RpcResult.Success -> {
-                val entry = r.value.scripts.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
+                val entry = r.value.scripts.firstOrNull { it.name == PresenceScriptGenerator.scriptName(device.switchId) }
                 RpcResult.Success(
                     PresenceState(deployed = entry != null, running = entry?.running == true, scriptId = entry?.id),
                 )
@@ -334,7 +334,7 @@ class DeviceRepository @Inject constructor(
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(emptyList())
         val (ip, list) = withIp(device) { i -> rpcClient.scriptList(i) }
         list.errorOrNull()?.let { return it }
-        val entry = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
+        val entry = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.scriptName(device.switchId) }
             ?: return RpcResult.Success(emptyList())
         return when (val code = rpcClient.scriptGetCode(ip, entry.id)) {
             is RpcResult.Success -> RpcResult.Success(PresenceScriptGenerator.parse(code.value.data).orEmpty())
@@ -355,9 +355,9 @@ class DeviceRepository @Inject constructor(
 
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
-        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
+        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.scriptName(device.switchId) }
         val scriptId = existing?.id ?: run {
-            val create = rpcClient.scriptCreate(ip, PresenceScriptGenerator.SCRIPT_NAME)
+            val create = rpcClient.scriptCreate(ip, PresenceScriptGenerator.scriptName(device.switchId))
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
         }
@@ -383,7 +383,7 @@ class DeviceRepository @Inject constructor(
     suspend fun stopPresence(device: Device): RpcResult<Unit> {
         val (ip, list) = withIp(device) { i -> rpcClient.scriptList(i) }
         list.errorOrNull()?.let { return it }
-        val entry = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
+        val entry = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.scriptName(device.switchId) }
         if (entry != null) {
             rpcClient.scriptStop(ip, entry.id)
             rpcClient.scriptDelete(ip, entry.id).errorOrNull()?.let { return it }
@@ -401,7 +401,7 @@ class DeviceRepository @Inject constructor(
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
         val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
         val entry = listResult.getOrNull()?.scripts
-            ?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME }
+            ?.firstOrNull { it.name == ButtonTimerScriptGenerator.scriptName(device.switchId) }
             ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
         val code = rpcClient.scriptGetCode(ip, entry.id).getOrNull()?.data
             ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
@@ -417,7 +417,7 @@ class DeviceRepository @Inject constructor(
     suspend fun setButtonTimer(device: Device, enabled: Boolean, durationSeconds: Int?, thresholdW: Int?): RpcResult<Unit> {
         val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
         val existing = listResult.getOrNull()?.scripts
-            ?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME }
+            ?.firstOrNull { it.name == ButtonTimerScriptGenerator.scriptName(device.switchId) }
 
         if (!enabled) {
             existing?.let {
@@ -428,7 +428,7 @@ class DeviceRepository @Inject constructor(
         }
 
         val scriptId = existing?.id ?: run {
-            val create = rpcClient.scriptCreate(ip, ButtonTimerScriptGenerator.SCRIPT_NAME)
+            val create = rpcClient.scriptCreate(ip, ButtonTimerScriptGenerator.scriptName(device.switchId))
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
         }

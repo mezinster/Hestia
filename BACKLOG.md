@@ -261,6 +261,19 @@ Points sortis du backlog, avec ce qui a été tranché :
     autres (ils partagent la même prise physique). Point non tranché, à surveiller à l'usage : le
     type (Prise/Lampe/Capteur) est uniformisé sur tout le bloc par ce même écran, pas réglable par
     canal.
+  - **Deux bugs multi-canaux trouvés en direct sur Strip 4, corrigés (2026-08-15)** :
+    - **Collision de nom de script entre canaux** : le moteur de scripts Shelly est partagé par
+      tout l'appareil physique (pas un par canal) — les quatre générateurs (`ButtonTimer`,
+      `Charge`, `Presence`, `TimerNotify`) utilisaient un nom de script fixe, retrouvé/écrasé
+      d'un canal à l'autre du même appareil au lieu d'être propre à chacun. Diagnostiqué via
+      `Script.List`/`Script.GetCode` en direct (deux scripts distincts ciblant le même canal).
+      Corrigé : nom de script désormais suffixé par le canal (`hestia_xxx_<switchId>`) partout,
+      y compris dans `DeviceRepository` (tous les points d'appel).
+    - **Bouton physique du bloc prise inopérant** : `Switch.GetStatus.source` vaut `"button"` sur
+      Plug M Gen3 mais `"short_push"` sur Strip 4 — le script de minuteur bouton ne s'armait
+      donc jamais sur ce second modèle (programmation posée, mais ni durée ni seuil n'agissaient).
+      Corrigé par un helper `isButtonSource(src)` acceptant les deux valeurs confirmées en direct,
+      plus `long_push`/`double_push`/`triple_push` par prudence (non vérifiées sur du matériel réel).
   - Spinner de rafraîchissement automatique du Tableau (toutes les 5 s) : ne doit plus jamais
     apparaître hors tirage manuel, quelle que soit la durée du cycle — l'indicateur temporisé
     précédent (déclenché après 600 ms si un appareil traînait) est retiré.

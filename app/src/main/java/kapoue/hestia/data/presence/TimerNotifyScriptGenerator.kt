@@ -11,7 +11,13 @@ import kapoue.hestia.data.notifications.NtfyScriptSupport
  */
 object TimerNotifyScriptGenerator {
 
-    const val SCRIPT_NAME = "hestia_timer_notify"
+    /**
+     * Nom **par canal** — un appareil multi-canaux (ex. Strip 4) partage un seul moteur de
+     * scripts entre tous ses relais : un nom fixe ferait retrouver/écraser le script d'un autre
+     * canal du même appareil au lieu du sien (bug vécu en direct avec [ButtonTimerScriptGenerator]
+     * et [PresenceScriptGenerator], corrigé partout en même temps).
+     */
+    fun scriptName(switchId: Int): String = "hestia_timer_notify_$switchId"
 
     fun generate(switchId: Int, selfId: Int, ntfyTopic: String, ntfyTitle: String, ntfyBody: String): String {
         val ntfyStatement = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyBody)

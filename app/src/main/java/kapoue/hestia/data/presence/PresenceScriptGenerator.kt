@@ -18,8 +18,13 @@ import kotlinx.serialization.json.Json
  */
 object PresenceScriptGenerator {
 
-    /** Nom réservé du script Hestia. Ne jamais toucher un script portant un autre nom. */
-    const val SCRIPT_NAME = "hestia_presence"
+    /**
+     * Nom réservé du script Hestia, **par canal** — un appareil multi-canaux (ex. Strip 4) partage
+     * un seul moteur de scripts entre tous ses relais : un nom fixe ferait retrouver/écraser le
+     * script d'un autre canal du même appareil au lieu du sien (bug vécu en direct, corrigé).
+     * Ne jamais toucher un script portant un autre nom.
+     */
+    fun scriptName(switchId: Int): String = "hestia_presence_$switchId"
 
     private const val MARKER = "// hestia_windows:"
 
