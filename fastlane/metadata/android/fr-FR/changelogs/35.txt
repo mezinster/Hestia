@@ -1,0 +1,1 @@
+Version 2.2.1. Correctif : le champ de nom personnalisé des réglages Manuel/Perso/Bouton physique acceptait trop peu de caractères, il en accepte désormais davantage.

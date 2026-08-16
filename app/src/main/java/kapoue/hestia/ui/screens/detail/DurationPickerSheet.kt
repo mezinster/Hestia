@@ -181,4 +181,4 @@ fun DurationPickerSheet(
 
 private val CUTOFF_THRESHOLDS_W = listOf(5, 10, 20, 30, 40, 50)
 private const val DEFAULT_THRESHOLD_W = 10
-private const val MAX_NAME_LENGTH = 20
+private const val MAX_NAME_LENGTH = 26

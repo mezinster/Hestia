@@ -1,8 +1,8 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-08-14 (regroupement multi-canaux + nom d'appareil stable, pause de
-planning, minuteur sans limite de durée, F-Droid 2.0.0).
+Dernière mise à jour : 2026-08-15 (LED d'état par appareil, contact réseaux sociaux, correctif
+build F-Droid R8/Tink, revue firmware Shelly 2.0.0).
 
 ## Fait — en cours (à surveiller)
 
@@ -74,8 +74,8 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   volontairement pour ne pas alourdir l'app pour un usage occasionnel. Deux idées écartées pour
   le même besoin : notifications ntfy (résout la notification à distance, pas la lecture de
   puissance) ; VPN personnel type Tailscale (fonctionnerait déjà, hors périmètre d'Hestia).
-- **Fonctions liées au firmware 2.0.0** (compteurs d'usage natifs du Switch, paramètre `tag` sur
-  les commandes, `Script.addRpcHandler`) : évoquées le 2026-07-29, revues le 2026-08-14 — plus
+- **Fonctions liées au firmware Shelly 2.0.0** (compteurs d'usage natifs du Switch, paramètre `tag`
+  sur les commandes, `Script.addRpcHandler`) : évoquées le 2026-07-29, revues le 2026-08-14 — plus
   « écartées » mais pas encore planifiées. Principe retenu pour quand on s'y attaque : Hestia part
   du principe que l'utilisateur met ses appareils à jour, **pas de rétrocompatibilité artificielle
   à maintenir**. Chaque fonction propre à 2.0.0 vérifie juste la version installée (déjà lue en
@@ -83,6 +83,16 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   dessous, message clair invitant à mettre à jour via le bouton « Vérifier une mise à jour » déjà
   existant (qui, lui, reste seul à contacter les serveurs Shelly, toujours manuel). Pas de scan de
   capacités RPC au cas par cas (jugé inutilement lourd) — juste ce test de version.
+  **Revue complète du changelog officiel le 2026-08-15**, points supplémentaires identifiés :
+  alarmes seuil natives sur EM/EM1/PM1 (recoupe la coupure sur seuil actuelle, gérée par script
+  maison — à voir si ça la simplifierait, matériel EM/PM différent d'un Switch classique donc pas
+  garanti applicable) ; réglages LED du PowerStrip **Gen4** en interface web native (à vérifier le
+  jour où un Strip Gen4 est testé — schéma RPC potentiellement différent de ce qu'on a validé sur
+  Gen3 pour la LED d'état) ; objet `alt` dans `CheckForUpdate` (pourrait enrichir l'écran firmware
+  existant). **Point de vigilance repéré, pas un bug vécu** : la 2.0.0 ajoute un redirect HTTP→HTTPS
+  automatique quand la sécurité renforcée (`enhanced_security`) est activée côté appareil — si un
+  utilisateur l'active un jour, les appels HTTP en clair d'Hestia (`cleartextTrafficPermitted`)
+  pourraient casser. Aucun de nos appareils de test ne l'a activée pour l'instant.
 - **Trouver l'IP du hotspot directement depuis Hestia** (2026-08-14) : un bouton « Trouver l'IP »
   par champ IP, qui interroge l'admin de la prise (`192.168.33.1`) pendant qu'elle est encore en
   mode point d'accès, pour lire l'IP qu'elle vient d'obtenir sur le réseau cible. Ne fonctionne que
@@ -113,35 +123,6 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   aussi fonctionner). Chantier de taille comparable à ntfy en son temps — plusieurs lots à prévoir
   (deep link, cycle de vie des tags, écran de gestion, export PDF pour impression via l'API PDF
   native Android, pas de nouvelle dépendance nécessaire).
-- **LED d'état par appareil (fait, 2026-08-15)** : interrupteur dans la boîte « Modifier » (solo
-  et bloc), un seul réglage par appareil physique. **ON** = 100 % le jour, réduite à 30 % de 22h à
-  8h ; **OFF** = éteinte en permanence. Entièrement natif au firmware (`night_mode` du composant
-  `plugs_ui`/`powerstrip_ui`), réutilisé pour les deux états (fenêtre 22h-8h à 30 % pour ON, fenêtre
-  toute la journée à 0 % pour OFF) — aucun script, aucune configuration stockée par Hestia. Deux
-  pièges confirmés en direct sur le Strip 4 et le Plug M avant d'écrire le code : le nom du
-  composant diffère selon le modèle (solo vs bloc), **et sa casse aussi** (`plugs_ui` en
-  minuscules, `POWERSTRIP_UI` en majuscules) — `DeviceRepository.getLedState`/`setLedState`
-  essaient les combinaisons plausibles plutôt que d'en figer une.
-- **Build F-Droid cassé par R8 (trouvé et corrigé, 2026-08-15)** : le build release de la 2.0.0
-  a échoué sur l'infrastructure F-Droid (CI `checkupdates-bot-fdroiddata`) — R8 refusait de
-  continuer sur 4 classes manquantes de `com.google.errorprone.annotations`, référencées par
-  Google Tink (dépendance interne de `androidx.security:security-crypto`, utilisée pour chiffrer
-  le sujet ntfy). Jamais vu en local car seul `assembleDebug` avait été testé — R8 ne tourne que
-  sur la variante `release`. Corrigé par une règle `-dontwarn` dans `proguard-rules.pro` (annotations
-  de compilation uniquement, jamais utilisées à l'exécution), validé ensuite par un vrai
-  `assembleRelease` local réussi. **Conséquence** : les tags 2.0.0 et 2.1.0 resteront cassés sur
-  F-Droid (commit figé, non corrigeable rétroactivement) — la 2.2.0 est la première version à
-  intégrer le correctif.
-- **Canal de communication Mastodon + Telegram (fait, 2026-08-15)** : finalement un **compte
-  dédié par application** plutôt qu'un compte unique pour tout le portefeuille (décision prise en
-  cours de route) — `@hestia_app@mastodon.social` et canal public Telegram `Hestia_app` (posté via
-  le bot `@hestia_app_bot`), même modèle prévu pour les autres applis (Agora, MainTask, Kartapuss,
-  Ignis). Création des comptes forcément manuelle (David) — Claude Code ne crée jamais de compte.
-  Section « Contact » ajoutée à l'À propos (FR/EN) avec liens vers les deux. Publication
-  automatisée en place (jetons API dans `~/.hestia-social.env`, hors dépôt), toujours avec
-  confirmation explicite avant chaque envoi réel — jamais silencieux. Changelogs F-Droid par
-  version rédigés en parallèle (`fastlane/metadata/android/*/changelogs/<versionCode>.txt`).
-
 ## Fait — pour mémoire
 
 Points sortis du backlog, avec ce qui a été tranché :
@@ -287,3 +268,32 @@ Points sortis du backlog, avec ce qui a été tranché :
   - Spinner de rafraîchissement automatique du Tableau (toutes les 5 s) : ne doit plus jamais
     apparaître hors tirage manuel, quelle que soit la durée du cycle — l'indicateur temporisé
     précédent (déclenché après 600 ms si un appareil traînait) est retiré.
+- **LED d'état par appareil** (2026-08-15) : interrupteur dans la boîte « Modifier » (solo
+  et bloc), un seul réglage par appareil physique. **ON** = 100 % le jour, réduite à 30 % de 22h à
+  8h ; **OFF** = éteinte en permanence. Entièrement natif au firmware (`night_mode` du composant
+  `plugs_ui`/`powerstrip_ui`), réutilisé pour les deux états (fenêtre 22h-8h à 30 % pour ON, fenêtre
+  toute la journée à 0 % pour OFF) — aucun script, aucune configuration stockée par Hestia. Deux
+  pièges confirmés en direct sur le Strip 4 et le Plug M avant d'écrire le code : le nom du
+  composant diffère selon le modèle (solo vs bloc), **et sa casse aussi** (`plugs_ui` en
+  minuscules, `POWERSTRIP_UI` en majuscules) — `DeviceRepository.getLedState`/`setLedState`
+  essaient les combinaisons plausibles plutôt que d'en figer une.
+- **Build F-Droid cassé par R8, trouvé et corrigé** (2026-08-15) : le build release de la 2.0.0
+  a échoué sur l'infrastructure F-Droid (CI `checkupdates-bot-fdroiddata`) — R8 refusait de
+  continuer sur 4 classes manquantes de `com.google.errorprone.annotations`, référencées par
+  Google Tink (dépendance interne de `androidx.security:security-crypto`, utilisée pour chiffrer
+  le sujet ntfy). Jamais vu en local car seul `assembleDebug` avait été testé — R8 ne tourne que
+  sur la variante `release`. Corrigé par une règle `-dontwarn` dans `proguard-rules.pro` (annotations
+  de compilation uniquement, jamais utilisées à l'exécution), validé ensuite par un vrai
+  `assembleRelease` local réussi. **Conséquence** : les tags 2.0.0 et 2.1.0 resteront cassés sur
+  F-Droid (commit figé, non corrigeable rétroactivement) — la 2.2.0 est la première version à
+  intégrer le correctif. Signalée par un mainteneur F-Droid via une issue Codeberg le jour même,
+  réponse technique postée avec lien vers le correctif.
+- **Canal de communication Mastodon + Telegram** (2026-08-15) : finalement un **compte
+  dédié par application** plutôt qu'un compte unique pour tout le portefeuille (décision prise en
+  cours de route) — `@hestia_app@mastodon.social` et canal public Telegram `Hestia_app` (posté via
+  le bot `@hestia_app_bot`), même modèle prévu pour les autres applis (Agora, MainTask, Kartapuss,
+  Ignis). Création des comptes forcément manuelle (David) — Claude Code ne crée jamais de compte.
+  Section « Contact » ajoutée à l'À propos (FR/EN) avec liens vers les deux. Publication
+  automatisée en place (jetons API dans `~/.hestia-social.env`, hors dépôt), toujours avec
+  confirmation explicite avant chaque envoi réel — jamais silencieux. Changelogs F-Droid par
+  version rédigés en parallèle (`fastlane/metadata/android/*/changelogs/<versionCode>.txt`).

@@ -1,0 +1,1 @@
+Version 2.2.1. Fix: the custom name field for Manual/Personal/Physical button presets accepted too few characters — it now accepts more.
