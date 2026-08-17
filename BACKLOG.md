@@ -1,8 +1,8 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-08-15 (LED d'état par appareil, contact réseaux sociaux, correctif
-build F-Droid R8/Tink, revue firmware Shelly 2.0.0).
+Dernière mise à jour : 2026-08-17 (refonte du Tableau, lots 1-4/5 ; découverte de la limite de
+3 scripts Shelly par appareil, chantier « script superviseur » à venir).
 
 ## Fait — en cours (à surveiller)
 
@@ -59,6 +59,34 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 - Fusion de Planning et Simulation de présence (switch « simuler une présence », fait apparaître
   la marge aléatoire) — chantier à part, plus invasif, prévu après le reste pour ne pas fragiliser
   une base qui vient de beaucoup bouger.
+- **Refonte du Tableau, lot 5/5 — mise en avant du programme en cours** : codé le 2026-08-17
+  (voir détail en § Fait), mais **pas encore testé/validé** — retour direct au test du Lot 4 à la
+  place. Gardé en l'état, à reprendre au prochain test complet.
+- **Scripts Shelly : limite dure de 3 activés simultanément par appareil, découverte le
+  2026-08-17** — chantier majeur, priorité haute. Diagnostiqué en direct sur le Strip 4 (erreur
+  RPC `-108 "Reached the maximum 3 of enabled scripts"`) en creusant le seuil qui ne coupait pas
+  (Lot 4) : le moteur de scripts Shelly est partagé par **appareil physique**, pas par canal — un
+  bloc à 4 canaux avec un minuteur bouton configuré sur 3 canaux ou plus (usage tout à fait normal
+  d'une multiprise) sature la limite en permanence, bloquant silencieusement toute autre
+  fonctionnalité à base de script sur *n'importe quel* canal du bloc (seuil, présence, notif de
+  fin) — le minuteur natif continue de s'afficher normalement dans l'app car il ne dépend pas du
+  script, ce qui masque complètement le problème côté utilisateur.
+  Concept de correctif **validé en direct par test réel** (script de preuve `hestia_test_multi`
+  sur le Strip 4, lisant l'état du canal 0 et pilotant le canal 2 depuis un seul script — confirmé
+  fonctionnel, `source:"loopback"` observé sur le canal piloté). Direction retenue : **un seul
+  script « superviseur » par fonctionnalité et par appareil physique**, gérant en interne tous ses
+  canaux, au lieu d'un script par canal — ramène la consommation de 4 scripts (pire cas actuel) à
+  1, quel que soit le nombre de canaux. Implique de revoir les générateurs de script (liste de
+  configs par canal au lieu d'un `switchId` unique) et la façon dont `DeviceRepository` lit/écrit
+  la config d'un canal *à l'intérieur* d'un script partagé. Migration nécessaire pour les scripts
+  déjà déployés chez l'utilisateur (à reconfigurer une fois le nouveau système en place).
+  **Élargissement identifié en discutant** : ce même principe « par appareil physique, pas par
+  canal » s'applique déjà, de façon plus ou moins propre, à d'autres fonctions non liées aux
+  scripts — la vérification de mise à jour firmware et le redémarrage de l'appareil, aujourd'hui
+  dupliqués à l'identique sur l'écran Détail de chacun des canaux d'un même bloc (confirmé dans le
+  code, `DetailScreen` étant par canal). L'idée est de profiter de cette refonte pour clarifier
+  partout dans Hestia ce qui relève du canal individuel vs de l'appareil physique, pas seulement
+  pour les scripts.
 
 ## Fonctionnalités futures
 
@@ -268,6 +296,58 @@ Points sortis du backlog, avec ce qui a été tranché :
   - Spinner de rafraîchissement automatique du Tableau (toutes les 5 s) : ne doit plus jamais
     apparaître hors tirage manuel, quelle que soit la durée du cycle — l'indicateur temporisé
     précédent (déclenché après 600 ms si un appareil traînait) est retiré.
+- **Refonte du Tableau, lot 1/5 — permission réseau en message global** (2026-08-17) : retiré
+  l'état « Permission requise » par tuile (`TileStatus.PermissionRequired` supprimé du modèle
+  partagé, tuiles concernées basculées en `Offline`), remplacé par un bandeau unique en tête du
+  Tableau quand la permission manque, avec la même action que la section Réglages (ouvre
+  directement les réglages système, ne redemande jamais la permission depuis l'app). Écran Détail
+  aligné sur le même principe (repli sur l'état « Hors ligne », pas de message dédié — il n'est
+  accessible qu'après être passé par le Tableau, où le bandeau est déjà visible). Prélude à la
+  refonte visuelle complète des tuiles (lots 2 à 5 : anatomie de la tuile solo, bloc multi-canaux
+  en ligne avec modale, bouton lié au minuteur physique, mise en avant du programme en cours).
+- **Refonte du Tableau, lot 2/5 — anatomie de la tuile solo** (2026-08-17) : cercle inspiré de la
+  vraie prise (deux trous), fond de tuile teinté par état (clair + sombre, nouvelles valeurs
+  `StateColorSet.*Bg`), bouton rond neutre séparé de l'état, consommation en bas à gauche, retrait
+  du picto de type d'appareil sur la tuile, retrait du bouton « Réessayer » (le rafraîchissement
+  auto 5 s + le tirage manuel suffisent). Deux couleurs distinctes et volontairement indépendantes :
+  l'anneau du cercle reflète le fait physique (courant ou non), le fond/texte reflète le régime
+  (actif seul / piloté par un programme / éteint / indisponible) — ex. une présence en pause reste
+  « Planifié » en orange même si l'anneau est gris à cet instant. Libellés simplifiés : « Planifié »
+  unifie minuteur/présence/planning sur la tuile (l'écran Détail garde ses libellés précis, via
+  `StatusBadge`, non touché) ; « Éteint » remplace « Repos » ; « Indisponible » remplace
+  « Hors ligne » partout. Point laissé en suspens : le petit picto de type au-dessus de la tuile
+  (en-tête de groupe) n'a pas été retiré, jamais explicitement inclus dans les échanges sur la
+  tuile elle-même — à trancher.
+- **Refonte du Tableau, lot 3/5 — bloc multi-canaux en ligne** (2026-08-17) : la grille 2×2 par
+  canal est remplacée par une seule ligne de petits cercles (`DeviceStripRow`), façon vraie
+  multiprise. Chaque cercle reprend l'anneau/les trous du cercle solo, avec nom (10 caractères
+  max, tronqué sans « … ») et état sur deux lignes en dessous — jamais de couleur seule, même à
+  cette échelle. Pas de bouton ON/OFF direct sur le Tableau pour un canal de bloc (contrairement à
+  une prise seule) : le tap ouvre une modale (`ChannelQuickSheet`, bottom sheet) avec conso,
+  interrupteur, état complet, et un lien « Voir le détail » vers l'écran complet (plannings,
+  présence, seuils — hors du périmètre de la modale).
+- **Refonte du Tableau, lot 4/5 — bouton app relié au minuteur physique** (2026-08-17) : allumer
+  depuis le bouton rond de l'app (tuile solo ou modale du bloc) relit d'abord le minuteur configuré
+  pour le bouton physique de l'appareil et reproduit exactement son comportement — durée seule,
+  durée + seuil, ou seuil sans limite de durée — via les fonctions déjà existantes (`startTimer`/
+  `startChargeTimer`/`startUnlimitedChargeTimer`, réutilisées telles quelles, aucune nouvelle
+  fonction repository). Sans minuteur bouton configuré, allumage classique inchangé. Éteindre reste
+  toujours un `Switch.Set` direct, jamais concerné, quel que soit ce qui a déclenché l'allumage.
+  Limite connue et assumée : le script du minuteur bouton distingue une annulation volontaire d'une
+  fin naturelle via le champ `source`, détecté par le matériel — un allumage déclenché depuis l'app
+  ne peut pas se faire passer pour un appui physique ; seule la formulation d'une notification de
+  fin pourrait en être affectée, jamais l'action elle-même (coupure toujours effective).
+- **Correctif couleur de fond, retour de test réel** (2026-08-17) : le fond de la tuile (et des
+  petits cercles du bloc) suit désormais **toujours** le fait physique (vert si le courant passe,
+  gris sinon), même quand un programme est en cours — plus de fond orange pour « Planifié »,
+  jugé source de confusion en usage réel sur le Strip 4. La nuance « un programme pilote la
+  prise » reste lisible, mais uniquement dans le texte (« Planifié » en orange), jamais dans le
+  fond. `StateColorSet.timedBg` retiré (devenu inutilisé).
+- **Refonte du Tableau, lots 1 à 4/5** (2026-08-17) : permission en message global, tuile solo
+  façon vraie prise, bloc multi-canaux en ligne + modale, bouton app lié au minuteur physique —
+  livrés et validés en test réel sur Pixel/Sony, Plug M et Strip 4. **Le lot 5/5 (mise en avant du
+  programme en cours) est codé mais pas encore testé** — voir § En cours de traitement, gardé en
+  l'état intentionnellement pour l'instant.
 - **LED d'état par appareil** (2026-08-15) : interrupteur dans la boîte « Modifier » (solo
   et bloc), un seul réglage par appareil physique. **ON** = 100 % le jour, réduite à 30 % de 22h à
   8h ; **OFF** = éteinte en permanence. Entièrement natif au firmware (`night_mode` du composant

@@ -1,8 +1,6 @@
 package kapoue.hestia.ui.screens.dashboard
 
 import android.os.SystemClock
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,11 +20,15 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ViewModule
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -43,8 +45,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -56,7 +56,7 @@ import kapoue.hestia.R
 import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.ui.permission.LocalNetworkPermission
-import kapoue.hestia.ui.permission.PermissionExplanationDialog
+import kapoue.hestia.ui.theme.stateColors
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -68,20 +68,14 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val permissionUsable by viewModel.permissionUsable.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var showPermissionDialog by remember { mutableStateOf(false) }
     // Bascule demandée sur une prise pilotée par une simulation : en attente de confirmation.
     var pendingToggle by remember { mutableStateOf<PendingToggle?>(null) }
-
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        val usable = granted || !LocalNetworkPermission.isRequired
-        viewModel.updatePermission(usable)
-        viewModel.refresh()
-    }
+    // Modale rapide d'un canal tapé dans un bloc multi-prises (conso, interrupteur, état).
+    var quickSheetTile by remember { mutableStateOf<TileUiState?>(null) }
 
     // Compteur de secondes pour décrémenter les comptes à rebours localement.
     var elapsedNow by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
@@ -154,7 +148,11 @@ fun DashboardScreen(
                     .background(MaterialTheme.colorScheme.primary),
             )
 
-            if (uiState.tiles.isEmpty()) {
+            if (!permissionUsable) {
+                // Aucune tuile tant que la permission manque : rien à en tirer sans elle, le
+                // bandeau seul porte le message et l'action.
+                PermissionBanner()
+            } else if (uiState.tiles.isEmpty()) {
                 EmptyDashboard(onAddDevice = onAddDevice)
             } else {
                 PullToRefreshBox(
@@ -170,53 +168,53 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxSize(),
                     ) {
                         uiState.tiles.forEach { tile ->
-                            if (tile.isFirstInGroup) {
+                            // Plus d'en-tête de groupe séparée (picto + nom) au-dessus des
+                            // tuiles : pour une prise seule ça doublait le nom déjà affiché dans
+                            // la tuile ; pour un bloc, le nom du bloc est désormais affiché en
+                            // titre à l'intérieur de la ligne de cercles elle-même.
+                            if (tile.isFirstInGroup && tile.isMultiChannel) {
+                                // Bloc multi-canaux : une seule ligne de cercles pour tout le
+                                // groupe (façon vraie multiprise), pas une tuile par canal — le
+                                // détail de chaque canal s'ouvre dans une modale au tap.
+                                val members = uiState.tiles.filter { it.device.ipAddress == tile.device.ipAddress }
                                 item(
-                                    key = "group-${tile.device.id}",
+                                    key = "strip-${tile.device.id}",
                                     span = { GridItemSpan(maxLineSpan) },
                                 ) {
-                                    DeviceGroupHeader(
-                                        label = tile.groupLabel,
-                                        icon = if (tile.isMultiChannel) Icons.Filled.ViewModule else iconFor(tile.device.type),
+                                    DeviceStripRow(
+                                        groupLabel = tile.groupLabel,
+                                        members = members,
+                                        elapsedNow = elapsedNow,
+                                        onTapChannel = { quickSheetTile = it },
                                     )
                                 }
                             }
-                            item(key = tile.device.id) {
-                                DeviceTile(
-                                    tile = tile,
-                                    elapsedNow = elapsedNow,
-                                    onToggle = { turnOn ->
-                                        // Une simulation en cours reprendrait la main : on demande
-                                        // d'abord si l'on doit l'arrêter, plutôt que de laisser
-                                        // l'utilisateur croire à un interrupteur défaillant.
-                                        val running = tile.presence
-                                        if (running != null) {
-                                            pendingToggle = PendingToggle(tile.device, turnOn, running)
-                                        } else {
-                                            viewModel.toggle(tile.device, turnOn)
-                                        }
-                                    },
-                                    onRetry = { viewModel.retry(tile.device) },
-                                    onGrantPermission = { showPermissionDialog = true },
-                                    onOpenDetail = { onOpenDetail(tile.device.id) },
-                                    onPlanningWindowEnded = { viewModel.refresh(force = true) },
-                                )
+                            if (!tile.isMultiChannel) {
+                                item(key = tile.device.id) {
+                                    DeviceTile(
+                                        tile = tile,
+                                        elapsedNow = elapsedNow,
+                                        onToggle = { turnOn ->
+                                            // Une simulation en cours reprendrait la main : on demande
+                                            // d'abord si l'on doit l'arrêter, plutôt que de laisser
+                                            // l'utilisateur croire à un interrupteur défaillant.
+                                            val running = tile.presence
+                                            if (running != null) {
+                                                pendingToggle = PendingToggle(tile.device, turnOn, running)
+                                            } else {
+                                                viewModel.toggle(tile.device, turnOn)
+                                            }
+                                        },
+                                        onOpenDetail = { onOpenDetail(tile.device.id) },
+                                        onPlanningWindowEnded = { viewModel.refresh(force = true) },
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
-
-    if (showPermissionDialog) {
-        PermissionExplanationDialog(
-            onContinue = {
-                showPermissionDialog = false
-                permissionLauncher.launch(LocalNetworkPermission.NAME)
-            },
-            onDismiss = { showPermissionDialog = false },
-        )
     }
 
     pendingToggle?.let { pending ->
@@ -229,6 +227,29 @@ fun DashboardScreen(
             onDismiss = { pendingToggle = null },
         )
     }
+
+    quickSheetTile?.let { tile ->
+        ChannelQuickSheet(
+            tile = tile,
+            elapsedNow = elapsedNow,
+            onToggle = { turnOn ->
+                // Même garde-fou que la tuile solo : une simulation en cours reprendrait la
+                // main, on demande d'abord si l'on doit l'arrêter.
+                val running = tile.presence
+                quickSheetTile = null
+                if (running != null) {
+                    pendingToggle = PendingToggle(tile.device, turnOn, running)
+                } else {
+                    viewModel.toggle(tile.device, turnOn)
+                }
+            },
+            onOpenDetail = {
+                quickSheetTile = null
+                onOpenDetail(tile.device.id)
+            },
+            onDismiss = { quickSheetTile = null },
+        )
+    }
 }
 
 /** Bascule demandée sur une prise pilotée par une simulation, en attente de confirmation. */
@@ -237,6 +258,45 @@ private data class PendingToggle(
     val turnOn: Boolean,
     val presence: PresenceInfo,
 )
+
+/**
+ * Bandeau global (pas de tuile dédiée) quand la permission réseau local manque — même style et
+ * même action que [kapoue.hestia.ui.screens.settings.SettingsScreen]'s PermissionSection :
+ * ouvre directement les réglages système, sans redemander la permission depuis l'app.
+ */
+@Composable
+private fun PermissionBanner() {
+    val context = LocalContext.current
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Filled.WifiOff,
+                contentDescription = null,
+                tint = MaterialTheme.stateColors.offlineLed,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.size(10.dp))
+            Text(
+                text = stringResource(R.string.dashboard_permission_banner),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = { LocalNetworkPermission.openAppSettings(context) }) {
+                Icon(Icons.Filled.Settings, contentDescription = stringResource(R.string.settings_permission_open_system))
+            }
+        }
+    }
+}
 
 /**
  * Prévient que la prise est pilotée par un programme avant d'agir sur l'interrupteur, et
@@ -279,36 +339,6 @@ private fun PresenceToggleDialog(
             }
         },
     )
-}
-
-/**
- * En-tête au-dessus du ou des canaux d'un appareil physique : son nom (celui de Réglages, pas le
- * modèle technique) + un picto — le picto « bloc groupé » pour un appareil multi-canaux (ex.
- * Strip 4), le picto du type d'appareil (prise/lampe/capteur) sinon. Étalé sur toute la largeur
- * de la grille (span), juste au-dessus de son ou ses canaux.
- */
-@Composable
-private fun DeviceGroupHeader(label: String, icon: ImageVector) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp, bottom = 2.dp, start = 4.dp),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp),
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontFamily = FontFamily.Monospace,
-        )
-    }
 }
 
 @Composable

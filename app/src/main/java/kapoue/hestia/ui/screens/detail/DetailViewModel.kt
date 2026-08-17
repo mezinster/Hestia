@@ -57,6 +57,15 @@ class DetailViewModel @Inject constructor(
     private val _pendingThresholdW = MutableStateFlow<Int?>(null)
     val pendingThresholdW: StateFlow<Int?> = _pendingThresholdW.asStateFlow()
 
+    /**
+     * Libellé du minuteur en cours (nom du préréglage Perso, ou durée lisible « 2h » pour un
+     * lancement rapide/Manuel) — le même texte que celui choisi au démarrage ([PendingTimer.label]),
+     * pour que l'écran affiche quel réglage pilote réellement la prise plutôt qu'un texte
+     * générique (2026-08-17).
+     */
+    private val _pendingLabel = MutableStateFlow<String?>(null)
+    val pendingLabel: StateFlow<String?> = _pendingLabel.asStateFlow()
+
     /** Simulation de présence réellement active (pour la gestion du conflit avec le minuteur). */
     private val _presenceActive = MutableStateFlow(false)
     val presenceActive: StateFlow<Boolean> = _presenceActive.asStateFlow()
@@ -162,7 +171,9 @@ class DetailViewModel @Inject constructor(
 
     fun refresh() {
         if (!permissionUsable) {
-            _status.value = TileStatus.PermissionRequired
+            // Aucune interrogation tentée : le bandeau global du Tableau porte le message de
+            // permission manquante, pas cet écran (voir DashboardScreen).
+            _status.value = TileStatus.Offline
             return
         }
         viewModelScope.launch { fetch() }
@@ -368,7 +379,9 @@ class DetailViewModel @Inject constructor(
         val dev = repository.getDevice(deviceId) ?: return
         _status.value = repository.getStatus(dev).toTileStatus()
         _activeIp.value = repository.activeIp(dev)
-        _pendingThresholdW.value = appPreferences.pendingTimers().firstOrNull { it.deviceId == deviceId }?.thresholdW
+        val pendingTimer = appPreferences.pendingTimers().firstOrNull { it.deviceId == deviceId }
+        _pendingThresholdW.value = pendingTimer?.thresholdW
+        _pendingLabel.value = pendingTimer?.label
         if (dev.hasScripting) {
             loadPresence(dev)
             loadButtonTimer(dev)

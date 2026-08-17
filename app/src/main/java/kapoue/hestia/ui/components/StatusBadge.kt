@@ -52,9 +52,6 @@ fun StatusBadge(
         online != null -> {
             led = BadgeLed.HOLLOW; color = colors.idleLed; labelRes = R.string.state_idle
         }
-        status is TileStatus.PermissionRequired -> {
-            led = BadgeLed.FILLED; color = colors.offlineLed; labelRes = R.string.state_permission_required
-        }
         else -> {
             led = BadgeLed.FILLED; color = colors.offlineLed; labelRes = R.string.state_offline
         }

@@ -1,5 +1,8 @@
 package kapoue.hestia.ui.screens.dashboard
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,17 +12,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Power
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,26 +34,34 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatCountdown
 import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.core.util.formatTimeRange
-import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.isActiveNow
-import kapoue.hestia.ui.components.BreakerSwitch
 import kapoue.hestia.ui.theme.StateColorSet
 import kapoue.hestia.ui.theme.stateColors
 
 /**
- * Tuile d'un canal sur le Tableau. LED d'état **toujours doublée d'un libellé texte**,
- * interrupteur rectangulaire.
+ * Tuile d'un canal sur le Tableau. Cercle inspiré de la vraie prise (deux trous), teinté selon
+ * l'état ; **jamais de couleur seule** : le libellé texte accompagne toujours l'état (SPEC).
+ *
+ * Deux signaux de couleur distincts, volontairement séparés (2026-08-17) :
+ * - l'**anneau** du cercle reflète un fait physique — le courant passe ([TileStatus.Online.output])
+ *   ou non — peu importe le régime (manuel, minuteur, présence, planning) ;
+ * - le **fond de la tuile** et le **texte** reflètent le régime — actif seul, piloté par un
+ *   programme, éteint, ou indisponible — indépendamment de l'état ON/OFF du moment (ex. une
+ *   présence en pause reste « Planifié » en orange, même si le cercle est gris à cet instant).
  *
  * @param elapsedNow SystemClock.elapsedRealtime() courant, rafraîchi à la seconde par le parent
  *   pour décrémenter le compte à rebours localement.
@@ -61,8 +71,6 @@ fun DeviceTile(
     tile: TileUiState,
     elapsedNow: Long,
     onToggle: (Boolean) -> Unit,
-    onRetry: () -> Unit,
-    onGrantPermission: () -> Unit,
     onOpenDetail: () -> Unit,
     onPlanningWindowEnded: () -> Unit,
 ) {
@@ -83,39 +91,12 @@ fun DeviceTile(
     }
 
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(2.dp),
+        color = visual.bgColor,
+        shape = RoundedCornerShape(12.dp),
         onClick = onOpenDetail,
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp)),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(
-                    imageVector = iconFor(tile.device.type),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp),
-                )
-                // Puissance instantanée à droite, seulement si l'appareil la mesure et répond.
-                val powerWatts = (tile.status as? TileStatus.Online)
-                    ?.powerWatts?.takeIf { tile.device.hasPowerMetering }
-                if (powerWatts != null) {
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        text = formatPower(powerWatts),
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
             Text(
                 text = tile.device.name,
                 style = MaterialTheme.typography.titleSmall,
@@ -123,72 +104,128 @@ fun DeviceTile(
                 overflow = TextOverflow.Ellipsis,
             )
 
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                StatusLed(style = visual.ledStyle, color = visual.ledColor)
-                Spacer(Modifier.size(6.dp))
+            Spacer(Modifier.height(10.dp))
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                PlugCircle(visual = visual)
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                val powerWatts = (tile.status as? TileStatus.Online)
+                    ?.powerWatts?.takeIf { tile.device.hasPowerMetering }
                 Text(
-                    text = visual.label,
-                    color = visual.textColor,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = powerWatts?.let { formatPower(it) }.orEmpty(),
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
                 )
-            }
-
-            // Emplacement réservé pour le compte à rebours : présent même sans minuteur, afin
-            // que les tuiles voisines gardent la même hauteur (SPEC — cohérence de la grille).
-            Spacer(Modifier.height(2.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(20.dp)) {
-                visual.countdown?.let { countdown ->
-                    Text(
-                        text = countdown,
-                        color = visual.textColor,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-
-            // Emplacement d'action à hauteur fixe (interrupteur / bouton) → tuiles uniformes.
-            Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxWidth().height(40.dp), contentAlignment = Alignment.CenterStart) {
-                when (tile.status) {
-                    is TileStatus.Online, TileStatus.Loading -> {
-                        val checked = (tile.status as? TileStatus.Online)?.output == true
-                        BreakerSwitch(
-                            checked = checked,
-                            onCheckedChange = onToggle,
-                            onColor = colors.activeLed,
-                            enabled = tile.status is TileStatus.Online,
-                        )
-                    }
-                    TileStatus.Offline -> {
-                        TextButton(onClick = onRetry, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.size(4.dp))
-                            Text(stringResource(R.string.action_retry))
-                        }
-                    }
-                    TileStatus.PermissionRequired -> {
-                        TextButton(onClick = onGrantPermission, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                            Text(stringResource(R.string.tile_grant_permission))
-                        }
-                    }
-                }
+                Spacer(Modifier.weight(1f))
+                val interactive = tile.status is TileStatus.Online
+                val checked = (tile.status as? TileStatus.Online)?.output == true
+                RoundToggleButton(
+                    enabled = interactive,
+                    onClick = { onToggle(!checked) },
+                )
             }
         }
     }
 }
 
-/** Rendu du voyant : disque plein (allumé), anneau creux (éteint) ou spinner (lecture). */
-private enum class LedStyle { FILLED, HOLLOW, SPINNER }
+// Plus de bouton « Réessayer » dédié : le rafraîchissement auto (5 s) + le tirage manuel
+// suffisent à rattraper un appareil redevenu joignable (voir DashboardViewModel.refresh).
+
+@Composable
+private fun RoundToggleButton(enabled: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
+        ),
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(40.dp),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth().height(40.dp)) {
+            Icon(
+                Icons.Filled.PowerSettingsNew,
+                contentDescription = stringResource(R.string.tile_toggle),
+                tint = if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                },
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
 
 private data class TileVisual(
-    val ledColor: Color,
+    val bgColor: Color,
+    val ringColor: Color,
     val textColor: Color,
     val label: String,
     val countdown: String?,
-    val ledStyle: LedStyle,
+    val dashed: Boolean,
+    val loading: Boolean = false,
 )
+
+/** Cercle inspiré de la vraie prise (deux trous) : anneau = fait physique, texte = régime. */
+@Composable
+private fun PlugCircle(visual: TileVisual) {
+    // Le disque reprend la teinte de fond de la tuile (comme demandé après test réel — un disque
+    // blanc détonnait) ; les trous, eux, tranchent en blanc/surface pour rester visibles dessus.
+    val holeColor = MaterialTheme.colorScheme.surface
+    Box(modifier = Modifier.size(76.dp), contentAlignment = Alignment.BottomCenter) {
+        Canvas(modifier = Modifier.size(76.dp)) {
+            val strokeWidthPx = 2.dp.toPx()
+            val radius = size.minDimension / 2 - strokeWidthPx / 2
+            drawCircle(color = visual.bgColor, radius = radius + strokeWidthPx)
+            drawCircle(
+                color = visual.ringColor,
+                radius = radius,
+                style = Stroke(
+                    width = strokeWidthPx,
+                    pathEffect = if (visual.dashed) PathEffect.dashPathEffect(floatArrayOf(8f, 6f)) else null,
+                ),
+            )
+            // Resserrés et remontés (2026-08-17, retour de test réel) : trop espacés/bas, ils
+            // évoquaient un visage souriant plutôt que les deux trous d'une prise.
+            // Trous à 50 % de la hauteur totale du cercle (= centre vertical) et à ~33 % du
+            // diamètre depuis chaque bord (donc 17 % depuis le centre), comme sur la vraie prise.
+            val holeRadius = size.minDimension * 0.075f
+            val holeOffsetX = size.minDimension * 0.17f
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x - holeOffsetX, center.y))
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x + holeOffsetX, center.y))
+        }
+        if (visual.loading) {
+            CircularProgressIndicator(
+                modifier = Modifier.padding(bottom = 24.dp).size(14.dp),
+                strokeWidth = 2.dp,
+                color = visual.ringColor,
+            )
+        } else {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 10.dp)) {
+                Text(
+                    text = visual.label,
+                    color = visual.textColor,
+                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                visual.countdown?.let {
+                    Text(
+                        text = it,
+                        color = visual.textColor,
+                        fontFamily = FontFamily.Monospace,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun TileStatus.toVisual(
@@ -198,108 +235,232 @@ private fun TileStatus.toVisual(
     activePlanning: Planning?,
     pendingThresholdW: Int?,
 ): TileVisual = when (this) {
-    // Lecture en cours : spinner plutôt que gris (qui se lirait « désactivé »).
     TileStatus.Loading -> TileVisual(
-        ledColor = colors.idleLed,
+        bgColor = colors.idleBg,
+        ringColor = colors.idleLed,
         textColor = colors.idleText,
         label = stringResource(R.string.state_loading),
         countdown = null,
-        ledStyle = LedStyle.SPINNER,
+        dashed = false,
+        loading = true,
     )
     is TileStatus.Online -> {
+        // Anneau ET fond = fait physique (courant ou non), même en présence d'un programme —
+        // seul le texte porte la nuance "Planifié" (2026-08-17, retour de test réel : un fond
+        // orange quand une programmation tourne prêtait à confusion, gardé uniquement en texte).
+        val ringColor = if (output) colors.activeLed else colors.idleLed
+        val physicalBg = if (output) colors.activeBg else colors.idleBg
         val remaining = timerEndsAtElapsed?.let { ((it - elapsedNow) / 1000).coerceAtLeast(0) }
         when {
             remaining != null && remaining > 0 -> TileVisual(
-                ledColor = colors.timedLed,
-                textColor = colors.timedText,
-                label = stringResource(R.string.state_timed),
+                bgColor = physicalBg, ringColor = ringColor, textColor = colors.timedText,
+                label = stringResource(R.string.state_planned),
                 // Format technique (comme formatPower) : jamais localisé phrase par phrase.
                 countdown = formatCountdown(remaining) + (pendingThresholdW?.let { " · $it W" } ?: ""),
-                ledStyle = LedStyle.FILLED,
+                dashed = false,
             )
-            // Même orange que la minuterie : dans les deux cas, un programme pilote le canal.
-            // Le voyant reste plein/creux selon l'état réel, car la simulation allume et éteint
-            // toute seule — l'interrupteur affiche ON/OFF en toutes lettres juste en dessous.
             presence != null -> TileVisual(
-                ledColor = colors.timedLed,
-                textColor = colors.timedText,
-                label = stringResource(R.string.state_presence),
+                bgColor = physicalBg, ringColor = ringColor, textColor = colors.timedText,
+                label = stringResource(R.string.state_planned),
                 countdown = formatTimeRange(
-                    presence.startHour,
-                    presence.startMinute,
-                    presence.endHour,
-                    presence.endMinute,
+                    presence.startHour, presence.startMinute,
+                    presence.endHour, presence.endMinute,
                 ),
-                ledStyle = if (output) LedStyle.FILLED else LedStyle.HOLLOW,
+                dashed = false,
             )
-            // Un planning est en cours (heure actuelle dans son créneau) : même orange. Deux
-            // plannings ne se chevauchant jamais, il n'y en a qu'un « en cours » à la fois.
             activePlanning != null -> TileVisual(
-                ledColor = colors.timedLed,
-                textColor = colors.timedText,
-                label = stringResource(R.string.state_planning),
+                bgColor = physicalBg, ringColor = ringColor, textColor = colors.timedText,
+                label = stringResource(R.string.state_planned),
                 countdown = "%02d:%02d – %02d:%02d".format(
                     activePlanning.startHour, activePlanning.startMinute,
                     activePlanning.endHour, activePlanning.endMinute,
                 ),
-                ledStyle = if (output) LedStyle.FILLED else LedStyle.HOLLOW,
+                dashed = false,
             )
             output -> TileVisual(
-                ledColor = colors.activeLed,
-                textColor = colors.activeText,
+                bgColor = colors.activeBg, ringColor = ringColor, textColor = colors.activeText,
                 label = stringResource(R.string.state_active),
                 countdown = null,
-                ledStyle = LedStyle.FILLED,
+                dashed = false,
             )
-            // Repos : anneau creux neutre = « voyant éteint », jamais un disque gris « mort ».
             else -> TileVisual(
-                ledColor = colors.idleLed,
-                textColor = colors.idleText,
+                bgColor = colors.idleBg, ringColor = ringColor, textColor = colors.idleText,
                 label = stringResource(R.string.state_idle),
                 countdown = null,
-                ledStyle = LedStyle.HOLLOW,
+                dashed = false,
             )
         }
     }
     TileStatus.Offline -> TileVisual(
-        ledColor = colors.offlineLed,
+        bgColor = colors.offlineBg,
+        ringColor = colors.offlineLed,
         textColor = colors.offlineText,
         label = stringResource(R.string.state_offline),
         countdown = null,
-        ledStyle = LedStyle.FILLED,
-    )
-    TileStatus.PermissionRequired -> TileVisual(
-        ledColor = colors.offlineLed,
-        textColor = colors.offlineText,
-        label = stringResource(R.string.state_permission_required),
-        countdown = null,
-        ledStyle = LedStyle.FILLED,
+        dashed = true,
     )
 }
 
+/**
+ * Bloc multi-canaux (2026-08-17) : une ligne de petits cercles façon vraie multiprise, plutôt
+ * que la grille 2×2 d'avant qui ne ressemblait à rien de réel. Un canal = un cercle (même
+ * logique d'anneau que [PlugCircle]) avec son nom (tronqué, pas la place pour plus) et son état
+ * sur deux lignes en dessous — jamais de couleur seule, même à cette échelle. Pas de bouton
+ * ON/OFF direct ici (contrairement à une prise seule) : le détail (conso, interrupteur, état
+ * complet) s'ouvre dans une modale au tap, pour ne pas surcharger un espace aussi compact.
+ */
 @Composable
-private fun StatusLed(style: LedStyle, color: Color) {
-    when (style) {
-        LedStyle.FILLED -> Box(
-            modifier = Modifier
-                .size(10.dp)
-                .clip(RoundedCornerShape(50))
-                .background(color),
+fun DeviceStripRow(
+    groupLabel: String,
+    members: List<TileUiState>,
+    elapsedNow: Long,
+    onTapChannel: (TileUiState) -> Unit,
+) {
+    val colors = MaterialTheme.stateColors
+    Surface(
+        color = colors.idleBg,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = groupLabel,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                members.forEach { member ->
+                    MiniPlugCircle(
+                        tile = member,
+                        elapsedNow = elapsedNow,
+                        onClick = { onTapChannel(member) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private const val STRIP_NAME_MAX_LENGTH = 10
+
+@Composable
+private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> Unit) {
+    val colors = MaterialTheme.stateColors
+    val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW)
+    // Même logique que PlugCircle : disque = teinte d'état du canal, trous = blanc/surface.
+    val holeColor = MaterialTheme.colorScheme.surface
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(6.dp),
+    ) {
+        Canvas(modifier = Modifier.size(44.dp)) {
+            val strokeWidthPx = 1.5.dp.toPx()
+            val radius = size.minDimension / 2 - strokeWidthPx / 2
+            drawCircle(color = visual.bgColor, radius = radius + strokeWidthPx)
+            drawCircle(
+                color = visual.ringColor,
+                radius = radius,
+                style = Stroke(
+                    width = strokeWidthPx,
+                    pathEffect = if (visual.dashed) PathEffect.dashPathEffect(floatArrayOf(6f, 4f)) else null,
+                ),
+            )
+            // Trous à 50 % de la hauteur totale du cercle (= centre vertical) et à ~33 % du
+            // diamètre depuis chaque bord (donc 17 % depuis le centre), comme sur la vraie prise.
+            val holeRadius = size.minDimension * 0.075f
+            val holeOffsetX = size.minDimension * 0.17f
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x - holeOffsetX, center.y))
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x + holeOffsetX, center.y))
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = tile.device.name.take(STRIP_NAME_MAX_LENGTH),
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
-        LedStyle.HOLLOW -> Box(
-            modifier = Modifier
-                .size(10.dp)
-                .border(1.5.dp, color, RoundedCornerShape(50)),
-        )
-        LedStyle.SPINNER -> CircularProgressIndicator(
-            modifier = Modifier.size(12.dp),
-            strokeWidth = 2.dp,
+        Text(
+            text = visual.label,
+            color = visual.textColor,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
         )
     }
 }
 
-internal fun iconFor(type: DeviceType): ImageVector = when (type) {
-    DeviceType.PLUG -> Icons.Filled.Power
-    DeviceType.LAMP -> Icons.Filled.Lightbulb
-    DeviceType.SENSOR -> Icons.Filled.Sensors
+/**
+ * Modale ouverte au tap d'un canal du bloc multi-prises : consommation, interrupteur, état
+ * complet (avec compte à rebours si un programme est en cours) — et un lien vers l'écran détail
+ * complet pour tout ce que la modale ne montre pas (plannings, présence, seuils…).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChannelQuickSheet(
+    tile: TileUiState,
+    elapsedNow: Long,
+    onToggle: (Boolean) -> Unit,
+    onOpenDetail: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val colors = MaterialTheme.stateColors
+    val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW)
+    val online = tile.status as? TileStatus.Online
+    val powerWatts = online?.powerWatts?.takeIf { tile.device.hasPowerMetering }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(text = tile.device.name, style = MaterialTheme.typography.titleMedium)
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = visual.label, color = visual.textColor, style = MaterialTheme.typography.bodyLarge)
+                        visual.countdown?.let {
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = it,
+                                color = visual.textColor,
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
+                    if (powerWatts != null) {
+                        Text(
+                            text = formatPower(powerWatts),
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                RoundToggleButton(
+                    enabled = online != null,
+                    onClick = { onToggle(online?.output != true) },
+                )
+            }
+
+            TextButton(onClick = onOpenDetail, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.tile_open_detail))
+            }
+        }
+    }
 }

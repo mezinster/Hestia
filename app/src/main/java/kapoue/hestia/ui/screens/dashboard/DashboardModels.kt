@@ -23,11 +23,10 @@ sealed interface TileStatus {
         val powerWatts: Double?,
     ) : TileStatus
 
-    /** Appareil injoignable (timeout, réseau, erreur RPC). */
+    /** Appareil injoignable (timeout, réseau, erreur RPC) — inclut aussi le cas où la permission
+     * réseau local manque : aucune interrogation n'est tentée, un message global le signale
+     * (bandeau en tête du Tableau), plutôt qu'un état par tuile. */
     data object Offline : TileStatus
-
-    /** Permission réseau local non accordée : aucune interrogation tentée. */
-    data object PermissionRequired : TileStatus
 }
 
 /**

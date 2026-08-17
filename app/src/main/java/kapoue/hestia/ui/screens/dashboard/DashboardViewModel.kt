@@ -23,6 +23,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -82,8 +83,10 @@ class DashboardViewModel @Inject constructor(
     private val pendingThresholds = MutableStateFlow<Map<Long, Int>>(emptyMap())
 
     // Renseigné par la couche UI (qui seule connaît le Context) à chaque reprise d'écran.
-    @Volatile
-    private var permissionUsable: Boolean = true
+    private val _permissionUsable = MutableStateFlow(true)
+
+    /** Lu par l'écran pour afficher (ou non) le bandeau de permission manquante. */
+    val permissionUsable: StateFlow<Boolean> = _permissionUsable.asStateFlow()
 
     // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils en un seul.
     private val extras = combine(presences, plannings, pendingThresholds) { p, pl, th -> Triple(p, pl, th) }
@@ -115,9 +118,9 @@ class DashboardViewModel @Inject constructor(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardUiState())
 
-    /** Mis à jour à chaque reprise d'écran. Si la permission tombe, les tuiles le reflètent. */
+    /** Mis à jour à chaque reprise d'écran. Si la permission tombe, le bandeau global le reflète. */
     fun updatePermission(usable: Boolean) {
-        permissionUsable = usable
+        _permissionUsable.value = usable
     }
 
     private var refreshJob: Job? = null
@@ -138,12 +141,13 @@ class DashboardViewModel @Inject constructor(
         if (!userInitiated && !force && refreshJob?.isActive == true) return
         if (userInitiated || force) refreshJob?.cancel()
         refreshJob = viewModelScope.launch {
-            val devices = repository.getDevicesOnce()
-            if (!permissionUsable) {
-                statuses.value = devices.associate { it.id to TileStatus.PermissionRequired }
+            if (!_permissionUsable.value) {
+                // Aucune interrogation tentée, aucune tuile affichée : le bandeau global du
+                // Tableau porte le message et l'action (voir DashboardScreen.PermissionBanner).
                 loaded.value = true
                 return@launch
             }
+            val devices = repository.getDevicesOnce()
             val fetch = launch {
                 // États, présences et plannings relevés en parallèle : le temps total reste celui
                 // du plus lent, pas la somme.
@@ -190,7 +194,7 @@ class DashboardViewModel @Inject constructor(
 
     /** Bascule un canal, puis relit son état réel (jamais supposé). */
     fun toggle(device: Device, turnOn: Boolean) {
-        if (!permissionUsable) return
+        if (!_permissionUsable.value) return
         viewModelScope.launch { applyToggle(device, turnOn) }
     }
 
@@ -202,7 +206,7 @@ class DashboardViewModel @Inject constructor(
      * interrupteur défaillant.
      */
     fun stopPresenceThenToggle(device: Device, turnOn: Boolean) {
-        if (!permissionUsable) return
+        if (!_permissionUsable.value) return
         viewModelScope.launch {
             when (repository.stopPresence(device)) {
                 is RpcResult.Success -> {
@@ -216,12 +220,40 @@ class DashboardViewModel @Inject constructor(
     }
 
     private suspend fun applyToggle(device: Device, turnOn: Boolean) {
-        when (repository.userToggle(device, turnOn)) {
+        // Éteindre reste toujours un Switch.Set direct, quel que soit ce qui a déclenché
+        // l'allumage (bouton physique ou app) — jamais concerné par le minuteur bouton.
+        val result = if (turnOn) startRespectingButtonTimer(device) else repository.userToggle(device, false)
+        when (result) {
             is RpcResult.Success -> {
                 logger.info(DiagnosticLogger.RPC, "Bascule ${device.ipAddress}#${device.switchId} → $turnOn")
                 fetchOne(device)
             }
             else -> setStatus(device.id, TileStatus.Offline)
+        }
+    }
+
+    /**
+     * Allumer depuis l'app reprend la même durée/seuil que le minuteur configuré pour le bouton
+     * physique de cet appareil, s'il y en a un (2026-08-17) — sinon un allumage classique,
+     * immédiat et indéfini, comme avant. Limite connue : le script du minuteur bouton distingue
+     * une annulation volontaire (appui bouton) d'une fin naturelle via le champ `source` de
+     * l'appareil, détecté par le matériel — un allumage déclenché ici ne peut pas se faire passer
+     * pour un appui physique, seule la notification de fin en serait potentiellement affectée,
+     * jamais l'action elle-même.
+     */
+    private suspend fun startRespectingButtonTimer(device: Device): RpcResult<*> {
+        val config = repository.getButtonTimerConfig(device)
+        if (!config.enabled) return repository.userToggle(device, true)
+        val detail = device.name
+        return when {
+            config.durationSeconds == null && config.thresholdW != null ->
+                repository.startUnlimitedChargeTimer(device, config.thresholdW)
+            config.durationSeconds != null && config.thresholdW != null ->
+                repository.startChargeTimer(device, config.durationSeconds, config.thresholdW, detail)
+            config.durationSeconds != null ->
+                repository.startTimer(device, config.durationSeconds, detail)
+            // Config incohérente (ni durée ni seuil) : ne devrait pas arriver, repli sûr.
+            else -> repository.userToggle(device, true)
         }
     }
 
@@ -246,15 +278,6 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             if (repository.hasDemoDevices()) repository.removeDemoDevices() else repository.addDemoDevices()
         }
-    }
-
-    /** Relance la lecture d'un seul appareil (bouton « Réessayer » d'une tuile hors ligne). */
-    fun retry(device: Device) {
-        if (!permissionUsable) {
-            setStatus(device.id, TileStatus.PermissionRequired)
-            return
-        }
-        viewModelScope.launch { fetchOne(device) }
     }
 
     private suspend fun fetchOne(device: Device) {

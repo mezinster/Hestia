@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -51,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -81,6 +83,7 @@ import kapoue.hestia.ui.components.TimeWheelPicker
 import kapoue.hestia.ui.components.ValueWheelPicker
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.screens.dashboard.TileStatus
+import kapoue.hestia.ui.theme.stateColors
 import kotlinx.coroutines.delay
 import java.time.LocalDate
 
@@ -94,6 +97,7 @@ fun DetailScreen(
     val status by viewModel.status.collectAsStateWithLifecycle()
     val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
     val pendingThresholdW by viewModel.pendingThresholdW.collectAsStateWithLifecycle()
+    val pendingLabel by viewModel.pendingLabel.collectAsStateWithLifecycle()
     val presenceActive by viewModel.presenceActive.collectAsStateWithLifecycle()
     val presenceWindows by viewModel.presenceWindows.collectAsStateWithLifecycle()
     val addPresenceResult by viewModel.addPresenceResult.collectAsStateWithLifecycle()
@@ -240,6 +244,7 @@ fun DetailScreen(
                     status = status,
                     elapsedNow = elapsedNow,
                     runningThresholdW = pendingThresholdW,
+                    runningLabel = pendingLabel,
                     presets = presets,
                     onPreset = { seconds, label -> requestStartTimer(seconds, label) },
                     onCustom = { showSheet = true },
@@ -911,7 +916,13 @@ private fun PlanningSection(
             )
         } else {
             plannings.forEach { p ->
-                PlanningRow(p, onEdit = { onEdit(p) }, onDelete = { onDelete(p) }, onPause = { onPause(p) })
+                PlanningRow(
+                    p,
+                    isActive = p.isActiveNow(),
+                    onEdit = { onEdit(p) },
+                    onDelete = { onDelete(p) },
+                    onPause = { onPause(p) },
+                )
             }
         }
         val atLimit = plannings.size >= 10
@@ -941,7 +952,11 @@ private fun PlanningSection(
 }
 
 @Composable
-private fun PlanningRow(planning: Planning, onEdit: () -> Unit, onDelete: () -> Unit, onPause: () -> Unit) {
+private fun PlanningRow(planning: Planning, isActive: Boolean, onEdit: () -> Unit, onDelete: () -> Unit, onPause: () -> Unit) {
+    // Mise en avant du planning qui pilote réellement la prise en ce moment (2026-08-17) — même
+    // couleur que « Planifié » sur le Tableau, cohérence du vocabulaire visuel. Jamais de couleur
+    // seule : le petit texte « En cours » accompagne toujours la couleur.
+    val activeColor = MaterialTheme.stateColors.timedText
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         // Un tap sur les horaires ouvre l'édition (sauf si le planning est en cours).
         Column(
@@ -949,13 +964,24 @@ private fun PlanningRow(planning: Planning, onEdit: () -> Unit, onDelete: () -> 
                 .weight(1f)
                 .clickable(onClick = onEdit),
         ) {
-            Text(
-                text = "%02d:%02d – %02d:%02d".format(
-                    planning.startHour, planning.startMinute, planning.endHour, planning.endMinute,
-                ),
-                style = MaterialTheme.typography.bodyLarge,
-                fontFamily = FontFamily.Monospace,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "%02d:%02d – %02d:%02d".format(
+                        planning.startHour, planning.startMinute, planning.endHour, planning.endMinute,
+                    ),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontFamily = FontFamily.Monospace,
+                    color = if (isActive) activeColor else Color.Unspecified,
+                )
+                if (isActive) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = stringResource(R.string.planning_row_active),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = activeColor,
+                    )
+                }
+            }
             Text(
                 text = daysSummary(planning),
                 style = MaterialTheme.typography.bodySmall,
@@ -1305,6 +1331,7 @@ private fun TimerSection(
     status: TileStatus,
     elapsedNow: Long,
     runningThresholdW: Int?,
+    runningLabel: String?,
     presets: List<PersonalPreset>,
     onPreset: (Int, String) -> Unit,
     onCustom: () -> Unit,
@@ -1325,8 +1352,12 @@ private fun TimerSection(
         val remaining = online?.timerEndsAtElapsed?.let { ((it - elapsedNow) / 1000).coerceAtLeast(0) }
 
         if (remaining != null && remaining > 0) {
+            // Nom du réglage qui pilote réellement la prise (préréglage Perso, ou durée choisie
+            // pour un lancement rapide/Manuel) plutôt qu'un texte générique, quand on le connaît
+            // (mémo local posé au démarrage — voir DetailViewModel.pendingLabel, 2026-08-17).
             Text(
-                text = stringResource(R.string.detail_timer_running),
+                text = runningLabel?.let { stringResource(R.string.detail_timer_running_named, it) }
+                    ?: stringResource(R.string.detail_timer_running),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
