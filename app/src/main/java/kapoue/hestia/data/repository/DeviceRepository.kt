@@ -193,22 +193,22 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
-     * Comme [startTimer] (minuteur natif + compte à rebours), mais déploie en plus un script de
-     * **coupure sur seuil de consommation** : la prise se coupe avant la fin si `apower` reste sous
-     * [thresholdW] pendant 60 s. Réservé aux prises qui mesurent la puissance.
+     * Comme [startTimer] (minuteur natif + compte à rebours), mais déploie en plus une entrée
+     * dans le script superviseur de **coupure sur seuil de consommation** : la prise se coupe
+     * avant la fin si `apower` reste sous [thresholdW] pendant 60 s. Réservé aux prises qui
+     * mesurent la puissance.
      */
     suspend fun startChargeTimer(device: Device, seconds: Int, thresholdW: Int, detail: String?): RpcResult<Unit> {
         // 1. Minuteur natif (durée max + compte à rebours).
         val (ip, set) = withIp(device) { i -> rpcClient.setSwitch(i, device.switchId, on = true, toggleAfterSec = seconds) }
         set.errorOrNull()?.let { return it }
 
-        // 2. Script de coupure conso, réutilisé ou créé.
-        val topic = ntfyTopic()
-        val deployed = deployChargeCutoffScript(
-            ip, device.switchId, device.name, thresholdW, graceSec = 0,
-            ntfyEndBody = if (topic != null) context.getString(R.string.notif_timer_ended, detail.orEmpty()) else "",
-        )
-        deployed.errorOrNull()?.let { return it }
+        // 2. Ce canal dans le script superviseur de coupure — les autres canaux qu'il surveille
+        // éventuellement déjà ne sont jamais touchés (voir upsertChargeSupervisorChannel).
+        cleanupLegacyChargeScripts(ip, device)
+        val endBody = context.getString(R.string.notif_timer_ended, detail.orEmpty())
+        val config = ChargeScriptGenerator.ChannelConfig(device.switchId, thresholdW, graceSec = 0, device.name, endBody)
+        upsertChargeSupervisorChannel(ip, config).errorOrNull()?.let { return it }
 
         rememberPendingTimer(device.id, seconds, detail, thresholdW = thresholdW)
         return RpcResult.Success(Unit)
@@ -220,41 +220,81 @@ class DeviceRepository @Inject constructor(
      * toute surveillance de la consommation (voir [ChargeScriptGenerator]) — sans elle, un
      * appareil qui met un instant à vraiment tirer du courant risquerait une coupure immédiate,
      * plus gênant ici qu'avec une durée maximale en filet de sécurité comme dans [startChargeTimer].
+     * Pas de fin naturelle à notifier ici (pas de minuteur natif), donc [ChargeScriptGenerator.
+     * ChannelConfig.endBody] vide.
      */
     suspend fun startUnlimitedChargeTimer(device: Device, thresholdW: Int): RpcResult<Unit> {
         val (ip, set) = withIp(device) { i -> rpcClient.setSwitch(i, device.switchId, on = true) }
         set.errorOrNull()?.let { return it }
-        val deployed = deployChargeCutoffScript(
-            ip, device.switchId, device.name, thresholdW, graceSec = UNLIMITED_CHARGE_GRACE_SEC, ntfyEndBody = "",
+
+        cleanupLegacyChargeScripts(ip, device)
+        val config = ChargeScriptGenerator.ChannelConfig(
+            device.switchId, thresholdW, graceSec = UNLIMITED_CHARGE_GRACE_SEC, device.name, endBody = "",
         )
-        deployed.errorOrNull()?.let { return it }
-        return RpcResult.Success(Unit)
+        return upsertChargeSupervisorChannel(ip, config)
     }
 
-    /** Déploie (ou réutilise) le script de coupure sur seuil partagé, commun à [startChargeTimer]/[startUnlimitedChargeTimer]. */
-    private suspend fun deployChargeCutoffScript(
-        ip: String, switchId: Int, deviceName: String, thresholdW: Int, graceSec: Int, ntfyEndBody: String,
-    ): RpcResult<Int> {
+    /**
+     * Supprime d'éventuels scripts hérités (un par canal, avant le 2026-08-17) : transitoires par
+     * nature (se désactivent seuls après usage), donc aucun état en cours à migrer contrairement
+     * au minuteur bouton — un simple nettoyage best-effort suffit.
+     */
+    private suspend fun cleanupLegacyChargeScripts(ip: String, device: Device) {
+        val scripts = rpcClient.scriptList(ip).getOrNull()?.scripts.orEmpty()
+        (listOf(device) + siblingsSharingIp(device)).forEach { d ->
+            scripts.firstOrNull { it.name == "hestia_charge_${d.switchId}" }?.let {
+                rpcClient.scriptStop(ip, it.id)
+                rpcClient.scriptDelete(ip, it.id)
+            }
+        }
+    }
+
+    /**
+     * Ajoute [config] au script superviseur partagé de coupure sur seuil, ou le remplace s'il
+     * suivait déjà ce canal (nouveau minuteur relancé dessus). **Ne touche jamais** aux autres
+     * canaux déjà surveillés : si le script tourne déjà, la mutation passe par `Script.Eval`
+     * (mémoire du script inchangée pour tout le reste, voir [ChargeScriptGenerator]) — seul un
+     * premier déploiement (aucun script, ou existant mais arrêté) réécrit le code en dur, ce qui
+     * est sans risque puisqu'il n'y a alors rien d'autre en cours à préserver.
+     */
+    private suspend fun upsertChargeSupervisorChannel(ip: String, config: ChargeScriptGenerator.ChannelConfig): RpcResult<Unit> {
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
-        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.scriptName(switchId) }
+        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME }
+
+        if (existing != null && existing.running) {
+            val eval = rpcClient.scriptEval(ip, existing.id, ChargeScriptGenerator.evalUpsertChannel(config))
+            return eval.errorOrNull() ?: RpcResult.Success(Unit)
+        }
+
         val scriptId = existing?.id ?: run {
-            val create = rpcClient.scriptCreate(ip, ChargeScriptGenerator.scriptName(switchId))
+            val create = rpcClient.scriptCreate(ip, ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME)
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
         }
-        rpcClient.scriptStop(ip, scriptId)
+        if (existing != null) rpcClient.scriptStop(ip, scriptId)
         val topic = ntfyTopic()
-        val code = ChargeScriptGenerator.generate(
-            switchId, thresholdW, belowSec = 60, selfId = scriptId, graceSec = graceSec,
-            ntfyTopic = topic, ntfyTitle = deviceName,
-            ntfyBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
-            ntfyEndBody = ntfyEndBody,
+        val code = ChargeScriptGenerator.generateSupervisor(
+            listOf(config), selfId = scriptId, ntfyTopic = topic,
+            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
         rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
-        return RpcResult.Success(scriptId)
+        return RpcResult.Success(Unit)
+    }
+
+    /**
+     * Retire [switchId] du suivi du script superviseur, sans toucher aux autres canaux. Ne fait
+     * rien si le script n'existe pas ou n'est pas en cours d'exécution (rien à retirer) — s'il
+     * n'a plus aucun canal après ce retrait, il se désactive lui-même au prochain top (voir
+     * [ChargeScriptGenerator.generateSupervisor]), pas besoin de le faire depuis Hestia.
+     */
+    private suspend fun removeChargeSupervisorChannel(device: Device) {
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        val existing = listResult.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME }
+        if (existing == null || !existing.running) return
+        rpcClient.scriptEval(ip, existing.id, ChargeScriptGenerator.evalRemoveChannel(device.switchId))
     }
 
     /** Mémorise un minuteur en attente pour la notification de fin (voir [PendingTimer]). */
@@ -265,29 +305,27 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
-     * Vrai si le script de coupure sur seuil a **effectivement coupé** : il est encore présent mais
-     * s'est auto-arrêté (`enable:false` + `Script.Stop`). Distingue une vraie coupure sur seuil
-     * d'une extinction manuelle ou par le bouton physique (où le script tournerait encore).
+     * Vrai si ce canal a été coupé par **un script**, peu importe lequel — basé sur `source ==
+     * "loopback"` (`Switch.GetStatus`), validé en direct le 2026-08-17. Remplace l'ancienne
+     * détection (« le script de coupure a disparu/s'est désactivé »), qui ne se généralisait pas
+     * à un script partagé entre plusieurs canaux : `source` est une propriété du canal lui-même,
+     * indépendante du nombre de scripts sur l'appareil.
      */
     suspend fun cutoffScriptFired(device: Device): Boolean {
-        val (_, listResult) = withIp(device) { ip -> rpcClient.scriptList(ip) }
-        val entry = listResult.getOrNull()?.scripts
-            ?.firstOrNull { it.name == ChargeScriptGenerator.scriptName(device.switchId) }
-        return entry != null && !entry.running
+        val (_, result) = withIp(device) { ip -> rpcClient.getSwitchStatus(ip, device.switchId) }
+        return result.getOrNull()?.source == "loopback"
     }
 
     /**
-     * Annule le minuteur en **éteignant le canal** (ce qui annule le `toggle_after`), et supprime
-     * un éventuel script de coupure conso resté actif.
+     * Annule le minuteur en **éteignant le canal** (ce qui annule le `toggle_after`), et retire ce
+     * canal du script superviseur de coupure sur seuil s'il y figurait — les autres canaux qu'il
+     * suit éventuellement restent inchangés.
      */
     suspend fun cancelTimer(device: Device): RpcResult<Unit> {
-        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
-        listResult.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.scriptName(device.switchId) }?.let {
-            rpcClient.scriptStop(ip, it.id)
-            rpcClient.scriptDelete(ip, it.id)
-        }
+        removeChargeSupervisorChannel(device)
         removeTimerNotifyScript(device)
-        return when (val set = rpcClient.setSwitch(ip, device.switchId, on = false)) {
+        val (_, set) = withIp(device) { i -> rpcClient.setSwitch(i, device.switchId, on = false) }
+        return when (set) {
             is RpcResult.Success -> {
                 appPreferences.removePendingTimer(device.id)
                 RpcResult.Success(Unit)

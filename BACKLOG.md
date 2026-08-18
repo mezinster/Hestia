@@ -97,21 +97,46 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   seul script. Signature de `DeviceRepository.getButtonTimerConfig`/`setButtonTimer` inchangée,
   aucune UI à toucher. Prudence conservée : `Array.map()` évité dans le JS généré au profit d'une
   boucle `for` + `push()`, seule technique déjà éprouvée en production.
-  Lots B (coupure sur seuil `hestia_charge`) et C (présence, notif de fin) pas encore commencés —
-  **Lot B plus délicat que A** : contrairement au bouton (toujours présent une fois configuré),
-  ce script apparaît/disparaît dynamiquement à chaque démarrage/fin de minuteur, potentiellement
-  sur plusieurs canaux en même temps. Le mécanisme actuel de détection « le script a coupé »
-  (`cutoffScriptFired`, qui interprète la disparition du script comme preuve de coupure) ne se
-  généralise pas tel quel à un script partagé qui doit continuer à vivre tant qu'un seul canal
-  reste actif.
-  **Piste validée en direct le 2026-08-17** : `Switch.GetStatus.source` vaut `"loopback"` quand
-  la dernière bascule d'un canal vient d'un script (confirmé sur deux canaux distincts du Strip 4,
-  coupés par le script du minuteur bouton). `cutoffScriptFired` pourrait donc se baser là-dessus
-  (le canal a-t-il été coupé par *un* script) plutôt que sur la présence/désactivation du script
-  lui-même — indépendant du fait que le script soit partagé entre plusieurs canaux ou non, donc
-  compatible tel quel avec le futur `hestia_charge` partagé. Reste à confirmer que ça tient aussi
-  spécifiquement pour une coupure par `hestia_charge` (testé ici via le script bouton), avant de
-  coder le Lot B.
+  **Lot B (coupure sur seuil `hestia_charge`) — bug trouvé en test réel le 2026-08-18, corrigé le
+  même jour, pas encore validé sur le terrain.** Une première version (même principe que le Lot A :
+  redéploie tout le script — `Stop`+réécriture+`Start` — à chaque canal ajouté/retiré) a révélé un
+  vrai bug au premier test sur le Strip 4 : minuteur avec seuil lancé sur la prise 1, puis sur la
+  prise 2 30s plus tard → **les deux ont coupé en même temps**, la prise 1 ayant tourné 1min30 au
+  lieu de 1min. Diagnostic confirmé par un relevé toutes les 5s (`Switch.GetStatus` + contenu du
+  script) : le redéploiement déclenché par le démarrage de la prise 2 réinitialise la mémoire
+  interne (compteur « sous le seuil depuis... ») de **tous** les canaux déjà suivis, pas seulement
+  celui qu'on ajoute — dans le pire cas (canaux démarrés en cascade rapprochée), une coupure
+  pourrait ne jamais se déclencher.
+  **Correctif validé en direct avant d'être codé** (comme pour la découverte initiale de la limite
+  des 3 scripts) : `Script.Eval` permet d'exécuter du JS dans le contexte d'un script **déjà en
+  cours d'exécution**, en lisant et modifiant ses variables de haut niveau sans jamais le
+  redémarrer — testé avec un compteur qui continue d'incrémenter sans interruption après une
+  mutation par `Eval` sur une autre variable, puis avec un tableau d'objets (`.push()` + relecture
+  via `JSON.stringify`, persistant entre appels séparés). Piste de repli envisagée puis écartée :
+  reécrire discrètement le texte enregistré du script (`Script.PutCode`) sans le redémarrer, pour
+  qu'un vrai redémarrage matériel retrouve au moins le dernier état connu — testé et **refusé net**
+  par l'appareil (`-103 "The script is running!"` : `PutCode` exige `Stop` au préalable, donc
+  impossible sans perdre le bénéfice recherché).
+  Architecture retenue : `generateSupervisor()` ne sert plus qu'au **tout premier déploiement**
+  (aucun script existant, ou existant mais arrêté) ; ajouter/retirer un canal sur un script déjà en
+  cours passe exclusivement par `Script.Eval` (nouvelles fonctions `evalUpsertChannel()`/
+  `evalRemoveChannel()`, reconstruisent `CFG`/`STATE` via un tableau tampon + `for`/`push`, jamais
+  `.splice()` — même prudence que pour `Array.map()`, non testé). Limite acceptée en connaissance
+  de cause : un canal ajouté uniquement via `Eval` ne survit pas à un vrai redémarrage matériel
+  (coupure secteur, mise à jour firmware) survenant pendant que son minuteur tourne — cas rare,
+  sans danger, juste la protection à relancer manuellement si ça arrive.
+  `cutoffScriptFired` basé sur `Switch.GetStatus.source == "loopback"` (piste validée en direct la
+  veille sur le script bouton) au lieu de l'ancienne détection « le script a disparu », qui ne se
+  généralisait pas à un script partagé. Le générateur `generate()`/`parseThreshold()`/
+  `uniquePlanningScriptName()` d'origine, utilisé uniquement par la coupure de planning (jamais
+  partagé par conception, un script par occurrence, pas concerné par la limite de 3), reste
+  **entièrement inchangé**. Migration simplifiée par rapport au Lot A : ce script est transitoire
+  par nature (actif seulement pendant qu'un minuteur tourne, se désactive seul), donc pas d'état à
+  préserver — les éventuels anciens scripts `hestia_charge_<canal>` sont simplement supprimés à la
+  prochaine lecture. Signatures publiques de `DeviceRepository`
+  (`startChargeTimer`/`startUnlimitedChargeTimer`/`cutoffScriptFired`/`cancelTimer`) inchangées,
+  aucune UI à toucher.
+  Lot C (présence, notif de fin) pas encore commencé.
 
 ## Fonctionnalités futures
 
@@ -146,6 +171,21 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   automatique quand la sécurité renforcée (`enhanced_security`) est activée côté appareil — si un
   utilisateur l'active un jour, les appels HTTP en clair d'Hestia (`cleartextTrafficPermitted`)
   pourraient casser. Aucun de nos appareils de test ne l'a activée pour l'instant.
+- **Cloud Shelly activable par appareil** (2026-08-17) : un interrupteur, par appareil physique
+  (pas global à l'app), pour activer le cloud natif de Shelly (`cloud.enable`, déjà vu désactivé
+  dans nos dumps `Shelly.GetConfig` cette session). Permettrait de garder la plupart des appareils
+  strictement locaux tout en ouvrant ceux qui en profiteraient (détecteurs de fumée notamment,
+  utiles à surveiller même hors du réseau domestique) — opt-in, par appareil, cohérent avec le
+  principe déjà posé pour ntfy (« toute fonctionnalité qui fait sortir des données du réseau
+  local doit être opt-in et clairement expliquée »). Techniquement simple (un seul appel RPC
+  `Cloud.SetConfig`), l'essentiel de l'effort serait le texte d'explication : bien préciser que
+  c'est le cloud de **Shelly**, pas un service Hestia, qu'Hestia n'ajoute aucune fonction de
+  surveillance à distance elle-même (ça resterait dans l'app/compte Shelly), et qu'Hestia ne crée
+  ni ne gère jamais de compte (ligne rouge du projet, inchangée). **À vérifier avant tout code** :
+  est-ce que `cloud.enable=true` suffit à connecter l'appareil, ou faut-il un appairage préalable
+  via l'appli Shelly (compte créé par l'utilisateur lui-même, jamais par Hestia) — déterminerait
+  si Hestia ne fait qu'« ouvrir la porte » ou doit aussi expliquer une étape supplémentaire hors
+  de l'app.
 - **Trouver l'IP du hotspot directement depuis Hestia** (2026-08-14) : un bouton « Trouver l'IP »
   par champ IP, qui interroge l'admin de la prise (`192.168.33.1`) pendant qu'elle est encore en
   mode point d'accès, pour lire l'IP qu'elle vient d'obtenir sur le réseau cible. Ne fonctionne que
@@ -176,6 +216,13 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   aussi fonctionner). Chantier de taille comparable à ntfy en son temps — plusieurs lots à prévoir
   (deep link, cycle de vie des tags, écran de gestion, export PDF pour impression via l'API PDF
   native Android, pas de nouvelle dépendance nécessaire).
+- **Déplacer « Mise à jour » et « Redémarrer » vers la page Modifier d'un appareil** (2026-08-18) :
+  aujourd'hui dupliqués à l'identique sur l'écran Détail de chaque canal d'un même bloc multi-
+  canaux (un seul appareil physique, donc un seul firmware, un seul redémarrage) — recoupe le
+  chantier « par appareil physique, pas par canal » déjà identifié en creusant le script
+  superviseur (voir § En cours de traitement). À rapprocher de la LED d'état, déjà gérée par
+  appareil physique dans `AddEditDeviceScreen` (page « Modifier ») plutôt que par canal : même
+  logique à appliquer à la mise à jour firmware et au redémarrage.
 ## Fait — pour mémoire
 
 Points sortis du backlog, avec ce qui a été tranché :

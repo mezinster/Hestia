@@ -3,7 +3,7 @@
 ## Build + copie de l'APK (nom horodaté, pas de souci de cache)
 
 ```bash
-cd /Users/david/www/Hestia && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk /tmp/hestia-apk/hestia-$(date +%H%M%S).apk && cd /tmp/hestia-apk && ls -t *.apk | head -1
+cd /Users/david/www/Hestia && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk /tmp/hestia-apk/hestia-$(date +%Y%m%d-%H%M%S).apk && cd /tmp/hestia-apk && ls -t *.apk | head -1
 ```
 
 ## Lancement du serveur (installation sans câble)

@@ -38,4 +38,15 @@ object NtfyScriptSupport {
         return "Shelly.call(\"HTTP.Request\", { method: \"POST\", url: \"https://ntfy.sh/${jsString(topic)}\", " +
             "body: \"${jsString(body)}\", timeout: 5, headers: { Title: $titleExpr } });"
     }
+
+    /**
+     * Comme [callDynamicTitle], mais le **corps** est aussi une expression JS — pour le cas où le
+     * texte varie aussi selon le canal (ex. la notif de fin de minuteur, dont le texte dépend du
+     * réglage lancé sur ce canal précis, pas seulement de son nom).
+     */
+    fun callDynamicTitleAndBody(topic: String?, titleExpr: String, bodyExpr: String): String {
+        if (topic == null) return ""
+        return "Shelly.call(\"HTTP.Request\", { method: \"POST\", url: \"https://ntfy.sh/${jsString(topic)}\", " +
+            "body: $bodyExpr, timeout: 5, headers: { Title: $titleExpr } });"
+    }
 }

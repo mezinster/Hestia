@@ -11,6 +11,7 @@ import kapoue.hestia.data.rpc.model.ScheduleCreateResult
 import kapoue.hestia.data.rpc.model.ScheduleDeleteResult
 import kapoue.hestia.data.rpc.model.ScheduleListResult
 import kapoue.hestia.data.rpc.model.ScriptCreateResult
+import kapoue.hestia.data.rpc.model.ScriptEvalResult
 import kapoue.hestia.data.rpc.model.ScriptGetCodeResult
 import kapoue.hestia.data.rpc.model.ScriptListResult
 import kapoue.hestia.data.rpc.model.ScriptPutCodeResult
@@ -223,6 +224,24 @@ class ShellyRpcClient @Inject constructor(
 
     suspend fun scriptDelete(ip: String, id: Int): RpcResult<ScriptRunResult> =
         call(ip, "Script.Delete", buildJsonObject { put("id", id) }, ScriptRunResult.serializer())
+
+    /**
+     * Exécute [code] dans le contexte d'un script **déjà en cours d'exécution** — échoue avec
+     * `-109` si ce n'est pas le cas. Contrairement à `Script.PutCode`+`Script.Stop`/`Start`, ne
+     * réinitialise jamais les variables de haut niveau du script : validé en direct le 2026-08-18
+     * (superviseur `hestia_charge`, voir [kapoue.hestia.data.presence.ChargeScriptGenerator]) —
+     * seul moyen trouvé d'ajouter/retirer un canal surveillé sans perdre la mémoire des autres.
+     */
+    suspend fun scriptEval(ip: String, id: Int, code: String): RpcResult<ScriptEvalResult> =
+        call(
+            ip,
+            "Script.Eval",
+            buildJsonObject {
+                put("id", id)
+                put("code", code)
+            },
+            ScriptEvalResult.serializer(),
+        )
 
     // --- Schedule (planning natif de l'appareil) ---
 

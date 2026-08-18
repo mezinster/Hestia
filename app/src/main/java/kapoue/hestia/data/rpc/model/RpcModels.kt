@@ -122,6 +122,16 @@ data class ScriptGetCodeResult(
     val left: Int = 0,
 )
 
+/**
+ * Réponse de Script.Eval : le champ s'appelle bien `result` dans le schéma Shelly lui-même (pas un
+ * effet de l'enveloppe JSON-RPC) — toujours une chaîne, y compris pour une valeur numérique
+ * (`"3"`), validé en direct le 2026-08-18.
+ */
+@Serializable
+data class ScriptEvalResult(
+    val result: String? = null,
+)
+
 @Serializable
 data class ScriptEntry(
     val id: Int,
@@ -211,4 +221,10 @@ data class SwitchStatusResult(
     @SerialName("timer_started_at") val timerStartedAt: Double? = null,
     /** Durée totale du minuteur (secondes). Absent si pas de minuteur. */
     @SerialName("timer_duration") val timerDuration: Double? = null,
+    /**
+     * Origine de la dernière bascule : `"button"`/`"short_push"` (bouton physique, variable selon
+     * le modèle), `"HTTP_in"` (RPC, ex. l'app), `"loopback"` (un script) — validé en direct le
+     * 2026-08-17. Persiste jusqu'à la bascule suivante, utile pour savoir après coup qui a coupé.
+     */
+    val source: String? = null,
 )
