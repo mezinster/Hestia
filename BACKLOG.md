@@ -87,6 +87,31 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   code, `DetailScreen` étant par canal). L'idée est de profiter de cette refonte pour clarifier
   partout dans Hestia ce qui relève du canal individuel vs de l'appareil physique, pas seulement
   pour les scripts.
+  **Lot A (minuteur bouton) livré et validé en test réel le 2026-08-17** : un seul script
+  `hestia_button_timer` par appareil (fini le suffixe par canal), config = liste `[[switchId,
+  durée,seuil],...]`, état JS par canal (tableau `STATE`, pas de variables globales). Migration
+  automatique et transparente des anciens scripts par-canal vers le nouveau format confirmée sur
+  le Plug M (l'ancien script disparaît bien après lecture/écriture, sans action utilisateur).
+  Comportement fonctionnel confirmé sur le Strip 4 : deux canaux avec détection de seuil,
+  notifications de fin reçues après ~1 min sous le seuil, sur plusieurs canaux à la fois via un
+  seul script. Signature de `DeviceRepository.getButtonTimerConfig`/`setButtonTimer` inchangée,
+  aucune UI à toucher. Prudence conservée : `Array.map()` évité dans le JS généré au profit d'une
+  boucle `for` + `push()`, seule technique déjà éprouvée en production.
+  Lots B (coupure sur seuil `hestia_charge`) et C (présence, notif de fin) pas encore commencés —
+  **Lot B plus délicat que A** : contrairement au bouton (toujours présent une fois configuré),
+  ce script apparaît/disparaît dynamiquement à chaque démarrage/fin de minuteur, potentiellement
+  sur plusieurs canaux en même temps. Le mécanisme actuel de détection « le script a coupé »
+  (`cutoffScriptFired`, qui interprète la disparition du script comme preuve de coupure) ne se
+  généralise pas tel quel à un script partagé qui doit continuer à vivre tant qu'un seul canal
+  reste actif.
+  **Piste validée en direct le 2026-08-17** : `Switch.GetStatus.source` vaut `"loopback"` quand
+  la dernière bascule d'un canal vient d'un script (confirmé sur deux canaux distincts du Strip 4,
+  coupés par le script du minuteur bouton). `cutoffScriptFired` pourrait donc se baser là-dessus
+  (le canal a-t-il été coupé par *un* script) plutôt que sur la présence/désactivation du script
+  lui-même — indépendant du fait que le script soit partagé entre plusieurs canaux ou non, donc
+  compatible tel quel avec le futur `hestia_charge` partagé. Reste à confirmer que ça tient aussi
+  spécifiquement pour une coupure par `hestia_charge` (testé ici via le script bouton), avant de
+  coder le Lot B.
 
 ## Fonctionnalités futures
 

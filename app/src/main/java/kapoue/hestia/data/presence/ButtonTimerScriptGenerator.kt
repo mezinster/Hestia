@@ -10,6 +10,14 @@ import kotlinx.serialization.json.Json
  * Input (absent sur les modèles mono-canal validés en direct : pas d'appui long/double possible
  * sur ce matériel, le bouton est câblé en dur au relais).
  *
+ * **Un seul script par appareil physique, pas par canal** (2026-08-17, script « superviseur ») :
+ * le moteur de scripts Shelly n'autorise que **3 scripts activés simultanément par appareil**
+ * (erreur RPC `-108` au-delà) — un bloc à 4 canaux avec un minuteur bouton sur chacun aurait
+ * besoin de 4 scripts en permanence, saturant la limite à lui seul et bloquant silencieusement
+ * toute autre fonctionnalité à base de script (seuil, présence, notifs) sur le bloc entier, quel
+ * que soit le canal. Un seul script surveille donc désormais tous les canaux configurés à la
+ * fois, chacun avec son propre état (armé, minuteur, seuil) — totalement indépendant des autres.
+ *
  * **La valeur exacte de `source` varie selon le modèle** : `"button"` sur Plug M Gen3 (validé en
  * direct), `"short_push"` sur Strip 4 (validé en direct après un bug où le script ne s'armait
  * jamais — la comparaison ne matchait pas). [isButtonSource] accepte les deux, plus les variantes
@@ -24,52 +32,60 @@ import kotlinx.serialization.json.Json
  */
 object ButtonTimerScriptGenerator {
 
-    /**
-     * Nom **par canal** — un appareil multi-canaux (ex. Strip 4) partage un seul moteur de
-     * scripts entre tous ses relais : un nom fixe ferait retrouver/écraser le script d'un autre
-     * canal du même appareil au lieu du sien (bug vécu en direct, corrigé).
-     */
-    fun scriptName(switchId: Int): String = "hestia_button_timer_$switchId"
+    /** Un seul nom, fixe : un seul script de ce type par appareil physique désormais. */
+    const val SCRIPT_NAME = "hestia_button_timer"
 
     private const val MARKER = "// hestia_button_timer:"
     private const val BELOW_SEC = 60
-    /** Grâce avant surveillance quand [generate.durationSec] est null (sans limite de durée). */
+    /** Grâce avant surveillance quand [ChannelConfig.durationSec] est null (sans limite de durée). */
     private const val UNLIMITED_GRACE_SEC = 15 * 60
 
     /**
-     * [durationSec] null = **sans limite de durée** : aucun minuteur natif armé à l'appui, la
-     * prise reste allumée jusqu'à la coupure sur seuil (obligatoire dans ce cas — sans durée ni
-     * seuil, rien ne l'éteindrait jamais). Une période de grâce fixe de 15 min précède alors toute
-     * surveillance, absente sinon (comportement historique inchangé avec une durée).
-     *
-     * [ntfyTopic] non nul = notifie via ntfy à la fin ([ntfyEndBody]) et à une coupure sur seuil
-     * ([ntfyCutoffBody]). Un appui bouton qui annule le minuteur en cours (source de nouveau un
-     * appui bouton au moment de l'extinction, voir `isButtonSource`) ne notifie jamais — c'est
-     * une action manuelle délibérée.
+     * Config d'un canal surveillé par le script. [durationSec] null = sans limite de durée (la
+     * prise reste allumée jusqu'à la coupure sur seuil, [thresholdW] alors obligatoire — imposé
+     * côté appelant). [name] sert uniquement au titre des notifications ntfy de ce canal.
+     */
+    data class ChannelConfig(
+        val switchId: Int,
+        val durationSec: Int?,
+        val thresholdW: Int?,
+        val name: String,
+    )
+
+    /**
+     * [configs] : un élément par canal configuré (les autres canaux de l'appareil, absents de la
+     * liste, ne sont pas concernés). [ntfyTopic] non nul = notifie via ntfy à la fin
+     * ([ntfyEndBody]) et à une coupure sur seuil ([ntfyCutoffBody]) — texte générique, identique
+     * pour tous les canaux, seul le titre (nom de la prise) varie, résolu à l'exécution. Un appui
+     * bouton qui annule le minuteur en cours (source de nouveau un appui bouton au moment de
+     * l'extinction, voir `isButtonSource`) ne notifie jamais — c'est une action manuelle délibérée.
      */
     fun generate(
-        switchId: Int,
-        durationSec: Int?,
-        thresholdW: Int?,
+        configs: List<ChannelConfig>,
         ntfyTopic: String? = null,
-        ntfyTitle: String = "",
         ntfyEndBody: String = "",
         ntfyCutoffBody: String = "",
     ): String {
-        val marker = "[${durationSec ?: "null"},${thresholdW ?: "null"}]"
-        val durationLiteral = durationSec?.toString() ?: "null"
-        val thresholdLiteral = thresholdW?.toString() ?: "null"
-        val graceSec = if (durationSec == null) UNLIMITED_GRACE_SEC else 0
-        val ntfyEnd = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyEndBody)
-        val ntfyCutoff = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyCutoffBody)
+        val marker = configs.joinToString(",", "[", "]") {
+            "[${it.switchId},${it.durationSec ?: "null"},${it.thresholdW ?: "null"}]"
+        }
+        val cfgArray = configs.joinToString(",\n          ", "[\n          ", "\n        ]") { c ->
+            val graceSec = if (c.durationSec == null) UNLIMITED_GRACE_SEC else 0
+            val durationLiteral = c.durationSec?.toString() ?: "null"
+            val thresholdLiteral = c.thresholdW?.toString() ?: "null"
+            "{ switchId: ${c.switchId}, durationSec: $durationLiteral, thresholdW: $thresholdLiteral, " +
+                "belowSec: $BELOW_SEC, graceSec: $graceSec, name: \"${NtfyScriptSupport.jsString(c.name)}\" }"
+        }
+        val notifyEnd = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyEndBody)
+        val notifyCutoff = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyCutoffBody)
         return """
-        // Généré par Hestia — minuteur déclenché par le bouton physique
+        // Généré par Hestia — minuteur déclenché par le bouton physique (plusieurs canaux)
         $MARKER$marker
-        let CFG = { switchId: $switchId, durationSec: $durationLiteral, thresholdW: $thresholdLiteral, belowSec: $BELOW_SEC, graceSec: $graceSec };
-        let armed = false;
-        let wasOn = false;
-        let belowSince = null;
-        let onSince = null;
+        let CFG = $cfgArray;
+        let STATE = [];
+        for (let i = 0; i < CFG.length; i++) {
+          STATE.push({ armed: false, wasOn: false, belowSince: null, onSince: null });
+        }
 
         // La valeur exacte de "source" pour un appui bouton varie selon le modèle de prise
         // (ex. "button" sur Plug M, "short_push" sur Strip 4) — accepte les variantes plausibles.
@@ -77,69 +93,78 @@ object ButtonTimerScriptGenerator {
           return src === "button" || src === "short_push" || src === "long_push" || src === "double_push" || src === "triple_push";
         }
 
+        function notifyEnd(name) { $notifyEnd }
+        function notifyCutoff(name) { $notifyCutoff }
+
         Timer.set(1000, true, function () {
-          let st = Shelly.getComponentStatus("switch", CFG.switchId);
-          if (!st) return;
+          for (let i = 0; i < CFG.length; i++) {
+            let cfg = CFG[i];
+            let s = STATE[i];
+            let st = Shelly.getComponentStatus("switch", cfg.switchId);
+            if (!st) continue;
 
-          if (!armed) {
-            // En veille : un appui qui vient d'allumer arme le minuteur par-dessus (ou, sans
-            // durée, laisse simplement l'allumage natif du bouton tel quel).
-            if (st.output && !wasOn && isButtonSource(st.source)) {
-              armed = true;
-              belowSince = null;
-              onSince = null;
-              if (CFG.durationSec !== null) {
-                Shelly.call("Switch.Set", { id: CFG.switchId, on: true, toggle_after: CFG.durationSec });
+            if (!s.armed) {
+              // En veille : un appui qui vient d'allumer arme le minuteur par-dessus (ou, sans
+              // durée, laisse simplement l'allumage natif du bouton tel quel).
+              if (st.output && !s.wasOn && isButtonSource(st.source)) {
+                s.armed = true;
+                s.belowSince = null;
+                s.onSince = null;
+                if (cfg.durationSec !== null) {
+                  Shelly.call("Switch.Set", { id: cfg.switchId, on: true, toggle_after: cfg.durationSec });
+                }
               }
+              s.wasOn = st.output;
+              continue;
             }
-            wasOn = st.output;
-            return;
-          }
 
-          if (wasOn && !st.output) {
-            // Éteinte pendant que le minuteur tournait : fin naturelle, coupure, ou action
-            // manuelle. Un nouvel appui bouton pour annuler ne notifie jamais (délibéré).
-            if (!isButtonSource(st.source)) {
-              $ntfyEnd
-            }
-            armed = false;
-            belowSince = null;
-            wasOn = false;
-            return;
-          }
-          wasOn = st.output;
-
-          let sys = Shelly.getComponentStatus("sys");
-          let now = (sys && sys.unixtime) ? sys.unixtime : null;
-          if (onSince === null && now !== null) onSince = now;
-          if (CFG.graceSec > 0 && onSince !== null && now !== null && (now - onSince) < CFG.graceSec) return;
-
-          if (CFG.thresholdW !== null && st.output) {
-            let p = st.apower;
-            if (p !== undefined && p !== null && p < CFG.thresholdW) {
-              if (now === null) return;
-              if (belowSince === null) belowSince = now;
-              if (now - belowSince >= CFG.belowSec) {
-                Shelly.call("Switch.Set", { id: CFG.switchId, on: false });
-                $ntfyCutoff
-                armed = false;
-                belowSince = null;
-                wasOn = false;
+            if (s.wasOn && !st.output) {
+              // Éteinte pendant que le minuteur tournait : fin naturelle, coupure, ou action
+              // manuelle. Un nouvel appui bouton pour annuler ne notifie jamais (délibéré).
+              if (!isButtonSource(st.source)) {
+                notifyEnd(cfg.name);
               }
-            } else {
-              belowSince = null;
+              s.armed = false;
+              s.belowSince = null;
+              s.wasOn = false;
+              continue;
+            }
+            s.wasOn = st.output;
+
+            let sys = Shelly.getComponentStatus("sys");
+            let now = (sys && sys.unixtime) ? sys.unixtime : null;
+            if (s.onSince === null && now !== null) s.onSince = now;
+            if (cfg.graceSec > 0 && s.onSince !== null && now !== null && (now - s.onSince) < cfg.graceSec) continue;
+
+            if (cfg.thresholdW !== null && st.output) {
+              let p = st.apower;
+              if (p !== undefined && p !== null && p < cfg.thresholdW) {
+                if (now === null) continue;
+                if (s.belowSince === null) s.belowSince = now;
+                if (now - s.belowSince >= cfg.belowSec) {
+                  Shelly.call("Switch.Set", { id: cfg.switchId, on: false });
+                  notifyCutoff(cfg.name);
+                  s.armed = false;
+                  s.belowSince = null;
+                  s.wasOn = false;
+                }
+              } else {
+                s.belowSince = null;
+              }
             }
           }
         });
         """.trimIndent()
     }
 
-    /** Relit (durée ou null si illimité, seuil) depuis la ligne-marqueur, ou null si absente/illisible. */
-    fun parse(code: String): Pair<Int?, Int?>? {
+    /** Relit (canal, durée ou null si illimité, seuil) pour chaque canal configuré, ou null si illisible. */
+    fun parse(code: String): List<Triple<Int, Int?, Int?>>? {
         val line = code.lineSequence().firstOrNull { it.trimStart().startsWith(MARKER) } ?: return null
         val payload = line.trim().removePrefix(MARKER).trim()
-        val rows = runCatching { Json.decodeFromString<List<Int?>>(payload) }.getOrNull() ?: return null
-        if (rows.size < 2) return null
-        return rows[0] to rows[1]
+        val rows = runCatching { Json.decodeFromString<List<List<Int?>>>(payload) }.getOrNull() ?: return null
+        return rows.mapNotNull { r ->
+            if (r.size < 3 || r[0] == null) return@mapNotNull null
+            Triple(r[0]!!, r[1], r[2])
+        }
     }
 }

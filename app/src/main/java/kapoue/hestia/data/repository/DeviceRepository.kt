@@ -393,34 +393,73 @@ class DeviceRepository @Inject constructor(
     }
 
     // --- Minuteur déclenché par le bouton physique ---
+    // Un seul script partagé par appareil physique depuis le 2026-08-17 (voir
+    // ButtonTimerScriptGenerator) — la limite Shelly de 3 scripts activés par appareil rendait
+    // un script par canal intenable dès 3 canaux configurés sur un même bloc.
 
     /** [durationSeconds] null = sans limite de durée (seuil alors obligatoire, voir [ButtonTimerScriptGenerator]). */
     data class ButtonTimerConfig(val enabled: Boolean, val durationSeconds: Int?, val thresholdW: Int?)
 
-    /** Lit la config réellement déployée sur l'appareil (jamais supposée, jamais stockée par Hestia). */
-    suspend fun getButtonTimerConfig(device: Device): ButtonTimerConfig {
-        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
-        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
-        val entry = listResult.getOrNull()?.scripts
-            ?.firstOrNull { it.name == ButtonTimerScriptGenerator.scriptName(device.switchId) }
-            ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
-        val code = rpcClient.scriptGetCode(ip, entry.id).getOrNull()?.data
-            ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
-        val parsed = ButtonTimerScriptGenerator.parse(code) ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
-        return ButtonTimerConfig(true, parsed.first, parsed.second)
-    }
+    /** Tous les autres canaux du même appareil physique (même IP), [device] exclu. */
+    private suspend fun siblingsSharingIp(device: Device): List<Device> =
+        deviceDao.getAllOnce().filter { it.ipAddress == device.ipAddress && it.id != device.id }
 
     /**
-     * Active/reconfigure (script créé ou réécrit) ou désactive (script supprimé, comportement
-     * natif du bouton retrouvé) le minuteur déclenché par le bouton physique. [durationSeconds]
-     * null = sans limite de durée ([thresholdW] alors obligatoire, imposé côté appelant).
+     * Lit la config réellement déployée sur l'appareil (jamais supposée, jamais stockée par
+     * Hestia) — tous canaux confondus. Migre au passage d'éventuels scripts hérités (un par
+     * canal, avant le 2026-08-17) vers le script partagé, de façon transparente et automatique.
      */
-    suspend fun setButtonTimer(device: Device, enabled: Boolean, durationSeconds: Int?, thresholdW: Int?): RpcResult<Unit> {
+    private suspend fun loadOrMigrateButtonTimerScript(device: Device): Pair<String, List<ButtonTimerScriptGenerator.ChannelConfig>> {
         val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
-        val existing = listResult.getOrNull()?.scripts
-            ?.firstOrNull { it.name == ButtonTimerScriptGenerator.scriptName(device.switchId) }
+        val scripts = listResult.getOrNull()?.scripts.orEmpty()
 
-        if (!enabled) {
+        val shared = scripts.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME }
+        if (shared != null) {
+            val code = rpcClient.scriptGetCode(ip, shared.id).getOrNull()?.data ?: return ip to emptyList()
+            val allDevices = listOf(device) + siblingsSharingIp(device)
+            val configs = ButtonTimerScriptGenerator.parse(code).orEmpty().mapNotNull { (switchId, dur, thr) ->
+                val name = allDevices.firstOrNull { it.switchId == switchId }?.name ?: return@mapNotNull null
+                ButtonTimerScriptGenerator.ChannelConfig(switchId, dur, thr, name)
+            }
+            return ip to configs
+        }
+
+        // Pas de script partagé : reprendre d'éventuels scripts hérités (ancien format, un par
+        // canal), les fusionner dans le nouveau, puis nettoyer les anciens — best-effort, jamais
+        // bloquant si un des scripts hérités est illisible (juste ignoré).
+        val allDevices = listOf(device) + siblingsSharingIp(device)
+        val legacy = allDevices.mapNotNull { d ->
+            val entry = scripts.firstOrNull { it.name == "hestia_button_timer_${d.switchId}" } ?: return@mapNotNull null
+            val code = rpcClient.scriptGetCode(ip, entry.id).getOrNull()?.data ?: return@mapNotNull null
+            val (dur, thr) = parseLegacyButtonTimerMarker(code) ?: return@mapNotNull null
+            entry to ButtonTimerScriptGenerator.ChannelConfig(d.switchId, dur, thr, d.name)
+        }
+        if (legacy.isEmpty()) return ip to emptyList()
+        val migrated = legacy.map { it.second }
+        deployButtonTimerScript(ip, migrated)
+        legacy.forEach { (entry, _) ->
+            rpcClient.scriptStop(ip, entry.id)
+            rpcClient.scriptDelete(ip, entry.id)
+        }
+        return ip to migrated
+    }
+
+    /** Ancien format (avant le 2026-08-17) : un marqueur `[durée,seuil]` par script, un script par canal. */
+    private fun parseLegacyButtonTimerMarker(code: String): Pair<Int?, Int?>? {
+        val line = code.lineSequence().firstOrNull { it.trimStart().startsWith("// hestia_button_timer:") } ?: return null
+        val payload = line.trim().removePrefix("// hestia_button_timer:").trim()
+        val rows = runCatching { kotlinx.serialization.json.Json.decodeFromString<List<Int?>>(payload) }.getOrNull() ?: return null
+        if (rows.size < 2) return null
+        return rows[0] to rows[1]
+    }
+
+    /** Réécrit le script partagé avec exactement [configs] ; le supprime si la liste est vide. */
+    private suspend fun deployButtonTimerScript(ip: String, configs: List<ButtonTimerScriptGenerator.ChannelConfig>): RpcResult<Unit> {
+        val list = rpcClient.scriptList(ip)
+        list.errorOrNull()?.let { return it }
+        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME }
+
+        if (configs.isEmpty()) {
             existing?.let {
                 rpcClient.scriptStop(ip, it.id)
                 rpcClient.scriptDelete(ip, it.id).errorOrNull()?.let { e -> return e }
@@ -429,24 +468,50 @@ class DeviceRepository @Inject constructor(
         }
 
         val scriptId = existing?.id ?: run {
-            val create = rpcClient.scriptCreate(ip, ButtonTimerScriptGenerator.scriptName(device.switchId))
+            val create = rpcClient.scriptCreate(ip, ButtonTimerScriptGenerator.SCRIPT_NAME)
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
         }
         rpcClient.scriptStop(ip, scriptId)
         val topic = ntfyTopic()
         val code = ButtonTimerScriptGenerator.generate(
-            device.switchId, durationSeconds, thresholdW,
-            ntfyTopic = topic, ntfyTitle = device.name,
+            configs,
+            ntfyTopic = topic,
             ntfyEndBody = if (topic != null) context.getString(R.string.notif_button_timer_ended) else "",
             ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         // enable:true (contrairement au script de coupure d'un planning) : doit redémarrer seul
-        // après un redémarrage de l'appareil, la fonctionnalité ne doit pas se couper en silence.
+        // après un redémarrage de l'appareil, la fonctionnalité ne doit pas se désactiver silencieusement.
         rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
         rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
         return RpcResult.Success(Unit)
+    }
+
+    suspend fun getButtonTimerConfig(device: Device): ButtonTimerConfig {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
+        val (_, configs) = loadOrMigrateButtonTimerScript(device)
+        val mine = configs.firstOrNull { it.switchId == device.switchId }
+            ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
+        return ButtonTimerConfig(true, mine.durationSec, mine.thresholdW)
+    }
+
+    /**
+     * Active/reconfigure ou désactive le minuteur déclenché par le bouton physique **de ce
+     * canal**, sans toucher aux autres canaux configurés du même appareil (le script, lui, est
+     * partagé — réécrit en entier à chaque changement, avec la config de tous les canaux
+     * concernés). [durationSeconds] null = sans limite de durée ([thresholdW] alors obligatoire,
+     * imposé côté appelant).
+     */
+    suspend fun setButtonTimer(device: Device, enabled: Boolean, durationSeconds: Int?, thresholdW: Int?): RpcResult<Unit> {
+        val (ip, existing) = loadOrMigrateButtonTimerScript(device)
+        val others = existing.filterNot { it.switchId == device.switchId }
+        val updated = if (enabled) {
+            others + ButtonTimerScriptGenerator.ChannelConfig(device.switchId, durationSeconds, thresholdW, device.name)
+        } else {
+            others
+        }
+        return deployButtonTimerScript(ip, updated)
     }
 
     /** Vrai si des intervalles hebdomadaires chevauchent une plage de présence de l'appareil. */

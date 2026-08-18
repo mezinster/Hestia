@@ -26,4 +26,16 @@ object NtfyScriptSupport {
         return "Shelly.call(\"HTTP.Request\", { method: \"POST\", url: \"https://ntfy.sh/${jsString(topic)}\", " +
             "body: \"${jsString(body)}\", timeout: 5, headers: { Title: \"${jsString(title)}\" } });"
     }
+
+    /**
+     * Comme [call], mais [titleExpr] est une **expression JS** (ex. une variable) plutôt qu'un
+     * littéral — pour les scripts qui surveillent plusieurs canaux à la fois (2026-08-17, script
+     * superviseur) : le titre (nom de la prise) dépend du canal qui notifie, connu seulement à
+     * l'exécution du script, pas à sa génération.
+     */
+    fun callDynamicTitle(topic: String?, titleExpr: String, body: String): String {
+        if (topic == null) return ""
+        return "Shelly.call(\"HTTP.Request\", { method: \"POST\", url: \"https://ntfy.sh/${jsString(topic)}\", " +
+            "body: \"${jsString(body)}\", timeout: 5, headers: { Title: $titleExpr } });"
+    }
 }
