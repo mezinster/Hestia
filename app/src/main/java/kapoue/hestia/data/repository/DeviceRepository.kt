@@ -528,21 +528,49 @@ class DeviceRepository @Inject constructor(
 
     suspend fun getButtonTimerConfig(device: Device): ButtonTimerConfig {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
-        val (_, configs) = loadOrMigrateButtonTimerScript(device)
-        val mine = configs.firstOrNull { it.switchId == device.switchId }
-            ?: return ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
-        return ButtonTimerConfig(true, mine.durationSec, mine.thresholdW)
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        val running = listResult.getOrNull()?.scripts?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME && it.running }
+
+        val mine = if (running != null) {
+            // Script déjà en cours d'exécution : sa mémoire vivante est la seule source à jour,
+            // le texte enregistré peut être en retard depuis un ajout/retrait via Script.Eval.
+            val json = rpcClient.scriptEval(ip, running.id, ButtonTimerScriptGenerator.evalReadConfig()).getOrNull()?.result
+            json?.let { ButtonTimerScriptGenerator.parseEvalResult(it) }.orEmpty().firstOrNull { it.first == device.switchId }
+        } else {
+            val (_, configs) = loadOrMigrateButtonTimerScript(device)
+            configs.firstOrNull { it.switchId == device.switchId }?.let { Triple(it.switchId, it.durationSec, it.thresholdW) }
+        }
+        return mine?.let { ButtonTimerConfig(true, it.second, it.third) } ?: ButtonTimerConfig(false, DEFAULT_BUTTON_TIMER_SEC, null)
     }
 
     /**
      * Active/reconfigure ou désactive le minuteur déclenché par le bouton physique **de ce
-     * canal**, sans toucher aux autres canaux configurés du même appareil (le script, lui, est
-     * partagé — réécrit en entier à chaque changement, avec la config de tous les canaux
-     * concernés). [durationSeconds] null = sans limite de durée ([thresholdW] alors obligatoire,
-     * imposé côté appelant).
+     * canal**, sans jamais toucher aux autres canaux configurés du même appareil. Si le script
+     * partagé tourne déjà, la modification passe par `Script.Eval` (mémoire des autres canaux
+     * inchangée — voir [ButtonTimerScriptGenerator]) ; sinon (script absent, arrêté, ou reprise
+     * d'anciens scripts par canal), un premier déploiement classique reprend les réglages déjà
+     * connus des autres canaux avant de les réécrire tous ensemble, sans risque puisqu'il n'y a
+     * alors rien de vivant à perdre. [durationSeconds] null = sans limite de durée ([thresholdW]
+     * alors obligatoire, imposé côté appelant).
      */
     suspend fun setButtonTimer(device: Device, enabled: Boolean, durationSeconds: Int?, thresholdW: Int?): RpcResult<Unit> {
-        val (ip, existing) = loadOrMigrateButtonTimerScript(device)
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        listResult.errorOrNull()?.let { return it }
+        val running = listResult.getOrNull()?.scripts?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME && it.running }
+
+        if (running != null) {
+            val evalCode = if (enabled) {
+                ButtonTimerScriptGenerator.evalUpsertChannel(
+                    ButtonTimerScriptGenerator.ChannelConfig(device.switchId, durationSeconds, thresholdW, device.name),
+                )
+            } else {
+                ButtonTimerScriptGenerator.evalRemoveChannel(device.switchId)
+            }
+            val eval = rpcClient.scriptEval(ip, running.id, evalCode)
+            return eval.errorOrNull() ?: RpcResult.Success(Unit)
+        }
+
+        val (_, existing) = loadOrMigrateButtonTimerScript(device)
         val others = existing.filterNot { it.switchId == device.switchId }
         val updated = if (enabled) {
             others + ButtonTimerScriptGenerator.ChannelConfig(device.switchId, durationSeconds, thresholdW, device.name)

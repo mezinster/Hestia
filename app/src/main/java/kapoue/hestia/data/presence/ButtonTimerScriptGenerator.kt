@@ -52,6 +52,18 @@ object ButtonTimerScriptGenerator {
         val name: String,
     )
 
+    /** Littéral JS d'un canal, partagé entre [generate] et [evalUpsertChannel]. */
+    private fun channelLiteral(c: ChannelConfig): String {
+        val graceSec = if (c.durationSec == null) UNLIMITED_GRACE_SEC else 0
+        val durationLiteral = c.durationSec?.toString() ?: "null"
+        val thresholdLiteral = c.thresholdW?.toString() ?: "null"
+        return "{ switchId: ${c.switchId}, durationSec: $durationLiteral, thresholdW: $thresholdLiteral, " +
+            "belowSec: $BELOW_SEC, graceSec: $graceSec, name: \"${NtfyScriptSupport.jsString(c.name)}\" }"
+    }
+
+    /** Littéral JS d'un état de suivi vierge, partagé entre [generate] et [evalUpsertChannel]. */
+    private const val FRESH_STATE = "{ armed: false, wasOn: false, belowSince: null, onSince: null }"
+
     /**
      * [configs] : un élément par canal configuré (les autres canaux de l'appareil, absents de la
      * liste, ne sont pas concernés). [ntfyTopic] non nul = notifie via ntfy à la fin
@@ -59,6 +71,14 @@ object ButtonTimerScriptGenerator {
      * pour tous les canaux, seul le titre (nom de la prise) varie, résolu à l'exécution. Un appui
      * bouton qui annule le minuteur en cours (source de nouveau un appui bouton au moment de
      * l'extinction, voir `isButtonSource`) ne notifie jamais — c'est une action manuelle délibérée.
+     *
+     * Ne sert plus qu'au premier déploiement (aucun script existant, ou existant mais arrêté) ou à
+     * une reprise après script mort — voir [evalUpsertChannel]/[evalRemoveChannel] pour modifier un
+     * seul canal sur un script déjà en cours d'exécution, sans perdre la mémoire des autres (bug
+     * confirmé en direct le 2026-08-18, voir BACKLOG.md : redéployer tout le script réinitialise le
+     * suivi de **tous** les canaux, pas seulement celui qu'on change — un canal dont le minuteur
+     * natif tournait encore perdait le sien, silencieusement, sans notif de fin ni protection seuil
+     * pour le reste de son cycle).
      */
     fun generate(
         configs: List<ChannelConfig>,
@@ -69,13 +89,7 @@ object ButtonTimerScriptGenerator {
         val marker = configs.joinToString(",", "[", "]") {
             "[${it.switchId},${it.durationSec ?: "null"},${it.thresholdW ?: "null"}]"
         }
-        val cfgArray = configs.joinToString(",\n          ", "[\n          ", "\n        ]") { c ->
-            val graceSec = if (c.durationSec == null) UNLIMITED_GRACE_SEC else 0
-            val durationLiteral = c.durationSec?.toString() ?: "null"
-            val thresholdLiteral = c.thresholdW?.toString() ?: "null"
-            "{ switchId: ${c.switchId}, durationSec: $durationLiteral, thresholdW: $thresholdLiteral, " +
-                "belowSec: $BELOW_SEC, graceSec: $graceSec, name: \"${NtfyScriptSupport.jsString(c.name)}\" }"
-        }
+        val cfgArray = configs.joinToString(",\n          ", "[\n          ", "\n        ]") { channelLiteral(it) }
         val notifyEnd = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyEndBody)
         val notifyCutoff = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyCutoffBody)
         return """
@@ -84,7 +98,7 @@ object ButtonTimerScriptGenerator {
         let CFG = $cfgArray;
         let STATE = [];
         for (let i = 0; i < CFG.length; i++) {
-          STATE.push({ armed: false, wasOn: false, belowSince: null, onSince: null });
+          STATE.push($FRESH_STATE);
         }
 
         // La valeur exacte de "source" pour un appui bouton varie selon le modèle de prise
@@ -157,11 +171,71 @@ object ButtonTimerScriptGenerator {
         """.trimIndent()
     }
 
-    /** Relit (canal, durée ou null si illimité, seuil) pour chaque canal configuré, ou null si illisible. */
+    /**
+     * Relit (canal, durée ou null si illimité, seuil) pour chaque canal configuré, ou null si
+     * illisible — depuis le **texte enregistré** du script (`Script.GetCode`). Fiable uniquement
+     * quand le script n'est pas en cours d'exécution (rien de vivant à côté qui aurait pu diverger
+     * depuis) : sinon, préférer [parseEvalResult] sur une lecture via `Script.Eval` (voir
+     * `DeviceRepository`), seule source à jour une fois qu'on modifie un canal sans redéployer.
+     */
     fun parse(code: String): List<Triple<Int, Int?, Int?>>? {
         val line = code.lineSequence().firstOrNull { it.trimStart().startsWith(MARKER) } ?: return null
         val payload = line.trim().removePrefix(MARKER).trim()
         val rows = runCatching { Json.decodeFromString<List<List<Int?>>>(payload) }.getOrNull() ?: return null
+        return rows.mapNotNull { r ->
+            if (r.size < 3 || r[0] == null) return@mapNotNull null
+            Triple(r[0]!!, r[1], r[2])
+        }
+    }
+
+    /**
+     * Code `Script.Eval` pour ajouter/remplacer [config] dans `CFG`/`STATE` d'un script **déjà en
+     * cours d'exécution**, sans jamais toucher aux autres canaux (même technique que
+     * [kapoue.hestia.data.presence.ChargeScriptGenerator.evalUpsertChannel], validée en direct le
+     * 2026-08-18). Reconstruit via un tableau tampon (`for`+`push`), jamais `.splice()`.
+     */
+    fun evalUpsertChannel(config: ChannelConfig): String = """
+        (function () {
+          let kept = [];
+          let keptState = [];
+          for (let i = 0; i < CFG.length; i++) {
+            if (CFG[i].switchId !== ${config.switchId}) { kept.push(CFG[i]); keptState.push(STATE[i]); }
+          }
+          kept.push(${channelLiteral(config)});
+          keptState.push($FRESH_STATE);
+          CFG = kept;
+          STATE = keptState;
+        })();
+    """.trimIndent()
+
+    /** Code `Script.Eval` pour retirer le canal [switchId] du suivi ; ne fait rien s'il est absent. */
+    fun evalRemoveChannel(switchId: Int): String = """
+        (function () {
+          let kept = [];
+          let keptState = [];
+          for (let i = 0; i < CFG.length; i++) {
+            if (CFG[i].switchId !== $switchId) { kept.push(CFG[i]); keptState.push(STATE[i]); }
+          }
+          CFG = kept;
+          STATE = keptState;
+        })();
+    """.trimIndent()
+
+    /** Code `Script.Eval` pour lire la config actuelle (canal, durée, seuil) de tous les canaux suivis. */
+    fun evalReadConfig(): String = """
+        (function () {
+          let r = [];
+          for (let i = 0; i < CFG.length; i++) {
+            let c = CFG[i];
+            r.push([c.switchId, c.durationSec, c.thresholdW]);
+          }
+          return JSON.stringify(r);
+        })();
+    """.trimIndent()
+
+    /** Décode le JSON renvoyé par [evalReadConfig] (champ `result` de `Script.Eval`). */
+    fun parseEvalResult(json: String): List<Triple<Int, Int?, Int?>> {
+        val rows = runCatching { Json.decodeFromString<List<List<Int?>>>(json) }.getOrNull() ?: return emptyList()
         return rows.mapNotNull { r ->
             if (r.size < 3 || r[0] == null) return@mapNotNull null
             Triple(r[0]!!, r[1], r[2])

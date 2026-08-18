@@ -136,6 +136,27 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   prochaine lecture. Signatures publiques de `DeviceRepository`
   (`startChargeTimer`/`startUnlimitedChargeTimer`/`cutoffScriptFired`/`cancelTimer`) inchangées,
   aucune UI à toucher.
+  **Lot A, même défaut trouvé et corrigé le 2026-08-18** : `setButtonTimer` redéployait lui aussi
+  tout le script (`Stop`+réécriture+`Start`) à chaque changement sur n'importe quel canal — repéré
+  en répondant à une question sur le nombre de scripts simultanés, puis **confirmé en test réel**
+  sur le Strip 4 : appui physique sur le bouton du canal 0 (minuteur armé normalement, `source`
+  passe à `"loopback"` via l'appel `Switch.Set` du script lui-même — comportement normal, pas un
+  signe de bug), puis changement du réglage du canal 2 depuis l'app → lecture de `STATE` via
+  `Script.Eval` juste après : le canal 0 était repassé à `armed:false` alors que son minuteur natif
+  tournait toujours. Conséquence, différente de celle du Lot B mais réelle : un canal dans cet état
+  ne repasse plus jamais par la case « armé » avant de s'éteindre — **notif de fin perdue**, et si
+  le canal avait un seuil configuré, **sa protection reste désactivée pour le reste du cycle**, pas
+  juste retardée. Même correctif que le Lot B : `Script.Eval` (nouvelles fonctions
+  `evalUpsertChannel()`/`evalRemoveChannel()`/`evalReadConfig()`) pour modifier ou lire un seul
+  canal sans jamais redéployer tant que le script tourne déjà. Nuance par rapport au Lot B : ce
+  script est **persistant** (réglages utilisateur, pas un état transitoire), donc quand il faut
+  malgré tout redéployer (script absent, arrêté, ou migration d'anciens scripts par canal), on
+  reprend d'abord les réglages déjà connus des autres canaux via `loadOrMigrateButtonTimerScript`
+  avant de tout réécrire ensemble — sans risque dans ce cas précis puisqu'il n'y a alors rien de
+  vivant à perdre. `getButtonTimerConfig` lit désormais aussi par `Script.Eval` quand le script
+  tourne (texte enregistré non fiable dès qu'un canal a été modifié sans redéploiement), avec
+  repli sur l'ancienne lecture par `Script.GetCode` si le script est arrêté. Signatures publiques
+  inchangées, aucune UI à toucher.
   Lot C (présence, notif de fin) pas encore commencé.
 
 ## Fonctionnalités futures
