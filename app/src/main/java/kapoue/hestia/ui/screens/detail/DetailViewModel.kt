@@ -1,5 +1,6 @@
 package kapoue.hestia.ui.screens.detail
 
+import android.os.SystemClock
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -29,6 +30,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
+import kotlin.math.abs
 
 @HiltViewModel
 class DetailViewModel @Inject constructor(
@@ -377,11 +379,20 @@ class DetailViewModel @Inject constructor(
 
     private suspend fun fetch() {
         val dev = repository.getDevice(deviceId) ?: return
-        _status.value = repository.getStatus(dev).toTileStatus()
+        val status = repository.getStatus(dev).toTileStatus()
+        _status.value = status
         _activeIp.value = repository.activeIp(dev)
+        // Souvenir local (Manuel/Perso uniquement, voir DashboardViewModel.fetch) : ne le garder
+        // que s'il correspond au minuteur natif réellement en cours sur l'appareil, sinon un
+        // minuteur bouton (qui ne passe jamais par ce souvenir) afficherait un seuil/libellé
+        // d'une tout autre programmation, périmée — bug vécu en direct le 2026-08-18.
         val pendingTimer = appPreferences.pendingTimers().firstOrNull { it.deviceId == deviceId }
-        _pendingThresholdW.value = pendingTimer?.thresholdW
-        _pendingLabel.value = pendingTimer?.label
+        val deviceEndsAtElapsed = (status as? TileStatus.Online)?.timerEndsAtElapsed
+        val matches = pendingTimer != null && deviceEndsAtElapsed != null &&
+            abs(deviceEndsAtElapsed - SystemClock.elapsedRealtime() - (pendingTimer.endMillis - System.currentTimeMillis())) <= STALE_PENDING_TIMER_TOLERANCE_MS
+        if (pendingTimer != null && !matches) appPreferences.removePendingTimer(deviceId)
+        _pendingThresholdW.value = pendingTimer?.thresholdW.takeIf { matches }
+        _pendingLabel.value = pendingTimer?.label.takeIf { matches }
         if (dev.hasScripting) {
             loadPresence(dev)
             loadButtonTimer(dev)
@@ -410,5 +421,11 @@ class DetailViewModel @Inject constructor(
             repository.setButtonTimer(dev, enabled, durationSeconds, thresholdW)
             loadButtonTimer(dev)
         }
+    }
+
+    private companion object {
+        /** Tolérance pour considérer qu'un souvenir local de minuteur correspond bien au minuteur
+         * natif actuellement en cours sur l'appareil (voir le calcul dans [fetch]). */
+        const val STALE_PENDING_TIMER_TOLERANCE_MS = 5_000L
     }
 }

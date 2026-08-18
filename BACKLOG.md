@@ -157,6 +157,19 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   tourne (texte enregistré non fiable dès qu'un canal a été modifié sans redéploiement), avec
   repli sur l'ancienne lecture par `Script.GetCode` si le script est arrêté. Signatures publiques
   inchangées, aucune UI à toucher.
+  **Effet de bord trouvé en testant le Lot A bis, corrigé le 2026-08-18** : l'étiquette « X W »
+  affichée à côté du décompte (Tableau et Détail) venait uniquement d'un souvenir local
+  (`appPreferences.pendingTimers()`), écrit **seulement** par les minuteurs Manuel/Perso lancés
+  depuis l'app — un minuteur bouton (déclenché par un appui physique) n'y touche jamais, ni en
+  écriture ni en effacement. Un vieux souvenir restait donc affiché indéfiniment (le nettoyage en
+  tâche de fond ne passe que toutes les 15 min), y compris sur un minuteur bouton en cours sans
+  aucun seuil — repéré en direct : « 10 W » écrit alors que le bouton n'avait aucun seuil configuré.
+  Corrigé en croisant, à chaque lecture, le souvenir local avec le minuteur natif réellement en
+  cours sur l'appareil (`timer_started_at`/`timer_duration`, déjà relevés à chaque rafraîchissement
+  — aucun appel RPC supplémentaire) : gardé seulement si les deux échéances coïncident à quelques
+  secondes près, sinon effacé immédiatement plutôt que d'attendre le passage périodique de
+  `NotificationWorker`. Appliqué à la fois dans `DashboardViewModel.fetch()` et
+  `DetailViewModel.fetch()`.
   Lot C (présence, notif de fin) pas encore commencé.
 
 ## Fonctionnalités futures
@@ -244,6 +257,22 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   superviseur (voir § En cours de traitement). À rapprocher de la LED d'état, déjà gérée par
   appareil physique dans `AddEditDeviceScreen` (page « Modifier ») plutôt que par canal : même
   logique à appliquer à la mise à jour firmware et au redémarrage.
+- **Historique / graphique de consommation par prise** (2026-08-18) : histogramme ou courbe dans
+  le temps, pour repérer visuellement des cycles réguliers (recharge mensuelle d'un scooter
+  électrique, d'un Mac...). Pas trivial : l'API RPC classique n'expose qu'un compteur cumulatif
+  (`aenergy.total`, jamais remis à zéro) et une fenêtre glissante très courte (`aenergy.by_minute`,
+  3 valeurs seulement) — rien qui ressemble à un historique long terme côté appareil. Pour un vrai
+  graphique sur plusieurs semaines/mois, il faudrait qu'Hestia échantillonne et stocke lui-même
+  dans le temps (relevés périodiques de `aenergy.total`, deltas calculés) — une **nouvelle
+  catégorie de donnée** pour le projet (télémétrie historique, pas de la configuration d'appareil
+  ni un cache de confort comme aujourd'hui), à peser avant de s'engager : stockage qui grossit sans
+  fin (politique de rétention à définir), échantillonnage qui suppose une tâche de fond régulière
+  (à distinguer du principe « pas de scheduler pour piloter un appareil » — ici il s'agirait de
+  *lire*, jamais d'agir), et l'appareil doit rester joignable au moment de chaque relevé sous peine
+  de trous dans la courbe. À explorer : Shelly propose peut-être une fonction de journalisation
+  native plus riche sur certains modèles (EM/EM1/PM1, voir plus haut « Fonctions liées au firmware
+  2.0.0 ») qui simplifierait le besoin sans qu'Hestia ait à tout stocker lui-même — à vérifier
+  avant de partir sur la solution la plus lourde.
 ## Fait — pour mémoire
 
 Points sortis du backlog, avec ce qui a été tranché :

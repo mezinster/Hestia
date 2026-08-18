@@ -1,6 +1,7 @@
 package kapoue.hestia.ui.screens.dashboard
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import kotlin.math.abs
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
@@ -181,9 +183,27 @@ class DashboardViewModel @Inject constructor(
                     .toMap()
                 plannings.value = planningResults.await().toMap()
                 // Lecture locale (SharedPreferences), pas de RPC : pas besoin de la paralléliser.
-                pendingThresholds.value = appPreferences.pendingTimers()
-                    .mapNotNull { timer -> timer.thresholdW?.let { timer.deviceId to it } }
-                    .toMap()
+                // Ce souvenir ne date que des minuteurs lancés depuis l'app (Manuel/Perso) — un
+                // minuteur bouton (armé par un appui physique) ne le touche jamais, ni pour
+                // l'écrire ni pour l'effacer. Sans vérification, un vieux souvenir resterait donc
+                // affiché indéfiniment (jusqu'au prochain passage du nettoyage en tâche de fond,
+                // toutes les 15 min) même sur un tout autre minuteur en cours, y compris sans
+                // seuil — bug vécu en direct le 2026-08-18. On ne le garde que s'il correspond
+                // (à quelques secondes près) au minuteur natif réellement en cours sur l'appareil ;
+                // sinon on l'efface tout de suite, pas la peine d'attendre le nettoyage périodique.
+                val nowWall = System.currentTimeMillis()
+                val nowElapsed = SystemClock.elapsedRealtime()
+                pendingThresholds.value = appPreferences.pendingTimers().mapNotNull { timer ->
+                    val thresholdW = timer.thresholdW ?: return@mapNotNull null
+                    val deviceEndsAtElapsed = (statuses.value[timer.deviceId] as? TileStatus.Online)?.timerEndsAtElapsed
+                    val remainingLocalSec = (timer.endMillis - nowWall) / 1000
+                    val remainingDeviceSec = deviceEndsAtElapsed?.let { (it - nowElapsed) / 1000 }
+                    if (remainingDeviceSec == null || abs(remainingDeviceSec - remainingLocalSec) > STALE_PENDING_TIMER_TOLERANCE_SEC) {
+                        appPreferences.removePendingTimer(timer.deviceId)
+                        return@mapNotNull null
+                    }
+                    timer.deviceId to thresholdW
+                }.toMap()
                 loaded.value = true
             }
             if (userInitiated) refreshing.value = true
@@ -286,6 +306,12 @@ class DashboardViewModel @Inject constructor(
 
     private fun setStatus(deviceId: Long, status: TileStatus) {
         statuses.value = statuses.value + (deviceId to status)
+    }
+
+    private companion object {
+        /** Tolérance pour considérer qu'un souvenir local de minuteur correspond bien au minuteur
+         * natif actuellement en cours sur l'appareil (voir le calcul dans [fetch]). */
+        const val STALE_PENDING_TIMER_TOLERANCE_SEC = 5
     }
 }
 
