@@ -17,7 +17,6 @@ import kapoue.hestia.data.presence.ButtonTimerScriptGenerator
 import kapoue.hestia.data.presence.ChargeScriptGenerator
 import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
-import kapoue.hestia.data.presence.PresenceState
 import kapoue.hestia.data.presence.TimerNotifyScriptGenerator
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcFailure
@@ -353,86 +352,152 @@ class DeviceRepository @Inject constructor(
         }
     }
 
-    /** État réel de la présence, lu via Script.List (jamais supposé). */
-    suspend fun getPresenceState(device: Device): RpcResult<PresenceState> {
-        val (_, r) = withIp(device) { ip -> rpcClient.scriptList(ip) }
-        return when (r) {
-            is RpcResult.Success -> {
-                val entry = r.value.scripts.firstOrNull { it.name == PresenceScriptGenerator.scriptName(device.switchId) }
-                RpcResult.Success(
-                    PresenceState(deployed = entry != null, running = entry?.running == true, scriptId = entry?.id),
-                )
-            }
-            is RpcResult.RpcError -> r
-            is RpcResult.Failure -> r
-        }
-    }
-
     /**
-     * Lit les plages de présence réellement embarquées dans le script (jamais supposées). Privé
-     * depuis la fusion Planning/Présence (2026-08-18) : la présence est désormais une simple
-     * variante de [Planning] ([Planning.isPresence]) — [getPlannings] est le seul point d'entrée
-     * public, il fusionne les deux réalisations en une seule liste.
+     * Lit les plages de présence de **ce canal** depuis le script partagé de l'appareil (jamais
+     * supposées). Privé depuis la fusion Planning/Présence (2026-08-18) : la présence est
+     * désormais une simple variante de [Planning] ([Planning.isPresence]) — [getPlannings] est le
+     * seul point d'entrée public, il fusionne les deux réalisations en une seule liste.
+     *
+     * Lit par `Script.Eval` si le script tourne (mémoire vivante, seule à jour dès qu'un canal a
+     * été modifié sans redéploiement — voir [PresenceScriptGenerator]), sinon par le texte
+     * enregistré (`Script.GetCode`, fiable uniquement dans ce cas puisque rien n'a pu diverger).
      */
     private suspend fun getPresenceWindows(device: Device): RpcResult<List<PresenceWindow>> {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(emptyList())
-        val (ip, list) = withIp(device) { i -> rpcClient.scriptList(i) }
-        list.errorOrNull()?.let { return it }
-        val entry = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.scriptName(device.switchId) }
-            ?: return RpcResult.Success(emptyList())
-        return when (val code = rpcClient.scriptGetCode(ip, entry.id)) {
-            is RpcResult.Success -> RpcResult.Success(PresenceScriptGenerator.parse(code.value.data).orEmpty())
-            is RpcResult.RpcError -> code
-            is RpcResult.Failure -> code
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        listResult.errorOrNull()?.let { return it }
+        val running = listResult.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME && it.running }
+
+        val channels = if (running != null) {
+            val json = rpcClient.scriptEval(ip, running.id, PresenceScriptGenerator.evalReadConfig()).getOrNull()?.result
+            json?.let { PresenceScriptGenerator.parseChannels(it) }.orEmpty()
+        } else {
+            loadOrMigratePresenceScript(device).second.map { it.switchId to it.windows }
         }
+        return RpcResult.Success(channels.firstOrNull { it.first == device.switchId }?.second.orEmpty())
     }
 
     /**
-     * Déploie **l'ensemble des plages** de présence dans un unique script `hestia_presence`.
-     * Liste vide → arrête et supprime le script. Neutralise d'abord un `auto_off` posé hors
-     * d'Hestia. La configuration voyage dans le script (relisible), Hestia ne stocke rien. Privé
-     * depuis la fusion Planning/Présence — voir [createPlanning]/[updatePlanning]/[deletePlanning].
+     * Déploie **l'ensemble des plages de ce canal** dans le script de présence partagé de
+     * l'appareil, sans toucher aux autres canaux qu'il suit déjà. Liste vide → retire ce canal
+     * ([stopPresence]). Neutralise d'abord un `auto_off` posé hors d'Hestia. Privé depuis la
+     * fusion Planning/Présence — voir [createPlanning]/[updatePlanning]/[deletePlanning].
      */
     private suspend fun setPresenceWindows(device: Device, windows: List<PresenceWindow>): RpcResult<Unit> {
         if (windows.isEmpty()) return stopPresence(device)
-        val (ip, clear) = withIp(device) { i -> rpcClient.clearAutoOff(i, device.switchId) }
+        val (_, clear) = withIp(device) { i -> rpcClient.clearAutoOff(i, device.switchId) }
         clear.errorOrNull()?.let { return it }
+        return applyPresenceChannel(device, PresenceScriptGenerator.ChannelConfig(device.switchId, device.name, windows))
+    }
 
+    /**
+     * Retire **ce canal** du suivi du script de présence partagé — les autres canaux qu'il suit
+     * éventuellement restent inchangés (jusqu'au 2026-08-18, ceci arrêtait et supprimait tout le
+     * script, y compris pour un bloc multi-canaux : bug de portée corrigé par la mutualisation).
+     */
+    suspend fun stopPresence(device: Device): RpcResult<Unit> = applyPresenceChannel(device, null)
+
+    /**
+     * Ajoute/remplace [config] pour son canal dans le script de présence partagé, ou retire ce
+     * canal si [config] est nul — sans jamais toucher aux autres canaux déjà suivis. Si le script
+     * tourne déjà, la mutation passe par `Script.Eval` (mémoire des autres canaux inchangée) ; sinon
+     * (script absent, arrêté, ou reprise d'anciens scripts par canal), un premier déploiement
+     * classique reprend les réglages déjà connus des autres canaux avant de tout réécrire — sans
+     * risque puisqu'il n'y a alors rien de vivant à perdre.
+     */
+    private suspend fun applyPresenceChannel(device: Device, config: PresenceScriptGenerator.ChannelConfig?): RpcResult<Unit> {
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        listResult.errorOrNull()?.let { return it }
+        val running = listResult.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME && it.running }
+
+        if (running != null) {
+            val evalCode = if (config != null) {
+                PresenceScriptGenerator.evalUpsertChannel(config)
+            } else {
+                PresenceScriptGenerator.evalRemoveChannel(device.switchId)
+            }
+            val eval = rpcClient.scriptEval(ip, running.id, evalCode)
+            return eval.errorOrNull() ?: RpcResult.Success(Unit)
+        }
+
+        val (_, existing) = loadOrMigratePresenceScript(device)
+        val others = existing.filterNot { it.switchId == device.switchId }
+        val updated = if (config != null) others + config else others
+        return deployPresenceScript(ip, updated)
+    }
+
+    /**
+     * Lit les canaux actuellement suivis par le script de présence partagé, en reprenant
+     * d'éventuels scripts hérités (un par canal, avant le 2026-08-18) si le script partagé
+     * n'existe pas encore — transparent pour l'utilisateur, fusionnés puis les anciens supprimés.
+     */
+    private suspend fun loadOrMigratePresenceScript(device: Device): Pair<String, List<PresenceScriptGenerator.ChannelConfig>> {
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        val scripts = listResult.getOrNull()?.scripts.orEmpty()
+        val allDevices = listOf(device) + siblingsSharingIp(device)
+
+        val shared = scripts.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
+        if (shared != null) {
+            val code = rpcClient.scriptGetCode(ip, shared.id).getOrNull()?.data ?: return ip to emptyList()
+            val configs = PresenceScriptGenerator.parseSupervisor(code).orEmpty().mapNotNull { (switchId, windows) ->
+                val name = allDevices.firstOrNull { it.switchId == switchId }?.name ?: return@mapNotNull null
+                PresenceScriptGenerator.ChannelConfig(switchId, name, windows)
+            }
+            return ip to configs
+        }
+
+        // Pas de script partagé : reprendre d'éventuels scripts hérités (ancien format, un par
+        // canal), les fusionner dans le nouveau, puis nettoyer les anciens — best-effort, jamais
+        // bloquant si un des scripts hérités est illisible (juste ignoré).
+        val legacy = allDevices.mapNotNull { d ->
+            val entry = scripts.firstOrNull { it.name == PresenceScriptGenerator.legacyScriptName(d.switchId) } ?: return@mapNotNull null
+            val code = rpcClient.scriptGetCode(ip, entry.id).getOrNull()?.data ?: return@mapNotNull null
+            val windows = PresenceScriptGenerator.parseLegacyChannel(code) ?: return@mapNotNull null
+            entry to PresenceScriptGenerator.ChannelConfig(d.switchId, d.name, windows)
+        }
+        if (legacy.isEmpty()) return ip to emptyList()
+        val migrated = legacy.map { it.second }
+        deployPresenceScript(ip, migrated)
+        legacy.forEach { (entry, _) ->
+            rpcClient.scriptStop(ip, entry.id)
+            rpcClient.scriptDelete(ip, entry.id)
+        }
+        return ip to migrated
+    }
+
+    /** Réécrit le script de présence partagé avec exactement [configs] ; le supprime si la liste est vide. */
+    private suspend fun deployPresenceScript(ip: String, configs: List<PresenceScriptGenerator.ChannelConfig>): RpcResult<Unit> {
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
-        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.scriptName(device.switchId) }
+        val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
+
+        if (configs.isEmpty()) {
+            existing?.let {
+                rpcClient.scriptStop(ip, it.id)
+                rpcClient.scriptDelete(ip, it.id).errorOrNull()?.let { e -> return e }
+            }
+            return RpcResult.Success(Unit)
+        }
+
         val scriptId = existing?.id ?: run {
-            val create = rpcClient.scriptCreate(ip, PresenceScriptGenerator.scriptName(device.switchId))
+            val create = rpcClient.scriptCreate(ip, PresenceScriptGenerator.SCRIPT_NAME)
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
         }
-
-        rpcClient.scriptStop(ip, scriptId)
+        if (existing != null) rpcClient.scriptStop(ip, scriptId)
         val topic = ntfyTopic()
-        // Plusieurs plages possibles par appareil : le script ne sait pas, au moment où il bascule,
+        // Plusieurs plages possibles par canal : le script ne sait pas, au moment où il bascule,
         // laquelle a déclenché — texte générique plutôt qu'un horaire qui serait celui de la
         // mauvaise plage (contrairement au planning, qui n'a qu'un seul créneau).
-        val code = PresenceScriptGenerator.generate(
-            windows, device.switchId,
-            ntfyTopic = topic, ntfyTitle = device.name,
+        val code = PresenceScriptGenerator.generateSupervisor(
+            configs,
+            ntfyTopic = topic,
             ntfyStartBody = if (topic != null) context.getString(R.string.notif_ntfy_presence_started) else "",
             ntfyEndBody = if (topic != null) context.getString(R.string.notif_ntfy_presence_ended) else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
         rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
-        return RpcResult.Success(Unit)
-    }
-
-    /** Arrête et supprime le script de présence. Ne touche jamais un script d'un autre nom. */
-    suspend fun stopPresence(device: Device): RpcResult<Unit> {
-        val (ip, list) = withIp(device) { i -> rpcClient.scriptList(i) }
-        list.errorOrNull()?.let { return it }
-        val entry = list.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.scriptName(device.switchId) }
-        if (entry != null) {
-            rpcClient.scriptStop(ip, entry.id)
-            rpcClient.scriptDelete(ip, entry.id).errorOrNull()?.let { return it }
-        }
         return RpcResult.Success(Unit)
     }
 
@@ -739,7 +804,9 @@ class DeviceRepository @Inject constructor(
         val ip = currentIp(device)
 
         if (marginMinutes != null) {
-            val windows = getPresenceWindows(device).getOrNull().orEmpty()
+            // Déjà lues via getPlannings ci-dessus (existing) — inutile de rappeler
+            // getPresenceWindows, qui referait le même aller-retour RPC pour rien.
+            val windows = existing.filter { it.isPresence }.map { it.toPresenceWindow() }
             val newWindow = PresenceWindow(startHour, startMinute, endHour, endMinute, marginMinutes, days)
             return when (setPresenceWindows(device, windows + newWindow)) {
                 is RpcResult.Success -> CreatePlanningResult.Success
@@ -876,7 +943,9 @@ class DeviceRepository @Inject constructor(
         val ip = currentIp(device)
 
         if (marginMinutes != null) {
-            val windows = getPresenceWindows(device).getOrNull().orEmpty()
+            // Déjà lues via getPlannings ci-dessus (existing) — inutile de rappeler
+            // getPresenceWindows, qui referait le même aller-retour RPC pour rien.
+            val windows = existing.filter { it.isPresence }.map { it.toPresenceWindow() }
             val kept = if (old.isPresence) windows.filterNot { it.matchesPlanning(old) } else windows
             val newWindow = PresenceWindow(startHour, startMinute, endHour, endMinute, marginMinutes, days)
             val result = setPresenceWindows(device, kept + newWindow)
@@ -925,8 +994,9 @@ class DeviceRepository @Inject constructor(
         }
         // Nouveaux programmes en place : retirer l'ancienne réalisation.
         if (old.isPresence) {
-            // Bascule présence → précis : retirer l'ancienne plage du script de présence.
-            val windows = getPresenceWindows(device).getOrNull().orEmpty()
+            // Bascule présence → précis : retirer l'ancienne plage du script de présence. Déjà lues
+            // via getPlannings en haut de fonction (existing), rien n'a changé côté présence depuis.
+            val windows = existing.filter { it.isPresence }.map { it.toPresenceWindow() }
             setPresenceWindows(device, windows.filterNot { it.matchesPlanning(old) })
         } else {
             old.onJobId?.let { rpcClient.scheduleDelete(ip, it) }
@@ -955,6 +1025,14 @@ class DeviceRepository @Inject constructor(
         startHour == p.startHour && startMinute == p.startMinute &&
             endHour == p.endHour && endMinute == p.endMinute &&
             days == p.days && marginMinutes == p.marginMinutes
+
+    /**
+     * Reconvertit un [Planning] de présence (tel que renvoyé par [getPlannings]) en [PresenceWindow]
+     * — évite de rappeler [getPresenceWindows] (un aller-retour RPC) alors qu'on vient déjà de lire
+     * ce canal via [getPlannings]. Uniquement valable sur un [Planning.isPresence].
+     */
+    private fun Planning.toPresenceWindow(): PresenceWindow =
+        PresenceWindow(startHour, startMinute, endHour, endMinute, marginMinutes ?: 0, days)
 
     /** Jour de semaine cron (0 = dimanche … 6 = samedi) d'une date. */
     private fun cronDayOf(date: LocalDate): Int = date.dayOfWeek.value % 7

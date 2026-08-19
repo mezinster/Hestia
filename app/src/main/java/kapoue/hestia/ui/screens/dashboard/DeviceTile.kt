@@ -261,7 +261,7 @@ private fun TileStatus.toVisual(
             )
             presence != null -> TileVisual(
                 bgColor = physicalBg, ringColor = ringColor, textColor = colors.timedText,
-                label = stringResource(R.string.state_planned),
+                label = stringResource(R.string.state_presence),
                 countdown = formatTimeRange(
                     presence.startHour, presence.startMinute,
                     presence.endHour, presence.endMinute,

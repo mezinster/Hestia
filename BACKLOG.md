@@ -195,7 +195,44 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   secondes près, sinon effacé immédiatement plutôt que d'attendre le passage périodique de
   `NotificationWorker`. Appliqué à la fois dans `DashboardViewModel.fetch()` et
   `DetailViewModel.fetch()`.
-  Lot C (présence, notif de fin) pas encore commencé.
+  **Lot C (présence) — mutualisation par appareil physique, codée le 2026-08-19, pas encore
+  testée.** Construite directement sur le modèle avec jours de la semaine du Lot 1 de la fusion
+  Planning/Présence (`getPlannings`), donc sans le travail en double qu'on cherchait à éviter en
+  faisant la fusion avant ce lot. Même architecture que le bouton et le seuil : un seul script
+  `hestia_presence` par appareil physique, `Script.Eval` (`evalUpsertChannel()`/
+  `evalRemoveChannel()`/`evalReadConfig()`) pour ajouter/retirer/lire un seul canal sans jamais
+  redéployer tant que le script tourne déjà — `generateSupervisor()` ne sert plus qu'au tout
+  premier déploiement. Présence est **persistante** comme le bouton (pas transitoire comme le
+  seuil) : quand un redéploiement complet reste nécessaire (script absent ou arrêté), les plages
+  déjà connues des autres canaux sont reprises via `loadOrMigratePresenceScript` avant réécriture,
+  qui gère aussi la migration des anciens scripts par canal (`hestia_presence_<canal>`,
+  `PresenceScriptGenerator.legacyScriptName`/`parseLegacyChannel`, conservés uniquement pour cette
+  migration). `stopPresence` change de portée au passage : avant, arrêtait et supprimait tout le
+  script partagé (aurait coupé la présence de **tous** les canaux d'un bloc multi-canaux) ; retire
+  désormais seulement le canal concerné — bug de portée qui existait depuis la mutualisation du
+  bouton et du seuil sans qu'on s'en rende compte pour la présence, corrigé au passage.
+  `getPresenceState`/`PresenceState` supprimés : code mort (aucun appelant) déjà avant ce lot, et
+  son hypothèse (un script par canal) ne tenait plus après la mutualisation.
+  **Limite repérée en écrivant ce lot, pas testée, valable aussi pour le bouton et le seuil** :
+  quand un script superviseur tourne déjà, `Script.Eval` ne modifie que `CFG`/`STATE` — il ne
+  touche jamais aux fonctions `notifyStart`/`notifyEnd`/`notifyCutoff`, dont le sujet ntfy est figé
+  au moment du tout premier déploiement. Si l'utilisateur change son sujet ntfy dans Réglages
+  *après* qu'un script superviseur tourne déjà, ce script continuerait de notifier sur l'**ancien**
+  sujet jusqu'à son prochain redéploiement complet (script arrêté, ou redémarrage matériel) — pas
+  un risque de sécurité (le sujet reste secret), mais des notifications qui n'arriveraient plus là
+  où l'utilisateur les attend, silencieusement. À vérifier en direct puis corriger si confirmé
+  (probablement : forcer un redéploiement complet des scripts superviseurs existants au moment où
+  l'utilisateur change son sujet ntfy, plutôt que d'attendre le prochain Eval).
+  **Testé le 2026-08-19** : présence sur 2 canaux du Strip 4 en même temps, aucune perturbation
+  mutuelle. Au passage, retour de test réel sur la lenteur ressentie à l'enregistrement d'une
+  présence (~1,7 s, variable, journal de diagnostic vérifié — latence réseau normale, rien à
+  corriger côté app) : a quand même révélé un vrai doublon, `createPlanning`/`updatePlanning`
+  relisaient les plages de présence deux fois (une fois via `getPlannings` déjà nécessaire pour le
+  contrôle de chevauchement, une seconde fois via `getPresenceWindows` juste après, pour rien) —
+  corrigé, la seconde lecture est maintenant dérivée de la première (`Planning.toPresenceWindow()`)
+  au lieu de refaire 2-3 allers-retours RPC. Et sur la tuile du Tableau, « Présence » a son propre
+  libellé désormais, distinct de « Planifié » (confusion repérée en test réel : impossible de
+  savoir si une prise « planifiée » l'était par un planning précis ou une simulation de présence).
 
 ## Fonctionnalités futures
 

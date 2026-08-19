@@ -194,9 +194,12 @@
     <!-- Encore utilisé par le badge d'état de l'écran Détail (StatusBadge), qui n'a pas besoin
          de distinguer minuteur/présence/planning comme le faisait la tuile du Tableau. -->
     <string name="state_timed">Minuterie</string>
-    <!-- Tuile du Tableau uniquement : un seul mot pour minuteur, présence ou planning en cours —
-         le régime précis se lit sur l'écran détail, pas sur la tuile (2026-08-17). -->
+    <!-- Tuile du Tableau uniquement : un seul mot pour minuteur ou planning précis en cours — le
+         régime exact se lit sur l'écran détail, pas sur la tuile (2026-08-17). La présence a son
+         propre libellé ci-dessous (2026-08-19, retour de test réel : ne pas savoir si c'est une
+         présence ou un planning précis en cours prêtait à confusion). -->
     <string name="state_planned">Planifié</string>
+    <string name="state_presence">Présence</string>
     <string name="state_offline">Indisponible</string>
     <string name="state_loading">Lecture…</string>
 
