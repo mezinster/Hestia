@@ -75,8 +75,6 @@ import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
 import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.Planning
-import kapoue.hestia.domain.model.PresenceOpResult
-import kapoue.hestia.domain.model.PresenceWindow
 import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.components.StatusBadge
 import kapoue.hestia.ui.components.TimeWheelPicker
@@ -98,9 +96,6 @@ fun DetailScreen(
     val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
     val pendingThresholdW by viewModel.pendingThresholdW.collectAsStateWithLifecycle()
     val pendingLabel by viewModel.pendingLabel.collectAsStateWithLifecycle()
-    val presenceActive by viewModel.presenceActive.collectAsStateWithLifecycle()
-    val presenceWindows by viewModel.presenceWindows.collectAsStateWithLifecycle()
-    val addPresenceResult by viewModel.addPresenceResult.collectAsStateWithLifecycle()
     val plannings by viewModel.plannings.collectAsStateWithLifecycle()
     val addPlanningResult by viewModel.addPlanningResult.collectAsStateWithLifecycle()
     val pausedPlannings by viewModel.pausedPlannings.collectAsStateWithLifecycle()
@@ -120,18 +115,8 @@ fun DetailScreen(
     var editingPresetSlot by remember { mutableStateOf<Int?>(null) }
     var deletingPresetSlot by remember { mutableStateOf<Int?>(null) }
     var showAddPlanning by remember { mutableStateOf(false) }
-    var showAddPresence by remember { mutableStateOf(false) }
-    var editingPresence by remember { mutableStateOf<PresenceWindow?>(null) }
-    var presenceToDelete by remember { mutableStateOf<PresenceWindow?>(null) }
     var showButtonTimerSheet by remember { mutableStateOf(false) }
     var showButtonTimerDisableConfirm by remember { mutableStateOf(false) }
-    LaunchedEffect(addPresenceResult) {
-        if (addPresenceResult is PresenceOpResult.Success) {
-            showAddPresence = false
-            editingPresence = null
-            viewModel.clearAddPresenceResult()
-        }
-    }
     // Planning en cours d'édition (dialogue pré-rempli), et planning dont l'édition est bloquée
     // parce qu'il est en cours.
     var editingPlanning by remember { mutableStateOf<Planning?>(null) }
@@ -178,8 +163,9 @@ fun DetailScreen(
     fun requestStartTimer(seconds: Int?, label: String, thresholdW: Int? = null) {
         val activePlanning = plannings.firstOrNull { it.isActiveNow() }
         when {
-            // La présence est un vrai conflit (elle pilote la prise en continu) : on la traite d'abord.
-            presenceActive -> pendingTimer = PendingTimer(seconds, label, thresholdW)
+            // Une simulation de présence en cours est un vrai conflit (elle pilote la prise en
+            // continu) : on la traite d'abord. Un planning précis n'est qu'un avertissement.
+            activePlanning?.isPresence == true -> pendingTimer = PendingTimer(seconds, label, thresholdW)
             activePlanning != null ->
                 planningWarning = PendingTimer(seconds, label, thresholdW) to activePlanning
             else -> viewModel.startTimer(seconds, label, thresholdW)
@@ -285,17 +271,6 @@ fun DetailScreen(
             }
 
             if (dev.hasScripting) {
-                HorizontalDivider()
-                PresenceSection(
-                    windows = presenceWindows,
-                    onAdd = {
-                        viewModel.clearAddPresenceResult()
-                        showAddPresence = true
-                    },
-                    onEdit = { editingPresence = it },
-                    onDelete = { presenceToDelete = it },
-                )
-
                 HorizontalDivider()
                 ButtonTimerSection(
                     config = buttonTimerConfig,
@@ -421,10 +396,11 @@ fun DetailScreen(
             initial = editingPlanning,
             result = addPlanningResult,
             hasCutoff = (device?.hasScripting ?: false) && (device?.hasPowerMetering ?: false),
-            onValidate = { sh, sm, eh, em, days, date, thresholdW ->
+            hasPresence = device?.hasScripting ?: false,
+            onValidate = { sh, sm, eh, em, days, date, thresholdW, marginMinutes ->
                 val edit = editingPlanning
-                if (edit != null) viewModel.updatePlanning(edit, sh, sm, eh, em, days, date, thresholdW)
-                else viewModel.addPlanning(sh, sm, eh, em, days, date, thresholdW)
+                if (edit != null) viewModel.updatePlanning(edit, sh, sm, eh, em, days, date, thresholdW, marginMinutes)
+                else viewModel.addPlanning(sh, sm, eh, em, days, date, thresholdW, marginMinutes)
             },
             onDismiss = {
                 showAddPlanning = false
@@ -557,57 +533,6 @@ fun DetailScreen(
         )
     }
 
-    if (showAddPresence || editingPresence != null) {
-        AddPresenceDialog(
-            initial = editingPresence,
-            result = addPresenceResult,
-            onValidate = { sh, sm, eh, em, margin ->
-                val edit = editingPresence
-                val w = PresenceWindow(sh, sm, eh, em, margin)
-                if (edit != null) viewModel.updatePresenceWindow(edit, w) else viewModel.addPresenceWindow(w)
-            },
-            onDismiss = {
-                showAddPresence = false
-                editingPresence = null
-                viewModel.clearAddPresenceResult()
-            },
-        )
-    }
-
-    presenceToDelete?.let { w ->
-        AlertDialog(
-            onDismissRequest = { presenceToDelete = null },
-            title = { Text(stringResource(R.string.presence_delete_title)) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        stringResource(
-                            R.string.presence_delete_message,
-                            "%02d:%02d – %02d:%02d".format(w.startHour, w.startMinute, w.endHour, w.endMinute),
-                        ),
-                    )
-                    if (w.isActiveNow()) {
-                        Text(
-                            text = stringResource(R.string.presence_delete_active_warning),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    viewModel.deletePresenceWindow(w)
-                    presenceToDelete = null
-                }) { Text(stringResource(R.string.planning_delete_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { presenceToDelete = null }) {
-                    Text(stringResource(R.string.conflict_cancel))
-                }
-            },
-        )
-    }
 
     if (showButtonTimerSheet) {
         val existing = buttonTimerConfig
@@ -646,61 +571,6 @@ fun DetailScreen(
                 }
             },
         )
-    }
-}
-
-@Composable
-private fun PresenceSection(
-    windows: List<PresenceWindow>,
-    onAdd: () -> Unit,
-    onEdit: (PresenceWindow) -> Unit,
-    onDelete: (PresenceWindow) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.presence_section),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        if (windows.isEmpty()) {
-            Text(
-                text = stringResource(R.string.presence_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            windows.forEach { w -> PresenceRow(w, onEdit = { onEdit(w) }, onDelete = { onDelete(w) }) }
-        }
-        OutlinedButton(onClick = onAdd) {
-            Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.size(4.dp))
-            Text(stringResource(R.string.presence_add))
-        }
-    }
-}
-
-@Composable
-private fun PresenceRow(window: PresenceWindow, onEdit: () -> Unit, onDelete: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .clickable(onClick = onEdit),
-        ) {
-            Text(
-                text = "%02d:%02d – %02d:%02d".format(window.startHour, window.startMinute, window.endHour, window.endMinute),
-                style = MaterialTheme.typography.bodyLarge,
-                fontFamily = FontFamily.Monospace,
-            )
-            Text(
-                text = stringResource(R.string.presence_margin_value, window.marginMinutes),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        IconButton(onClick = onDelete) {
-            Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.presence_delete))
-        }
     }
 }
 
@@ -749,79 +619,6 @@ private fun ButtonTimerSection(
                 Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.size(4.dp))
                 Text(stringResource(R.string.detail_button_timer_configure))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AddPresenceDialog(
-    initial: PresenceWindow?,
-    result: PresenceOpResult?,
-    onValidate: (Int, Int, Int, Int, Int) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var startHour by remember { mutableStateOf(initial?.startHour ?: 19) }
-    var startMinute by remember { mutableStateOf(initial?.startMinute ?: 0) }
-    var endHour by remember { mutableStateOf(initial?.endHour ?: 23) }
-    var endMinute by remember { mutableStateOf(initial?.endMinute ?: 0) }
-    var margin by remember { mutableStateOf(initial?.marginMinutes ?: 20) }
-
-    val startMin = startHour * 60 + startMinute
-    val endMin = endHour * 60 + endMinute
-    val valid = startMin != endMin
-
-    val errorText: String? = when {
-        result is PresenceOpResult.PlanningOverlap -> stringResource(R.string.presence_conflict_planning)
-        result is PresenceOpResult.Error -> stringResource(R.string.planning_error_generic)
-        startMin == endMin -> stringResource(R.string.presence_error_end_before_start)
-        else -> null
-    }
-
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Text(
-                text = stringResource(if (initial == null) R.string.presence_dialog_title else R.string.presence_edit_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.planning_start), style = MaterialTheme.typography.bodyMedium)
-                    TimeWheelPicker(startHour, startMinute) { h, m -> startHour = h; startMinute = m }
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.planning_end), style = MaterialTheme.typography.bodyMedium)
-                    TimeWheelPicker(endHour, endMinute) { h, m -> endHour = h; endMinute = m }
-                }
-            }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    stringResource(R.string.presence_margin),
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                TextButton(onClick = { margin = (margin - 5).coerceAtLeast(0) }) { Text("−") }
-                Text(stringResource(R.string.presence_margin_value, margin), fontFamily = FontFamily.Monospace)
-                TextButton(onClick = { margin = (margin + 5).coerceAtMost(120) }) { Text("+") }
-            }
-            errorText?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
-
-            Button(
-                enabled = valid,
-                onClick = { onValidate(startHour, startMinute, endHour, endMinute, margin) },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                Text(stringResource(R.string.planning_validate))
             }
         }
     }
@@ -925,7 +722,9 @@ private fun PlanningSection(
                 )
             }
         }
-        val atLimit = plannings.size >= 10
+        // Le plafond ne concerne que les programmes cron : une simulation de présence n'en
+        // consomme aucun (voir DeviceRepository.MAX_PLANNINGS).
+        val atLimit = plannings.count { !it.isPresence } >= 10
         OutlinedButton(onClick = onAdd, enabled = !atLimit) {
             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.size(4.dp))
@@ -994,6 +793,13 @@ private fun PlanningRow(planning: Planning, isActive: Boolean, onEdit: () -> Uni
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            planning.marginMinutes?.let {
+                Text(
+                    text = stringResource(R.string.presence_row_label, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         IconButton(onClick = onPause) {
             Icon(Icons.Filled.Pause, contentDescription = stringResource(R.string.planning_pause))
@@ -1008,9 +814,9 @@ private fun PlanningRow(planning: Planning, isActive: Boolean, onEdit: () -> Uni
 private fun PausedPlanning.toDisplayPlanning(): Planning = Planning(
     startHour = startHour, startMinute = startMinute, endHour = endHour, endMinute = endMinute,
     days = days.split(",").filter { it.isNotBlank() }.map { it.toInt() }.toSet(),
-    onJobId = 0, offJobId = 0,
     date = date?.let { LocalDate.parse(it) },
     cutoffThresholdW = cutoffThresholdW,
+    marginMinutes = marginMinutes,
 )
 
 @Composable
@@ -1038,6 +844,13 @@ private fun PausedPlanningRow(paused: PausedPlanning, onResume: () -> Unit, onDe
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            display.marginMinutes?.let {
+                Text(
+                    text = stringResource(R.string.presence_row_label, it),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         IconButton(onClick = onResume) {
             Icon(Icons.Filled.PlayArrow, contentDescription = stringResource(R.string.planning_resume))
@@ -1048,6 +861,12 @@ private fun PausedPlanningRow(paused: PausedPlanning, onResume: () -> Unit, onDe
     }
 }
 
+/**
+ * Résumé des jours d'un planning **existant** (liste) — noms complets ([dayLabelFull]), à ne pas
+ * confondre avec [dayLabel] (abrégés, réservé aux puces de sélection du dialogue, où la place
+ * manque). Confusion repérée en test réel le 2026-08-18 : « Mer » à côté d'une marge de présence
+ * se lisait mal, sans lien évident avec un jour de la semaine.
+ */
 @Composable
 private fun daysSummary(planning: Planning): String {
     val date = planning.date
@@ -1055,19 +874,19 @@ private fun daysSummary(planning: Planning): String {
         return if (date == LocalDate.now()) {
             stringResource(R.string.planning_today)
         } else {
-            "${dayLabel(date.dayOfWeek.value % 7)} ${formatDate(date)}"
+            "${dayLabelFull(date.dayOfWeek.value % 7)} ${formatDate(date)}"
         }
     }
     if (planning.everyDay) return stringResource(R.string.planning_every_day)
     // Libellés résolus ici (contexte composable), puis assemblés hors lambda composable.
     val labels = mapOf(
-        1 to stringResource(R.string.planning_day_mon),
-        2 to stringResource(R.string.planning_day_tue),
-        3 to stringResource(R.string.planning_day_wed),
-        4 to stringResource(R.string.planning_day_thu),
-        5 to stringResource(R.string.planning_day_fri),
-        6 to stringResource(R.string.planning_day_sat),
-        0 to stringResource(R.string.planning_day_sun),
+        1 to stringResource(R.string.planning_day_full_mon),
+        2 to stringResource(R.string.planning_day_full_tue),
+        3 to stringResource(R.string.planning_day_full_wed),
+        4 to stringResource(R.string.planning_day_full_thu),
+        5 to stringResource(R.string.planning_day_full_fri),
+        6 to stringResource(R.string.planning_day_full_sat),
+        0 to stringResource(R.string.planning_day_full_sun),
     )
     return WEEK_DAYS.filter { it in planning.days }.mapNotNull { labels[it] }.joinToString(", ")
 }
@@ -1085,6 +904,19 @@ private fun dayLabel(day: Int): String = stringResource(
     },
 )
 
+@Composable
+private fun dayLabelFull(day: Int): String = stringResource(
+    when (day) {
+        1 -> R.string.planning_day_full_mon
+        2 -> R.string.planning_day_full_tue
+        3 -> R.string.planning_day_full_wed
+        4 -> R.string.planning_day_full_thu
+        5 -> R.string.planning_day_full_fri
+        6 -> R.string.planning_day_full_sat
+        else -> R.string.planning_day_full_sun
+    },
+)
+
 /** Message associé à un résultat de création/modification/réactivation de planning, s'il y en a un. */
 @Composable
 private fun createPlanningResultMessage(result: CreatePlanningResult): String? = when (result) {
@@ -1095,20 +927,27 @@ private fun createPlanningResultMessage(result: CreatePlanningResult): String? =
             result.existing.endHour, result.existing.endMinute,
         ),
     )
-    CreatePlanningResult.PresenceOverlap -> stringResource(R.string.planning_conflict_presence)
     CreatePlanningResult.PastOnce -> stringResource(R.string.planning_error_past)
     CreatePlanningResult.LimitReached -> stringResource(R.string.planning_limit_reached)
     CreatePlanningResult.Error -> stringResource(R.string.planning_error_generic)
     CreatePlanningResult.Success -> null
 }
 
+/**
+ * Un seul dialogue pour les deux réalisations d'un planning depuis la fusion Planning/Présence du
+ * 2026-08-18 : [hasPresence] affiche l'interrupteur « Simuler une présence » (masqué si l'appareil
+ * ne fait pas tourner de scripts). Présence et Unique sont mutuellement exclusifs (une simulation
+ * n'a de sens que récurrente), tout comme présence et coupure sur seuil (décidé le 2026-08-18,
+ * voir [kapoue.hestia.domain.model.Planning]) — activer l'un désactive l'autre.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AddPlanningDialog(
     initial: Planning?,
     result: CreatePlanningResult?,
     hasCutoff: Boolean,
-    onValidate: (Int, Int, Int, Int, Set<Int>, LocalDate?, Int?) -> Unit,
+    hasPresence: Boolean,
+    onValidate: (Int, Int, Int, Int, Set<Int>, LocalDate?, Int?, Int?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var startHour by remember { mutableStateOf(initial?.startHour ?: 9) }
@@ -1120,12 +959,17 @@ private fun AddPlanningDialog(
     var everyDay by remember { mutableStateOf(initial?.date == null && (initial?.everyDay ?: true)) }
     var days by remember { mutableStateOf(if (initial != null && !initial.everyDay) initial.days else emptySet()) }
     // Planning Unique (une seule occurrence, à une date précise) : mode à part, incompatible avec
-    // « Tous les jours ». [onceDate] par défaut aujourd'hui, choisi via les chips Aujourd'hui/jours.
+    // « Tous les jours » et avec une simulation de présence. [onceDate] par défaut aujourd'hui,
+    // choisi via les chips Aujourd'hui/jours.
     var once by remember { mutableStateOf(initial?.date != null) }
     var onceDate by remember { mutableStateOf(initial?.date ?: LocalDate.now()) }
-    // Coupure sur seuil (Unique comme récurrent, script dédié réarmé à chaque occurrence).
+    // Coupure sur seuil (Unique comme récurrent, script dédié réarmé à chaque occurrence) —
+    // incompatible avec une simulation de présence.
     var cutoffEnabled by remember { mutableStateOf(initial?.cutoffThresholdW != null) }
     var cutoffThreshold by remember { mutableStateOf(initial?.cutoffThresholdW ?: DEFAULT_PLANNING_THRESHOLD_W) }
+    // Simulation de présence : marge aléatoire, jamais Unique, jamais de coupure sur seuil.
+    var presenceEnabled by remember { mutableStateOf(initial?.marginMinutes != null) }
+    var margin by remember { mutableStateOf(initial?.marginMinutes ?: 20) }
     val effectiveDays = if (everyDay) setOf(0, 1, 2, 3, 4, 5, 6) else days
 
     val startMin = startHour * 60 + startMinute
@@ -1145,6 +989,10 @@ private fun AddPlanningDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                // Contenu variable (seuil et présence ajoutent chacun de la hauteur) : sans défilement,
+                // un contenu plus haut que l'écran écrasait le bouton "Enregistrer" au lieu de le
+                // pousser hors champ — repéré en test réel le 2026-08-18, seuil activé.
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -1167,25 +1015,29 @@ private fun AddPlanningDialog(
                 }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = stringResource(R.string.planning_once),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = once,
-                    onCheckedChange = { checked ->
-                        once = checked
-                        if (checked) {
-                            everyDay = false
-                        } else if (!everyDay && days.isEmpty()) {
-                            // Retour au récurrent sans sélection restante (rien à préserver) :
-                            // « Tous les jours » par défaut plutôt qu'un état invalide.
-                            everyDay = true
-                        }
-                    },
-                )
+            // Unique masqué pendant une simulation de présence (mutuellement exclusifs) : rien à
+            // désactiver, juste rien à montrer tant que présence est active.
+            if (!presenceEnabled) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.planning_once),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = once,
+                        onCheckedChange = { checked ->
+                            once = checked
+                            if (checked) {
+                                everyDay = false
+                            } else if (!everyDay && days.isEmpty()) {
+                                // Retour au récurrent sans sélection restante (rien à préserver) :
+                                // « Tous les jours » par défaut plutôt qu'un état invalide.
+                                everyDay = true
+                            }
+                        },
+                    )
+                }
             }
 
             if (once) {
@@ -1232,8 +1084,39 @@ private fun AddPlanningDialog(
                 }
             }
 
-            // Coupure sur seuil : Unique comme récurrent, script dédié par planning.
-            if (hasCutoff) {
+            // Simulation de présence : masquée pendant Unique (mutuellement exclusifs).
+            if (hasPresence && !once) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.presence_toggle_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(
+                        checked = presenceEnabled,
+                        onCheckedChange = { checked ->
+                            presenceEnabled = checked
+                            if (checked) cutoffEnabled = false
+                        },
+                    )
+                }
+                if (presenceEnabled) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            stringResource(R.string.presence_margin),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        TextButton(onClick = { margin = (margin - 5).coerceAtLeast(0) }) { Text("−") }
+                        Text(stringResource(R.string.presence_margin_value, margin), fontFamily = FontFamily.Monospace)
+                        TextButton(onClick = { margin = (margin + 5).coerceAtMost(120) }) { Text("+") }
+                    }
+                }
+            }
+
+            // Coupure sur seuil : Unique comme récurrent, script dédié par planning — jamais avec
+            // une simulation de présence (mutuellement exclusifs).
+            if (hasCutoff && !presenceEnabled) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text(
                         text = stringResource(R.string.timer_cutoff_label),
@@ -1268,7 +1151,8 @@ private fun AddPlanningDialog(
                     onValidate(
                         startHour, startMinute, endHour, endMinute, effectiveDays,
                         if (once) onceDate else null,
-                        if (hasCutoff && cutoffEnabled) cutoffThreshold else null,
+                        if (hasCutoff && !presenceEnabled && cutoffEnabled) cutoffThreshold else null,
+                        if (hasPresence && presenceEnabled) margin else null,
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),

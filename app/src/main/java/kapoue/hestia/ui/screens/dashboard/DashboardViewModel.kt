@@ -279,12 +279,13 @@ class DashboardViewModel @Inject constructor(
 
     /**
      * Simulation de présence en cours sur cet appareil, ou null. L'exécution est vérifiée sur
-     * l'appareil ; les horaires viennent du cache local (ils n'ont d'intérêt qu'affichés).
+     * l'appareil (via [DeviceRepository.getPlannings], qui fusionne plannings précis et
+     * simulations de présence depuis la fusion du 2026-08-18) ; les horaires viennent du cache
+     * local (ils n'ont d'intérêt qu'affichés).
      */
     private suspend fun loadPresence(device: Device): PresenceInfo? {
-        // Plages lues depuis la prise (jamais supposées) ; on affiche celle en cours, s'il y en a.
-        val windows = repository.getPresenceWindows(device).getOrNull().orEmpty()
-        val active = windows.firstOrNull { it.isActiveNow() } ?: return null
+        val plannings = repository.getPlannings(device).getOrNull().orEmpty()
+        val active = plannings.firstOrNull { it.isPresence && it.isActiveNow() } ?: return null
         return PresenceInfo(active.startHour, active.startMinute, active.endHour, active.endMinute)
     }
 

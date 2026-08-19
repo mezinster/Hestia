@@ -56,9 +56,34 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   prise se connecte temporairement à son propre point d'accès, envoie le Wi-Fi cible via
   `WiFi.SetConfig`, puis relit elle-même l'IP obtenue — sans scan réseau ni lecture de MAC (deux
   choses qu'une appli Android normale ne peut de toute façon plus faire proprement).
-- Fusion de Planning et Simulation de présence (switch « simuler une présence », fait apparaître
-  la marge aléatoire) — chantier à part, plus invasif, prévu après le reste pour ne pas fragiliser
-  une base qui vient de beaucoup bouger.
+- **Fusion de Planning et Simulation de présence — Lot 1 codé le 2026-08-18, pas encore testé.**
+  Un seul écran, un seul dialogue : plage horaire + jours (ou date Unique) + coupure sur seuil +
+  interrupteur « Simuler une présence » (marge aléatoire). Présence et Unique mutuellement
+  exclusifs (une simulation n'a de sens que récurrente) ; présence et coupure sur seuil aussi
+  (décidé avec David : combiner les deux demanderait d'apprendre au script de présence à
+  surveiller la conso comme `hestia_charge`, un chantier à part, pas fait ici).
+  Modèle unifié : `Planning` gagne `marginMinutes: Int?` (`null` = précis via Schedule natif,
+  non-null = présence via script) ; `onJobId`/`offJobId` deviennent nullables (absents pour une
+  présence, qui n'a pas de programme cron). `getPlannings()` fusionne désormais les deux
+  réalisations en une seule liste (lue depuis `Schedule.List` **et** le script `hestia_presence`
+  du canal) — routage transparent dans `createPlanning`/`updatePlanning`/`deletePlanning` selon
+  `marginMinutes`. Bénéfice inattendu : le contrôle de chevauchement (`existing.firstOrNull{...}`)
+  couvre maintenant les deux types **gratuitement**, `overlapsPresence`/
+  `presenceConflictsWithPlanning` ont pu être supprimées entièrement (chevauchement planning↔
+  planning, planning↔présence, présence↔présence, tout par le même chemin).
+  `PresenceScriptGenerator` gagne le **jour de la semaine** par plage (absent jusqu'ici, la
+  présence tournait identique tous les jours) — nécessaire pour que la fusion tienne debout, pas
+  cosmétique. `Date.getDay()` en JS suit déjà la même convention (0=dimanche…6=samedi) que
+  `Planning.days`, aucune conversion. Ancien marqueur sans jour toujours relu (défaut : tous les
+  jours), migration silencieuse à la prochaine écriture.
+  Script encore **par canal** à ce stade (pas mutualisé) — c'est le Lot 2, qui réutilisera
+  directement ce modèle avec jours déjà intégré (pas de travail à refaire, contrairement à si on
+  avait fait la mutualisation d'abord).
+  `PausedPlanning` (Room) gagne `marginMinutes: Int?` — migration v12→v14 (jamais 13, voir
+  CLAUDE.md), additive. Écran Détail : `AddPresenceDialog`/`PresenceSection`/`PresenceRow`
+  supprimés, fondus dans `AddPlanningDialog`/`PlanningSection`/`PlanningRow` (qui affiche
+  désormais la marge quand elle est définie, comme il affichait déjà le seuil). Une dizaine de
+  chaînes `presence_*` devenues mortes supprimées (FR+EN, parité vérifiée).
 - **Refonte du Tableau, lot 5/5 — mise en avant du programme en cours** : codé le 2026-08-17
   (voir détail en § Fait), mais **pas encore testé/validé** — retour direct au test du Lot 4 à la
   place. Gardé en l'état, à reprendre au prochain test complet.

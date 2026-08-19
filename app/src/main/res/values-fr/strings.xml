@@ -282,19 +282,14 @@
     <string name="firmware_reboot_started">Redémarrage lancé.</string>
     <string name="firmware_reboot_error">Échec du lancement du redémarrage. Réessaie.</string>
 
-    <!-- Simulation de présence (lot 4) -->
-    <string name="presence_section">Simulation de présence</string>
-    <string name="presence_add">Ajouter une plage</string>
-    <string name="presence_empty">Aucune plage.</string>
-    <string name="presence_delete">Supprimer la plage</string>
-    <string name="presence_dialog_title">Nouvelle plage</string>
-    <string name="presence_edit_title">Modifier la plage</string>
+    <!-- Simulation de présence (lot 4 ; fusionnée dans le planning depuis le 2026-08-18, voir
+         planning_* plus bas — les entrées ci-dessous ne servent plus qu'au sein de ce dialogue) -->
+    <string name="presence_toggle_label">Simuler une présence</string>
     <string name="presence_margin">Marge aléatoire</string>
     <string name="presence_margin_value">± %1$d min</string>
-    <string name="presence_conflict_planning">Ce créneau chevauche un planning. Choisis un autre horaire.</string>
-    <string name="presence_delete_title">Supprimer cette plage ?</string>
-    <string name="presence_delete_message">La plage %1$s sera retirée.</string>
-    <string name="presence_delete_active_warning">Cette plage est en cours : sa suppression éteindra la prise.</string>
+    <!-- Ligne de résumé dans la liste des plannings, pour qu'une simulation de présence ne se
+         confonde jamais avec un planning précis (2026-08-18, retour de test réel). -->
+    <string name="presence_row_label">Planning de présence – ± %1$d min</string>
     <string name="presence_configure">Configurer</string>
     <string name="presence_state_active">Active</string>
     <string name="presence_state_inactive">Inactive</string>
@@ -307,7 +302,6 @@
     <string name="presence_deploying">Déploiement…</string>
     <string name="presence_deployed_confirm">Simulation active sur l\'appareil.</string>
     <string name="presence_stopped_confirm">Simulation arrêtée.</string>
-    <string name="presence_error_end_before_start">Le début et la fin doivent être différents.</string>
     <string name="presence_error_planning_exists">Un planning est déjà défini sur cette prise. Supprime-le avant d\'activer le mode Présence.</string>
     <string name="presence_error_margin">Marge invalide (0 à 120 minutes).</string>
     <string name="presence_clock_device_time">Heure de l\'appareil : %1$s</string>
@@ -371,7 +365,6 @@
     <string name="planning_error_no_day">Choisis au moins un jour.</string>
     <string name="planning_error_past">Ce créneau unique est déjà passé. Choisis un horaire à venir.</string>
     <string name="planning_conflict">Ce créneau chevauche un planning existant (%1$s). Modifie l\'un ou l\'autre.</string>
-    <string name="planning_conflict_presence">Ce créneau chevauche une plage de simulation de présence. Choisis un autre horaire.</string>
     <string name="planning_error_generic">Impossible d\'enregistrer le planning. Vérifie que la prise répond.</string>
     <string name="planning_day_mon">Lun</string>
     <string name="planning_day_tue">Mar</string>
@@ -380,6 +373,15 @@
     <string name="planning_day_fri">Ven</string>
     <string name="planning_day_sat">Sam</string>
     <string name="planning_day_sun">Dim</string>
+    <!-- Noms complets, utilisés dans le résumé d'un planning existant (liste) — les abrégés
+         ci-dessus restent réservés aux puces de sélection du dialogue, où la place manque. -->
+    <string name="planning_day_full_mon">Lundi</string>
+    <string name="planning_day_full_tue">Mardi</string>
+    <string name="planning_day_full_wed">Mercredi</string>
+    <string name="planning_day_full_thu">Jeudi</string>
+    <string name="planning_day_full_fri">Vendredi</string>
+    <string name="planning_day_full_sat">Samedi</string>
+    <string name="planning_day_full_sun">Dimanche</string>
 
     <!-- Sauvegarde / restauration (lot 5) -->
     <string name="settings_backup_section">Sauvegarde</string>

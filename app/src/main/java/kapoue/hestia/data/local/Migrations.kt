@@ -150,3 +150,15 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
         db.execSQL("ALTER TABLE devices ADD COLUMN deviceName TEXT NOT NULL DEFAULT ''")
     }
 }
+
+/**
+ * v12 → v14 (jamais 13, voir CLAUDE.md) : fusion Planning/Présence (2026-08-18) — un planning en
+ * pause peut désormais être une simulation de présence, [PausedPlanning.marginMinutes] non nul
+ * dans ce cas. Colonne nullable : absence = planning précis, comportement inchangé pour les
+ * plannings déjà en pause.
+ */
+val MIGRATION_12_14 = object : Migration(12, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE paused_plannings ADD COLUMN marginMinutes INTEGER")
+    }
+}

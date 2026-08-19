@@ -5,20 +5,34 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 
 /**
- * Un planning : une plage horaire pilotée par l'appareil (composant Schedule natif). Concrètement,
- * deux programmes cron dans l'appareil — allumage au début, extinction à la fin.
+ * Un planning : une plage horaire pilotée par l'appareil. Deux réalisations possibles côté
+ * appareil, invisibles l'une de l'autre pour l'utilisateur (un seul écran, un seul modèle) :
+ * - **précis** ([marginMinutes] nul) : composant Schedule natif, deux programmes cron (allumage
+ *   au début, extinction à la fin) — ne consomme aucun script, gratuit vis-à-vis de la limite
+ *   Shelly de 3 scripts activés par appareil.
+ * - **simulation de présence** ([marginMinutes] non nul) : la prise s'allume/s'éteint dans ce
+ *   créneau avec une marge aléatoire (±[marginMinutes]) pour imiter une présence réelle — c'est
+ *   la seule chose qu'un cron natif ne sait pas faire (une heure fixe, jamais variable). Réalisé
+ *   par un script (voir [kapoue.hestia.data.presence.PresenceScriptGenerator]), jamais Unique
+ *   (n'aurait pas de sens de « simuler une présence » pour une seule occurrence), jamais combiné
+ *   à une coupure sur seuil (mutuellement exclusif, décidé le 2026-08-18 — surveiller la
+ *   consommation en plus du jour/marge alourdirait le script pour un besoin jugé trop rare).
  *
- * Hestia ne stocke rien : un planning est toujours **reconstruit** depuis `Schedule.List`
- * (principe du projet — on lit l'état réel, on ne suppose jamais). C'est la règle de non-
- * chevauchement, appliquée à la création, qui rend cette reconstruction non ambiguë.
+ * Hestia ne stocke rien : un planning est toujours **reconstruit** depuis l'appareil (`Schedule.
+ * List` pour un précis, le script de présence pour une simulation) — principe du projet, on lit
+ * l'état réel, on ne suppose jamais. C'est la règle de non-chevauchement, appliquée à la création
+ * (tous types confondus), qui rend cette reconstruction non ambiguë.
  *
  * [days] : jours de la semaine, 0 = dimanche … 6 = samedi. L'ensemble complet = tous les jours.
- * Ignoré quand [date] est non nul (planning **Unique**, une occurrence à cette date précise).
- * [onJobId] / [offJobId] : identifiants des deux programmes dans l'appareil (pour la suppression).
+ * Ignoré quand [date] est non nul (planning **Unique**, une occurrence à cette date précise —
+ * seulement pour un planning précis, jamais pour une simulation de présence).
+ * [onJobId] / [offJobId] : identifiants des deux programmes cron dans l'appareil (pour la
+ * suppression) — null pour une simulation de présence, qui n'a pas de programme cron.
  *
- * [cutoffScriptId] : script dédié de coupure sur seuil (Unique ou récurrent), non nul si une
- * coupure est configurée — id à supprimer avec le planning. [cutoffThresholdW] : seuil relu
- * depuis ce script (null tant qu'il n'a pas encore été relu, voir [DeviceRepository]).
+ * [cutoffScriptId] : script dédié de coupure sur seuil (Unique ou récurrent, jamais pour une
+ * présence), non nul si une coupure est configurée — id à supprimer avec le planning.
+ * [cutoffThresholdW] : seuil relu depuis ce script (null tant qu'il n'a pas encore été relu, voir
+ * [DeviceRepository]).
  */
 data class Planning(
     val startHour: Int,
@@ -26,16 +40,18 @@ data class Planning(
     val endHour: Int,
     val endMinute: Int,
     val days: Set<Int>,
-    val onJobId: Int,
-    val offJobId: Int,
+    val onJobId: Int? = null,
+    val offJobId: Int? = null,
     val date: LocalDate? = null,
     val cutoffScriptId: Int? = null,
     val cutoffThresholdW: Int? = null,
+    val marginMinutes: Int? = null,
 ) {
     val startMinutes: Int get() = startHour * 60 + startMinute
     val endMinutes: Int get() = endHour * 60 + endMinute
     val everyDay: Boolean get() = days.size >= 7
     val once: Boolean get() = date != null
+    val isPresence: Boolean get() = marginMinutes != null
 
     /** Instant de fin réel d'un planning Unique (lendemain si le créneau passe minuit). */
     internal fun onceEndAt(onceDate: LocalDate): LocalDateTime = onceEndAt(startHour, startMinute, endHour, endMinute, onceDate)
@@ -86,11 +102,11 @@ fun Planning.isExpiredOnce(): Boolean {
 sealed interface CreatePlanningResult {
     data object Success : CreatePlanningResult
 
-    /** Chevauche un planning existant, dont on renvoie les bornes pour le message. */
+    /**
+     * Chevauche un planning existant (précis ou simulation de présence — un seul type de
+     * conflit désormais, [existing] dit lequel via [Planning.isPresence]).
+     */
     data class Conflict(val existing: Planning) : CreatePlanningResult
-
-    /** Le créneau chevauche une plage de simulation de présence. */
-    data object PresenceOverlap : CreatePlanningResult
 
     /** Planning Unique dont la fin (compte tenu d'un éventuel passage minuit) est déjà passée. */
     data object PastOnce : CreatePlanningResult

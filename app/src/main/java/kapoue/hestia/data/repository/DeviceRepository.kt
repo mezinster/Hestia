@@ -368,8 +368,13 @@ class DeviceRepository @Inject constructor(
         }
     }
 
-    /** Lit les plages de présence réellement embarquées dans le script (jamais supposées). */
-    suspend fun getPresenceWindows(device: Device): RpcResult<List<PresenceWindow>> {
+    /**
+     * Lit les plages de présence réellement embarquées dans le script (jamais supposées). Privé
+     * depuis la fusion Planning/Présence (2026-08-18) : la présence est désormais une simple
+     * variante de [Planning] ([Planning.isPresence]) — [getPlannings] est le seul point d'entrée
+     * public, il fusionne les deux réalisations en une seule liste.
+     */
+    private suspend fun getPresenceWindows(device: Device): RpcResult<List<PresenceWindow>> {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(emptyList())
         val (ip, list) = withIp(device) { i -> rpcClient.scriptList(i) }
         list.errorOrNull()?.let { return it }
@@ -385,9 +390,10 @@ class DeviceRepository @Inject constructor(
     /**
      * Déploie **l'ensemble des plages** de présence dans un unique script `hestia_presence`.
      * Liste vide → arrête et supprime le script. Neutralise d'abord un `auto_off` posé hors
-     * d'Hestia. La configuration voyage dans le script (relisible), Hestia ne stocke rien.
+     * d'Hestia. La configuration voyage dans le script (relisible), Hestia ne stocke rien. Privé
+     * depuis la fusion Planning/Présence — voir [createPlanning]/[updatePlanning]/[deletePlanning].
      */
-    suspend fun setPresenceWindows(device: Device, windows: List<PresenceWindow>): RpcResult<Unit> {
+    private suspend fun setPresenceWindows(device: Device, windows: List<PresenceWindow>): RpcResult<Unit> {
         if (windows.isEmpty()) return stopPresence(device)
         val (ip, clear) = withIp(device) { i -> rpcClient.clearAutoOff(i, device.switchId) }
         clear.errorOrNull()?.let { return it }
@@ -580,58 +586,53 @@ class DeviceRepository @Inject constructor(
         return deployButtonTimerScript(ip, updated)
     }
 
-    /** Vrai si des intervalles hebdomadaires chevauchent une plage de présence de l'appareil. */
-    private suspend fun overlapsPresence(device: Device, intervals: List<Pair<Int, Int>>): Boolean {
-        val windows = getPresenceWindows(device).getOrNull().orEmpty()
-        return windows.any { w ->
-            ScheduleCodec.intervalsOverlap(intervals, ScheduleCodec.weeklyIntervals(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS))
-        }
-    }
 
-    /** Vrai si une plage de présence chevauche un planning existant (pour bloquer son ajout). */
-    suspend fun presenceConflictsWithPlanning(device: Device, window: PresenceWindow): Boolean {
-        val plannings = getPlannings(device).getOrNull().orEmpty()
-        val wIv = ScheduleCodec.weeklyIntervals(window.startMinutes, window.endMinutes, ScheduleCodec.ALL_DAYS)
-        return plannings.any { p ->
-            ScheduleCodec.intervalsOverlap(wIv, ScheduleCodec.weeklyIntervals(p.startMinutes, p.endMinutes, p.conflictDays()))
-        }
-    }
-
-    // --- Planning (composant Schedule natif de l'appareil) ---
+    // --- Planning (précis, Schedule natif ; ou simulation de présence, script partagé) ---
 
     /**
-     * Lit les plannings réellement présents sur l'appareil (jamais supposés). Un planning
-     * **Unique** dont l'échéance est passée est supprimé de l'appareil dans la foulée (pas de
-     * tâche de fond : le nettoyage se fait à l'occasion de la prochaine lecture).
+     * Lit les plannings réellement présents sur l'appareil, **précis et simulations de présence
+     * confondus** (jamais supposés) — fusion Planning/Présence du 2026-08-18, un seul point
+     * d'entrée pour les deux réalisations (voir [Planning]). Un planning **Unique** dont
+     * l'échéance est passée est supprimé de l'appareil dans la foulée (pas de tâche de fond : le
+     * nettoyage se fait à l'occasion de la prochaine lecture) — n'arrive jamais pour une
+     * simulation de présence, qui ne peut pas être Unique.
      */
     suspend fun getPlannings(device: Device): RpcResult<List<Planning>> {
         // Appareils démo : aucun réseau (évite un timeout par tuile fictive à chaque relevé).
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(emptyList())
         val (ip, r) = withIp(device) { i -> rpcClient.scheduleList(i) }
-        return when (r) {
+        val native = when (r) {
             is RpcResult.Success -> {
                 val all = reconstructPlannings(r.value.jobs, device.switchId)
                 val (expired, active) = all.partition { it.isExpiredOnce() }
                 if (expired.isNotEmpty()) {
                     logger.info(DiagnosticLogger.RPC, "Nettoyage de ${expired.size} planning(s) Unique expiré(s)")
                     expired.forEach { p ->
-                        rpcClient.scheduleDelete(ip, p.onJobId)
-                        rpcClient.scheduleDelete(ip, p.offJobId)
+                        p.onJobId?.let { rpcClient.scheduleDelete(ip, it) }
+                        p.offJobId?.let { rpcClient.scheduleDelete(ip, it) }
                         p.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
                     }
                 }
                 // Seuil de coupure relu à part (un appel Script.GetCode par planning concerné) :
                 // jamais stocké, toujours l'état réel du script sur l'appareil.
-                val withThresholds = active.map { p ->
+                active.map { p ->
                     val scriptId = p.cutoffScriptId ?: return@map p
                     val code = rpcClient.scriptGetCode(ip, scriptId).getOrNull()?.data ?: return@map p
                     p.copy(cutoffThresholdW = ChargeScriptGenerator.parseThreshold(code))
                 }
-                RpcResult.Success(withThresholds)
             }
-            is RpcResult.RpcError -> r
-            is RpcResult.Failure -> r
+            is RpcResult.RpcError -> return r
+            is RpcResult.Failure -> return r
         }
+        if (!device.hasScripting) return RpcResult.Success(native)
+        val presence = getPresenceWindows(device).getOrNull().orEmpty().map { w ->
+            Planning(
+                startHour = w.startHour, startMinute = w.startMinute,
+                endHour = w.endHour, endMinute = w.endMinute,
+                days = w.days, marginMinutes = w.marginMinutes,
+            )
+        }
+        return RpcResult.Success((native + presence).sortedWith(compareBy({ it.startMinutes }, { it.endMinutes })))
     }
 
     /**
@@ -681,18 +682,25 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
-     * Crée un planning après contrôle de conflit (chevauchement d'un autre planning, présence
-     * active, ou limite atteinte). Un planning = deux programmes cron : allumage puis extinction.
-     * [date] non nul = planning **Unique** (une seule occurrence, à cette date précise) ; [days]
-     * est alors ignoré. Le contrôle de chevauchement d'un Unique se fait sur le jour de semaine de
-     * [date] : deux Uniques au même jour de semaine mais à des dates différentes peuvent donc se
-     * signaler comme en conflit à tort (cas rare, accepté pour ne pas complexifier le contrôle).
+     * Crée un planning après contrôle de conflit (contre tous les plannings existants, précis ou
+     * simulations de présence — [getPlannings] renvoie désormais les deux confondus) et de limite
+     * atteinte. [date] non nul = planning **Unique** (une seule occurrence, à cette date précise) ;
+     * [days] est alors ignoré. Le contrôle de chevauchement d'un Unique se fait sur le jour de
+     * semaine de [date] : deux Uniques au même jour de semaine mais à des dates différentes
+     * peuvent donc se signaler comme en conflit à tort (cas rare, accepté pour ne pas
+     * complexifier le contrôle).
      *
-     * [cutoffThresholdW] : coupure sur seuil de consommation, Unique comme récurrent. Déploie un
-     * script dédié à ce planning (jamais partagé, jamais réutilisé par un autre minuteur ou
-     * planning : deux plannings à coupure indépendants ne doivent pas se marcher dessus). Pour un
-     * récurrent, le script se réarme proprement à chaque occurrence (`Script.Start` après un
-     * `Script.Stop` réexécute le script depuis le début, aucun état résiduel — validé en direct).
+     * [cutoffThresholdW] : coupure sur seuil de consommation — planning **précis** uniquement
+     * (Unique ou récurrent). Déploie un script dédié à ce planning (jamais partagé, jamais
+     * réutilisé par un autre minuteur ou planning). Pour un récurrent, le script se réarme
+     * proprement à chaque occurrence (`Script.Start` après un `Script.Stop` réexécute le script
+     * depuis le début, aucun état résiduel — validé en direct).
+     *
+     * [marginMinutes] non nul = **simulation de présence** plutôt que planning précis : jamais
+     * Unique, jamais de coupure sur seuil (mutuellement exclusif, décidé le 2026-08-18 — l'appelant
+     * ne doit jamais fournir les deux à la fois, ignoré ici par construction si c'était le cas).
+     * Réalisée par le script de présence de ce canal plutôt que par Schedule natif — ne compte pas
+     * dans [MAX_PLANNINGS], qui ne concerne que les programmes cron.
      */
     suspend fun createPlanning(
         device: Device,
@@ -703,6 +711,7 @@ class DeviceRepository @Inject constructor(
         days: Set<Int>,
         date: LocalDate? = null,
         cutoffThresholdW: Int? = null,
+        marginMinutes: Int? = null,
     ): CreatePlanningResult {
         // Un Unique déjà révolu serait créé sur l'appareil puis supprimé quelques secondes après
         // par le nettoyage automatique (getPlannings) — sans retour à l'utilisateur. On le refuse net.
@@ -714,7 +723,9 @@ class DeviceRepository @Inject constructor(
             is RpcResult.RpcError -> return CreatePlanningResult.Error
             is RpcResult.Failure -> return CreatePlanningResult.Error
         }
-        if (existing.size >= MAX_PLANNINGS) return CreatePlanningResult.LimitReached
+        if (marginMinutes == null && existing.count { !it.isPresence } >= MAX_PLANNINGS) {
+            return CreatePlanningResult.LimitReached
+        }
 
         val startMin = startHour * 60 + startMinute
         val endMin = endHour * 60 + endMinute
@@ -724,14 +735,18 @@ class DeviceRepository @Inject constructor(
             ScheduleCodec.intervalsOverlap(newIntervals, ScheduleCodec.weeklyIntervals(p.startMinutes, p.endMinutes, p.conflictDays()))
         }?.let { return CreatePlanningResult.Conflict(it) }
 
-        // Coexistence présence/planning autorisée, mais pas de chevauchement horaire (le planning,
-        // horaire fixe, ne doit pas être contredit par une plage de présence sur le même créneau).
-        if (device.hasScripting && overlapsPresence(device, newIntervals)) {
-            return CreatePlanningResult.PresenceOverlap
-        }
-
         // getPlannings ci-dessus vient de réussir : l'emplacement IP qui fonctionne est à jour.
         val ip = currentIp(device)
+
+        if (marginMinutes != null) {
+            val windows = getPresenceWindows(device).getOrNull().orEmpty()
+            val newWindow = PresenceWindow(startHour, startMinute, endHour, endMinute, marginMinutes, days)
+            return when (setPresenceWindows(device, windows + newWindow)) {
+                is RpcResult.Success -> CreatePlanningResult.Success
+                else -> CreatePlanningResult.Error
+            }
+        }
+
         val scriptId = if (cutoffThresholdW != null) {
             createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name) ?: return CreatePlanningResult.Error
         } else {
@@ -813,9 +828,12 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
-     * Modifie un planning : contrôle de conflit (en s'excluant lui-même), puis remplace ses deux
-     * programmes. On **crée d'abord** les nouveaux, on **supprime ensuite** les anciens : si le
-     * réseau lâche en cours, on risque au pire un doublon (récupérable), jamais une perte.
+     * Modifie un planning : contrôle de conflit (en s'excluant lui-même), puis remplace sa
+     * réalisation sur l'appareil. On **crée d'abord** la nouvelle, on **supprime ensuite**
+     * l'ancienne : si le réseau lâche en cours, on risque au pire un doublon (récupérable), jamais
+     * une perte. [marginMinutes] peut changer par rapport à [old] : passer d'un planning précis à
+     * une simulation de présence (ou l'inverse) fonctionne, en basculant proprement de mécanisme
+     * (Schedule natif ↔ script de présence).
      */
     suspend fun updatePlanning(
         device: Device,
@@ -827,6 +845,7 @@ class DeviceRepository @Inject constructor(
         days: Set<Int>,
         date: LocalDate? = null,
         cutoffThresholdW: Int? = null,
+        marginMinutes: Int? = null,
     ): CreatePlanningResult {
         if (date != null && !onceEndAt(startHour, startMinute, endHour, endMinute, date).isAfter(LocalDateTime.now())) {
             return CreatePlanningResult.PastOnce
@@ -836,22 +855,41 @@ class DeviceRepository @Inject constructor(
             is RpcResult.RpcError -> return CreatePlanningResult.Error
             is RpcResult.Failure -> return CreatePlanningResult.Error
         }
+        // Un passage présence → précis consomme un nouveau programme cron : à vérifier contre la
+        // limite (jamais nécessaire dans les autres cas, le compte de programmes cron ne peut pas
+        // augmenter : précis → précis remplace à l'identique, tout le reste libère un programme).
+        if (marginMinutes == null && old.isPresence && existing.count { !it.isPresence } >= MAX_PLANNINGS) {
+            return CreatePlanningResult.LimitReached
+        }
         val startMin = startHour * 60 + startMinute
         val endMin = endHour * 60 + endMinute
         // Conflit avec les AUTRES plannings uniquement (on s'exclut soi-même).
         val conflictDays = date?.let { setOf(cronDayOf(it)) } ?: days
         val newIntervals = ScheduleCodec.weeklyIntervals(startMin, endMin, conflictDays)
-        existing.filterNot { it.onJobId == old.onJobId && it.offJobId == old.offJobId }
+        existing.filterNot { it.isSameEntryAs(old) }
             .firstOrNull { p ->
                 ScheduleCodec.intervalsOverlap(newIntervals, ScheduleCodec.weeklyIntervals(p.startMinutes, p.endMinutes, p.conflictDays()))
             }
             ?.let { return CreatePlanningResult.Conflict(it) }
-        if (device.hasScripting && overlapsPresence(device, newIntervals)) {
-            return CreatePlanningResult.PresenceOverlap
-        }
 
         // getPlannings ci-dessus vient de réussir : l'emplacement IP qui fonctionne est à jour.
         val ip = currentIp(device)
+
+        if (marginMinutes != null) {
+            val windows = getPresenceWindows(device).getOrNull().orEmpty()
+            val kept = if (old.isPresence) windows.filterNot { it.matchesPlanning(old) } else windows
+            val newWindow = PresenceWindow(startHour, startMinute, endHour, endMinute, marginMinutes, days)
+            val result = setPresenceWindows(device, kept + newWindow)
+            if (result !is RpcResult.Success) return CreatePlanningResult.Error
+            // Bascule précis → présence : retirer l'ancienne réalisation cron.
+            if (!old.isPresence) {
+                old.onJobId?.let { rpcClient.scheduleDelete(ip, it) }
+                old.offJobId?.let { rpcClient.scheduleDelete(ip, it) }
+                old.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
+            }
+            return CreatePlanningResult.Success
+        }
+
         val scriptId = if (cutoffThresholdW != null) {
             createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name) ?: return CreatePlanningResult.Error
         } else {
@@ -885,12 +923,38 @@ class DeviceRepository @Inject constructor(
             scriptId?.let { rpcClient.scriptDelete(ip, it) }
             return CreatePlanningResult.Error
         }
-        // Nouveaux programmes en place : retirer les anciens (et l'ancien script de coupure, le cas échéant).
-        rpcClient.scheduleDelete(ip, old.onJobId)
-        rpcClient.scheduleDelete(ip, old.offJobId)
-        old.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
+        // Nouveaux programmes en place : retirer l'ancienne réalisation.
+        if (old.isPresence) {
+            // Bascule présence → précis : retirer l'ancienne plage du script de présence.
+            val windows = getPresenceWindows(device).getOrNull().orEmpty()
+            setPresenceWindows(device, windows.filterNot { it.matchesPlanning(old) })
+        } else {
+            old.onJobId?.let { rpcClient.scheduleDelete(ip, it) }
+            old.offJobId?.let { rpcClient.scheduleDelete(ip, it) }
+            old.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
+        }
         return CreatePlanningResult.Success
     }
+
+    /**
+     * Vrai si [this] et [other] sont la **même** entrée — pour s'exclure soi-même d'un contrôle de
+     * chevauchement lors d'une modification. Un planning précis se reconnaît par ses identifiants
+     * de programme cron ; une simulation de présence n'en a pas (rien à adresser individuellement
+     * côté script), on la reconnaît donc par son contenu exact.
+     */
+    private fun Planning.isSameEntryAs(other: Planning): Boolean = if (other.isPresence) {
+        isPresence && startHour == other.startHour && startMinute == other.startMinute &&
+            endHour == other.endHour && endMinute == other.endMinute &&
+            days == other.days && marginMinutes == other.marginMinutes
+    } else {
+        onJobId == other.onJobId && offJobId == other.offJobId
+    }
+
+    /** Vrai si cette plage de présence correspond exactement à ce [Planning] (voir [isSameEntryAs]). */
+    private fun PresenceWindow.matchesPlanning(p: Planning): Boolean =
+        startHour == p.startHour && startMinute == p.startMinute &&
+            endHour == p.endHour && endMinute == p.endMinute &&
+            days == p.days && marginMinutes == p.marginMinutes
 
     /** Jour de semaine cron (0 = dimanche … 6 = samedi) d'une date. */
     private fun cronDayOf(date: LocalDate): Int = date.dayOfWeek.value % 7
@@ -900,14 +964,27 @@ class DeviceRepository @Inject constructor(
     private fun Planning.conflictDays(): Set<Int> = date?.let { setOf(cronDayOf(it)) } ?: days
 
     /**
-     * Supprime un planning = ses deux programmes cron (et son éventuel script de coupure dédié).
-     * Si le planning est **en cours** (créneau actif), on **éteint** la prise dans la foulée :
-     * supprimer l'allumeur sans éteindre laisserait la prise allumée sans extinction prévue.
+     * Supprime un planning — ses deux programmes cron (et son éventuel script de coupure dédié)
+     * pour un planning précis, ou sa plage dans le script de présence partagé du canal pour une
+     * simulation de présence. Si le planning est **en cours** (créneau actif), on **éteint** la
+     * prise dans la foulée : supprimer l'allumeur sans éteindre laisserait la prise allumée sans
+     * extinction prévue.
      */
     suspend fun deletePlanning(device: Device, planning: Planning): RpcResult<Unit> {
-        val (ip, first) = withIp(device) { i -> rpcClient.scheduleDelete(i, planning.onJobId) }
+        if (planning.isPresence) {
+            val windows = getPresenceWindows(device).getOrNull().orEmpty()
+            val result = setPresenceWindows(device, windows.filterNot { it.matchesPlanning(planning) })
+            if (result is RpcResult.Success && planning.isActiveNow()) {
+                val (_, set) = withIp(device) { i -> rpcClient.setSwitch(i, device.switchId, on = false) }
+                set.errorOrNull()?.let { return it }
+            }
+            return result
+        }
+        val onJobId = planning.onJobId ?: return RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE)
+        val offJobId = planning.offJobId ?: return RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE)
+        val (ip, first) = withIp(device) { i -> rpcClient.scheduleDelete(i, onJobId) }
         first.errorOrNull()?.let { return it }
-        rpcClient.scheduleDelete(ip, planning.offJobId).errorOrNull()?.let { return it }
+        rpcClient.scheduleDelete(ip, offJobId).errorOrNull()?.let { return it }
         planning.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
         if (planning.isActiveNow()) {
             rpcClient.setSwitch(ip, device.switchId, on = false)
@@ -940,6 +1017,7 @@ class DeviceRepository @Inject constructor(
                     days = planning.days.sorted().joinToString(","),
                     date = planning.date?.toString(),
                     cutoffThresholdW = planning.cutoffThresholdW,
+                    marginMinutes = planning.marginMinutes,
                 ),
             )
         }
@@ -956,7 +1034,7 @@ class DeviceRepository @Inject constructor(
         val date = paused.date?.let { LocalDate.parse(it) }
         val result = createPlanning(
             device, paused.startHour, paused.startMinute, paused.endHour, paused.endMinute,
-            days, date, paused.cutoffThresholdW,
+            days, date, paused.cutoffThresholdW, paused.marginMinutes,
         )
         if (result is CreatePlanningResult.Success) {
             pausedPlanningDao.delete(paused)
@@ -1284,18 +1362,16 @@ class DeviceRepository @Inject constructor(
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return true
         var reachable = true
         if (device.supportsSwitch) {
+            // getPlannings fusionne plannings précis et simulations de présence : ce seul relevé
+            // couvre désormais les deux (plus besoin d'un second passage par getPresenceWindows).
             when (val r = getPlannings(device)) {
                 is RpcResult.Success -> for (p in r.value) {
-                    updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, p.cutoffThresholdW)
+                    updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, p.cutoffThresholdW, p.marginMinutes)
                 }
                 is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
             }
         }
         if (device.hasScripting) {
-            when (val r = getPresenceWindows(device)) {
-                is RpcResult.Success -> if (r.value.isNotEmpty()) setPresenceWindows(device, r.value)
-                is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
-            }
             if (reachable) {
                 val buttonConfig = getButtonTimerConfig(device)
                 if (buttonConfig.enabled) {

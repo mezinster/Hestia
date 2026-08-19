@@ -36,5 +36,7 @@ data class PausedPlanning(
     /** Date ISO (AAAA-MM-JJ) pour un planning Unique, sinon null. */
     val date: String? = null,
     val cutoffThresholdW: Int? = null,
+    /** Non nul = c'était une simulation de présence, marge en minutes (voir [Planning]). */
+    val marginMinutes: Int? = null,
     val pausedAt: Long = System.currentTimeMillis(),
 )

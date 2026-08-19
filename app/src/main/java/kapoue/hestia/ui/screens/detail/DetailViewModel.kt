@@ -15,9 +15,6 @@ import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.Planning
-import kapoue.hestia.domain.model.PresenceOpResult
-import kapoue.hestia.domain.model.PresenceWindow
-import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.navigation.StackedRoutes
 import kapoue.hestia.ui.screens.dashboard.TileStatus
@@ -68,19 +65,10 @@ class DetailViewModel @Inject constructor(
     private val _pendingLabel = MutableStateFlow<String?>(null)
     val pendingLabel: StateFlow<String?> = _pendingLabel.asStateFlow()
 
-    /** Simulation de présence réellement active (pour la gestion du conflit avec le minuteur). */
-    private val _presenceActive = MutableStateFlow(false)
-    val presenceActive: StateFlow<Boolean> = _presenceActive.asStateFlow()
-
-    /** Plages de présence réellement embarquées dans le script, relues après chaque modification. */
-    private val _presenceWindows = MutableStateFlow<List<PresenceWindow>>(emptyList())
-    val presenceWindows: StateFlow<List<PresenceWindow>> = _presenceWindows.asStateFlow()
-
-    /** Résultat de la dernière tentative d'ajout/édition de plage présence (conflit…). */
-    private val _addPresenceResult = MutableStateFlow<PresenceOpResult?>(null)
-    val addPresenceResult: StateFlow<PresenceOpResult?> = _addPresenceResult.asStateFlow()
-
-    /** Plannings réellement présents sur l'appareil, relus après chaque modification. */
+    /**
+     * Plannings réellement présents sur l'appareil, relus après chaque modification — précis et
+     * simulations de présence confondus depuis la fusion du 2026-08-18 ([Planning.isPresence]).
+     */
     private val _plannings = MutableStateFlow<List<Planning>>(emptyList())
     val plannings: StateFlow<List<Planning>> = _plannings.asStateFlow()
 
@@ -243,8 +231,6 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
             repository.stopPresence(dev)
-            _presenceActive.value = false
-            _presenceWindows.value = emptyList()
             when {
                 seconds == null && thresholdW != null -> repository.startUnlimitedChargeTimer(dev, thresholdW)
                 seconds != null && thresholdW != null -> repository.startChargeTimer(dev, seconds, thresholdW, detail)
@@ -257,15 +243,16 @@ class DetailViewModel @Inject constructor(
 
     /**
      * Ajoute un planning ; le résultat (succès ou conflit) est publié pour l'UI. [date] non nul =
-     * Unique. [cutoffThresholdW] : coupure sur seuil, réservée aux plannings Unique.
+     * Unique. [cutoffThresholdW] : coupure sur seuil, réservée aux plannings précis (jamais avec
+     * [marginMinutes]). [marginMinutes] non nul = simulation de présence plutôt que précis.
      */
     fun addPlanning(
         startHour: Int, startMinute: Int, endHour: Int, endMinute: Int, days: Set<Int>,
-        date: LocalDate? = null, cutoffThresholdW: Int? = null,
+        date: LocalDate? = null, cutoffThresholdW: Int? = null, marginMinutes: Int? = null,
     ) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            val result = repository.createPlanning(dev, startHour, startMinute, endHour, endMinute, days, date, cutoffThresholdW)
+            val result = repository.createPlanning(dev, startHour, startMinute, endHour, endMinute, days, date, cutoffThresholdW, marginMinutes)
             _addPlanningResult.value = result
             if (result is CreatePlanningResult.Success) loadPlannings(dev)
         }
@@ -274,11 +261,11 @@ class DetailViewModel @Inject constructor(
     /** Modifie un planning existant ; même canal de résultat que l'ajout. */
     fun updatePlanning(
         old: Planning, startHour: Int, startMinute: Int, endHour: Int, endMinute: Int, days: Set<Int>,
-        date: LocalDate? = null, cutoffThresholdW: Int? = null,
+        date: LocalDate? = null, cutoffThresholdW: Int? = null, marginMinutes: Int? = null,
     ) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            val result = repository.updatePlanning(dev, old, startHour, startMinute, endHour, endMinute, days, date, cutoffThresholdW)
+            val result = repository.updatePlanning(dev, old, startHour, startMinute, endHour, endMinute, days, date, cutoffThresholdW, marginMinutes)
             _addPlanningResult.value = result
             if (result is CreatePlanningResult.Success) loadPlannings(dev)
         }
@@ -333,50 +320,6 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch { repository.deletePausedPlanning(paused) }
     }
 
-    /** Ajoute une plage de présence ; refusée si elle chevauche un planning. */
-    fun addPresenceWindow(window: PresenceWindow) {
-        viewModelScope.launch {
-            val dev = repository.getDevice(deviceId) ?: return@launch
-            if (repository.presenceConflictsWithPlanning(dev, window)) {
-                _addPresenceResult.value = PresenceOpResult.PlanningOverlap
-                return@launch
-            }
-            applyPresence(dev, _presenceWindows.value + window)
-        }
-    }
-
-    fun updatePresenceWindow(old: PresenceWindow, new: PresenceWindow) {
-        viewModelScope.launch {
-            val dev = repository.getDevice(deviceId) ?: return@launch
-            if (repository.presenceConflictsWithPlanning(dev, new)) {
-                _addPresenceResult.value = PresenceOpResult.PlanningOverlap
-                return@launch
-            }
-            applyPresence(dev, _presenceWindows.value.map { if (it == old) new else it })
-        }
-    }
-
-    private suspend fun applyPresence(dev: Device, windows: List<PresenceWindow>) {
-        val result = repository.setPresenceWindows(dev, windows)
-        _addPresenceResult.value = if (result is RpcResult.Success) PresenceOpResult.Success else PresenceOpResult.Error
-        if (result is RpcResult.Success) loadPresence(dev)
-    }
-
-    fun clearAddPresenceResult() {
-        _addPresenceResult.value = null
-    }
-
-    /** Supprime une plage ; si elle est en cours, éteint la prise dans la foulée. */
-    fun deletePresenceWindow(window: PresenceWindow) {
-        viewModelScope.launch {
-            val dev = repository.getDevice(deviceId) ?: return@launch
-            repository.setPresenceWindows(dev, _presenceWindows.value - window)
-            if (window.isActiveNow()) repository.userToggle(dev, false)
-            loadPresence(dev)
-            fetch()
-        }
-    }
-
     private suspend fun fetch() {
         val dev = repository.getDevice(deviceId) ?: return
         val status = repository.getStatus(dev).toTileStatus()
@@ -394,20 +337,15 @@ class DetailViewModel @Inject constructor(
         _pendingThresholdW.value = pendingTimer?.thresholdW.takeIf { matches }
         _pendingLabel.value = pendingTimer?.label.takeIf { matches }
         if (dev.hasScripting) {
-            loadPresence(dev)
             loadButtonTimer(dev)
         }
+        // getPlannings fusionne plannings précis et simulations de présence (gated en interne sur
+        // hasScripting pour ces dernières) depuis la fusion du 2026-08-18.
         if (dev.supportsSwitch) loadPlannings(dev)
     }
 
     private suspend fun loadPlannings(dev: Device) {
         repository.getPlannings(dev).getOrNull()?.let { _plannings.value = it }
-    }
-
-    private suspend fun loadPresence(dev: Device) {
-        val windows = repository.getPresenceWindows(dev).getOrNull().orEmpty()
-        _presenceWindows.value = windows
-        _presenceActive.value = windows.isNotEmpty()
     }
 
     private suspend fun loadButtonTimer(dev: Device) {

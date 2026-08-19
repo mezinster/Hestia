@@ -65,30 +65,21 @@ class NotificationWorker(
         val devices = repository.getDevicesOnce().filterNot { it.ipAddress.startsWith(DEMO_PREFIX) }
         var posted = 0
         for (device in devices) {
+            // getPlannings fusionne plannings précis et simulations de présence depuis la fusion
+            // du 2026-08-18 (gated en interne sur hasScripting pour la présence) — une seule
+            // boucle suffit désormais, [Planning.isPresence] choisit juste le texte de notif.
             if (device.supportsSwitch) {
                 for (p in repository.getPlannings(device).getOrNull().orEmpty()) {
+                    val (startKind, startText) = if (p.isPresence) "pr-start" to R.string.notif_presence_started else "pl-start" to R.string.notif_planning_started
+                    val (endKind, endText) = if (p.isPresence) "pr-end" to R.string.notif_presence_ended else "pl-end" to R.string.notif_planning_ended
                     ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.START, from, now, zone)?.let { t ->
-                        post(ctx, device.id, "pl-start", t, device.name,
-                            ctx.getString(R.string.notif_planning_started, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))
+                        post(ctx, device.id, startKind, t, device.name,
+                            ctx.getString(startText, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))
                         posted++
                     }
                     ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.END, from, now, zone)?.let { t ->
-                        post(ctx, device.id, "pl-end", t, device.name,
-                            ctx.getString(R.string.notif_planning_ended, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))
-                        posted++
-                    }
-                }
-            }
-            if (device.hasScripting) {
-                for (w in repository.getPresenceWindows(device).getOrNull().orEmpty()) {
-                    ScheduleCodec.boundaryInstant(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS, ScheduleCodec.Boundary.START, from, now, zone)?.let { t ->
-                        post(ctx, device.id, "pr-start", t, device.name,
-                            ctx.getString(R.string.notif_presence_started, formatClockTime(w.startMinutes), formatClockTime(w.endMinutes)))
-                        posted++
-                    }
-                    ScheduleCodec.boundaryInstant(w.startMinutes, w.endMinutes, ScheduleCodec.ALL_DAYS, ScheduleCodec.Boundary.END, from, now, zone)?.let { t ->
-                        post(ctx, device.id, "pr-end", t, device.name,
-                            ctx.getString(R.string.notif_presence_ended, formatClockTime(w.startMinutes), formatClockTime(w.endMinutes)))
+                        post(ctx, device.id, endKind, t, device.name,
+                            ctx.getString(endText, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))
                         posted++
                     }
                 }
