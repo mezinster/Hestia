@@ -28,6 +28,7 @@ import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.rpc.model.ScheduleJob
 import kapoue.hestia.data.rpc.model.SwitchSetResult
 import kapoue.hestia.data.rpc.model.SwitchStatusResult
+import kapoue.hestia.di.ApplicationScope
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.FirmwareCheckResult
@@ -37,7 +38,9 @@ import kapoue.hestia.domain.model.PresenceWindow
 import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.domain.model.isExpiredOnce
 import kapoue.hestia.domain.model.onceEndAt
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -56,6 +59,7 @@ class DeviceRepository @Inject constructor(
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
     @ApplicationContext private val context: Context,
+    @ApplicationScope private val appScope: CoroutineScope,
 ) {
     // --- Bascule automatique entre les 1 ou 2 adresses IP d'un appareil ---
 
@@ -1405,10 +1409,16 @@ class DeviceRepository @Inject constructor(
      * joignables** pour refléter l'état actuel de ntfy (activation, sujet) — appelé quand
      * l'utilisateur bascule le réglage. Un appareil injoignable à cet instant n'est pas marqué à
      * jour : le Tableau le rattrapera de lui-même dès qu'il redeviendra joignable ([ntfyCatchUpIfNeeded]).
+     *
+     * Lancé sur [appScope], pas sur l'appelant — même raison que [resyncDeviceName] : ça peut
+     * enchaîner de nombreux allers-retours RPC (tous les appareils, tous leurs plannings), pas
+     * question que ça s'arrête net si l'utilisateur quitte l'écran Réglages entre-temps.
      */
-    suspend fun resyncNtfyForAllDevices() {
-        for (device in getDevicesOnce()) {
-            if (resyncNtfyForDevice(device)) appPreferences.markNtfySynced(device.id)
+    fun resyncNtfyForAllDevices() {
+        appScope.launch {
+            for (device in getDevicesOnce()) {
+                if (resyncNtfyForDevice(device)) appPreferences.markNtfySynced(device.id)
+            }
         }
     }
 
@@ -1419,9 +1429,15 @@ class DeviceRepository @Inject constructor(
      * notifications garderaient l'ancien nom indéfiniment. Best-effort : si l'appareil est
      * injoignable au moment du renommage, l'ancien nom reste dans les scripts jusqu'à la prochaine
      * modification qui les redéploie (limite connue, non résolue automatiquement pour l'instant).
+     *
+     * Lancé sur [appScope], pas sur l'appelant : ceci peut enchaîner plusieurs allers-retours RPC
+     * (un par planning), et l'écran Modifier se ferme aussitôt après un renommage réussi — un
+     * `viewModelScope.launch` classique se serait fait tuer par la destruction du ViewModel avant
+     * la fin, laissant l'ancien nom dans les notifications malgré une attente de plusieurs minutes
+     * (bug vécu en direct le 2026-08-19).
      */
-    suspend fun resyncDeviceName(device: Device) {
-        resyncNtfyForDevice(device)
+    fun resyncDeviceName(device: Device) {
+        appScope.launch { resyncNtfyForDevice(device) }
     }
 
     /**

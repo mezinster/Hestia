@@ -1,5 +1,6 @@
 package kapoue.hestia.ui.screens.device
 
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -15,6 +16,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,6 +60,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.core.util.isValidIpv4
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.DriverType
+import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.LedNightModeState
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.permission.LocalNetworkPermissionStatus
@@ -76,10 +81,26 @@ fun AddEditDeviceScreen(
     var permissionDenied by remember { mutableStateOf(false) }
     // 1 ou 2 = boîte de dialogue d'édition de cet emplacement IP ouverte, null = fermée.
     var editingIpSlot by remember { mutableStateOf<Int?>(null) }
+    var showFirmwareInstallConfirm by remember { mutableStateOf(false) }
+    var showRebootConfirm by remember { mutableStateOf(false) }
 
     // Se referme lorsque l'opération est terminée (hors composition).
     LaunchedEffect(state.done) {
         if (state.done) onDone()
+    }
+
+    LaunchedEffect(state.firmwareInstallMessage) {
+        state.firmwareInstallMessage?.let {
+            Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
+            viewModel.consumeFirmwareInstallMessage()
+        }
+    }
+
+    LaunchedEffect(state.rebootMessage) {
+        state.rebootMessage?.let {
+            Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
+            viewModel.consumeRebootMessage()
+        }
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -197,6 +218,19 @@ fun AddEditDeviceScreen(
             if (state.isEditMode) {
                 HorizontalDivider()
                 LedSection(state = state.ledState, onToggle = viewModel::onToggleLed)
+
+                HorizontalDivider()
+                FirmwareSection(
+                    deviceType = state.type,
+                    driver = state.driver,
+                    result = state.firmwareCheck,
+                    checking = state.firmwareChecking,
+                    installing = state.firmwareInstalling,
+                    rebooting = state.rebooting,
+                    onCheck = viewModel::checkFirmwareUpdate,
+                    onInstall = { showFirmwareInstallConfirm = true },
+                    onReboot = { showRebootConfirm = true },
+                )
             }
 
             // Erreur globale (réseau / RPC / doublon) — message actionnable.
@@ -273,6 +307,26 @@ fun AddEditDeviceScreen(
                 editingIpSlot = null
             },
             onDismiss = { editingIpSlot = null },
+        )
+    }
+
+    if (showFirmwareInstallConfirm) {
+        FirmwareInstallConfirmDialog(
+            onConfirm = {
+                showFirmwareInstallConfirm = false
+                viewModel.installFirmwareUpdate()
+            },
+            onDismiss = { showFirmwareInstallConfirm = false },
+        )
+    }
+
+    if (showRebootConfirm) {
+        RebootConfirmDialog(
+            onConfirm = {
+                showRebootConfirm = false
+                viewModel.rebootDevice()
+            },
+            onDismiss = { showRebootConfirm = false },
         )
     }
 }
@@ -407,6 +461,127 @@ private fun LedSection(state: LedNightModeState?, onToggle: (Boolean) -> Unit) {
             }
         }
     }
+}
+
+/**
+ * Vérification manuelle de mise à jour firmware — jamais automatique (seul appel du projet qui
+ * sort du réseau local). Une version bêta disponible n'est jamais proposée à l'installation,
+ * seulement signalée. Par appareil physique (2026-08-19) : déplacé depuis l'écran Détail, où il
+ * était dupliqué à l'identique sur chaque canal d'un même bloc (un seul firmware, un seul
+ * redémarrage, quel que soit le nombre de canaux — même logique que la LED d'état ci-dessus).
+ */
+@Composable
+private fun FirmwareSection(
+    deviceType: DeviceType,
+    driver: DriverType,
+    result: FirmwareCheckResult?,
+    checking: Boolean,
+    installing: Boolean,
+    rebooting: Boolean,
+    onCheck: () -> Unit,
+    onInstall: () -> Unit,
+    onReboot: () -> Unit,
+) {
+    // Désigne l'appareil par son type (« Prise », « Lampe », « Capteur ») plutôt que par le mot
+    // générique « appareil » — évite aussi tout accord de genre dans la phrase (le nom sert
+    // d'étiquette, pas de sujet grammatical : « Prise : à jour », pas « Ta prise est à jour »).
+    val noun = stringResource(nounFor(deviceType))
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.firmware_section),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+
+        when (result) {
+            null -> Text(
+                text = stringResource(R.string.firmware_check_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            is FirmwareCheckResult.UpToDate -> Text(
+                stringResource(R.string.firmware_up_to_date, noun, result.installedVersion),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            is FirmwareCheckResult.BetaOnly -> Text(
+                stringResource(R.string.firmware_beta_only, noun, result.installedVersion, result.betaVersion),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            is FirmwareCheckResult.UpdateAvailable -> Text(
+                stringResource(R.string.firmware_update_available, noun, result.installedVersion, result.newVersion),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            FirmwareCheckResult.Error -> Text(
+                stringResource(R.string.firmware_check_error),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onCheck, enabled = !checking && !installing) {
+                Icon(Icons.Filled.CloudDownload, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.firmware_check_button))
+            }
+            if (result is FirmwareCheckResult.UpdateAvailable) {
+                Button(onClick = onInstall, enabled = !installing) {
+                    Text(stringResource(R.string.firmware_install_button))
+                }
+            }
+        }
+
+        // Redémarrage (dépannage) : méthode RPC propre à Shelly, absente si un jour Hestia gère
+        // une autre marque — c'est pourquoi ce bloc est distinct du reste, propre au pilote.
+        if (driver == DriverType.SHELLY_GEN2) {
+            Text(
+                text = stringResource(R.string.firmware_reboot_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            OutlinedButton(onClick = onReboot, enabled = !rebooting) {
+                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.firmware_reboot_button))
+            }
+        }
+    }
+}
+
+private fun nounFor(type: DeviceType): Int = when (type) {
+    DeviceType.PLUG -> R.string.device_type_plug
+    DeviceType.LAMP -> R.string.device_type_lamp
+    DeviceType.SENSOR -> R.string.device_type_sensor
+}
+
+@Composable
+private fun RebootConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.firmware_reboot_confirm_title)) },
+        text = { Text(stringResource(R.string.firmware_reboot_confirm_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.firmware_reboot_confirm_ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+@Composable
+private fun FirmwareInstallConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.firmware_install_confirm_title)) },
+        text = { Text(stringResource(R.string.firmware_install_confirm_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.firmware_install_confirm_ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }
 
 @Composable

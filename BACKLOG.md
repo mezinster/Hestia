@@ -6,6 +6,25 @@ Dernière mise à jour : 2026-08-17 (refonte du Tableau, lots 1-4/5 ; découvert
 
 ## Fait — en cours (à surveiller)
 
+- **Renommer un appareil gardait l'ancien nom dans les notifs ntfy, corrigé le 2026-08-19** — bug
+  vécu en direct : renommage, planning Unique déclenché ~3 min après, notif reçue avec l'ancien
+  nom malgré une attente largement suffisante. Cause réelle : `resyncDeviceName` (qui redéploie
+  planning/présence/bouton avec le nom à jour) était lancé via `viewModelScope.launch`, mais
+  l'écran Modifier se ferme **aussitôt** après l'enregistrement — détruisant le ViewModel et
+  annulant la resynchro avant son premier appel RPC, quel que soit le temps d'attente ensuite.
+  Corrigé avec une portée de coroutine applicative dédiée (`@ApplicationScope`, nouveau module
+  `CoroutineModule`), qui survit à la fermeture de l'écran — appliqué aussi à la resynchro
+  déclenchée par un changement de sujet ntfy dans Réglages (même défaut latent, jamais rapporté).
+  **Le bug a persisté après ce premier correctif** : retest en direct avec journal de diagnostic
+  à l'appui, **aucun** appel `Schedule.List`/`Create`/`Delete` après le renommage — la resynchro
+  n'était même pas tentée. Cause réelle, différente de la première : le renommage testé passait
+  par `RenameChannelDialog` (Réglages → renommer un canal, `SettingsViewModel.renameChannel`), un
+  **chemin entièrement distinct** de l'écran Modifier, qui ne touchait que Room
+  (`updateDevice`) sans jamais appeler `resyncDeviceName` — pas un souci de portée de coroutine
+  ici, une resynchro simplement absente sur ce second chemin. Corrigée en y ajoutant le même appel
+  `resyncDeviceName` que l'écran Modifier. Retest à refaire pour confirmer.
+  Au passage : `STRIP_NAME_MAX_LENGTH` (troncature du nom sous chaque cercle du bloc multi-canaux)
+  monté de 10 à 12 caractères, retour de test réel (l'ellipse « … » mange de la place déjà comptée).
 - **Traduction anglaise** : `values/strings.xml` (défaut) est désormais l'anglais, `values-fr/`
   porte le français — Android choisit tout seul selon la langue système. Deux formats horaires
   codés « à la française » corrigés au passage (`formatTimeRange`, les horaires des
@@ -312,13 +331,16 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   aussi fonctionner). Chantier de taille comparable à ntfy en son temps — plusieurs lots à prévoir
   (deep link, cycle de vie des tags, écran de gestion, export PDF pour impression via l'API PDF
   native Android, pas de nouvelle dépendance nécessaire).
-- **Déplacer « Mise à jour » et « Redémarrer » vers la page Modifier d'un appareil** (2026-08-18) :
-  aujourd'hui dupliqués à l'identique sur l'écran Détail de chaque canal d'un même bloc multi-
-  canaux (un seul appareil physique, donc un seul firmware, un seul redémarrage) — recoupe le
-  chantier « par appareil physique, pas par canal » déjà identifié en creusant le script
-  superviseur (voir § En cours de traitement). À rapprocher de la LED d'état, déjà gérée par
-  appareil physique dans `AddEditDeviceScreen` (page « Modifier ») plutôt que par canal : même
-  logique à appliquer à la mise à jour firmware et au redémarrage.
+- ~~Déplacer « Mise à jour » et « Redémarrer » vers la page Modifier d'un appareil~~ **fait le
+  2026-08-19, pas encore testé.** Idée du 2026-08-18 : c'était dupliqué à l'identique sur l'écran
+  Détail de chaque canal d'un bloc multi-canaux (un seul appareil physique, donc un seul firmware,
+  un seul redémarrage). `FirmwareSection`/`RebootConfirmDialog`/`FirmwareInstallConfirmDialog`
+  déplacés de `DetailScreen` vers `AddEditDeviceScreen` (page « Modifier »), même logique que la
+  LED d'état déjà présente là — un seul canal du groupe suffit à porter l'appel (`groupMembers.
+  firstOrNull()`), les fonctions `checkFirmwareUpdate`/`installFirmwareUpdate`/`rebootDevice` du
+  dépôt n'ayant jamais dépendu du canal (juste l'IP). État déplacé en bloc dans `AddEditUiState`
+  (`driver`, `firmwareCheck`, `firmwareChecking`, `firmwareInstalling`, `firmwareInstallMessage`,
+  `rebooting`, `rebootMessage`), gated sur `state.isEditMode` comme la LED.
 - **Historique / graphique de consommation par prise** (2026-08-18) : histogramme ou courbe dans
   le temps, pour repérer visuellement des cycles réguliers (recharge mensuelle d'un scooter
   électrique, d'un Mac...). Pas trivial : l'API RPC classique n'expose qu'un compteur cumulatif

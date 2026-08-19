@@ -346,7 +346,7 @@ fun DeviceStripRow(
     }
 }
 
-private const val STRIP_NAME_MAX_LENGTH = 10
+private const val STRIP_NAME_MAX_LENGTH = 12
 
 @Composable
 private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> Unit) {

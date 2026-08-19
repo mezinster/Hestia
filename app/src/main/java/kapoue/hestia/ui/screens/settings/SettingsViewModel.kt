@@ -95,7 +95,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     private fun resyncNtfy() {
-        viewModelScope.launch { repository.resyncNtfyForAllDevices() }
+        repository.resyncNtfyForAllDevices()
     }
 
     /** Envoie une notif de test avec le texte choisi par l'utilisateur (pas configurable). */
@@ -123,9 +123,19 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { repository.deleteDeviceGroup(members) }
     }
 
-    /** Renomme un seul canal (ex. « Frigo ») — sans toucher au nom partagé de l'appareil. */
+    /**
+     * Renomme un seul canal (ex. « Frigo ») — sans toucher au nom partagé de l'appareil. Le
+     * nouveau nom est aussi celui qui apparaît dans les notifications ntfy (planning, présence,
+     * bouton) : sans le redéploiement qui suit, elles auraient gardé l'ancien nom indéfiniment —
+     * exactement le même bug que celui déjà corrigé pour le renommage depuis l'écran Modifier
+     * (2026-08-19), sur ce chemin-ci distinct qui ne l'appelait pas encore.
+     */
     fun renameChannel(device: Device, newName: String) {
-        viewModelScope.launch { repository.updateDevice(device.copy(name = newName)) }
+        viewModelScope.launch {
+            val updated = device.copy(name = newName)
+            repository.updateDevice(updated)
+            repository.resyncDeviceName(updated)
+        }
     }
 
     /** Message transitoire (résultat export/import) à afficher puis consommer. */

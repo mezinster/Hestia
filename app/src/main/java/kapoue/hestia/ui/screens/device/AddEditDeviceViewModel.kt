@@ -11,6 +11,8 @@ import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.DriverType
+import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.LedNightModeState
 import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.common.toUserMessageOrNull
@@ -54,6 +56,18 @@ data class AddEditUiState(
     val isDirty: Boolean = false,
     /** LED d'état de l'appareil. Null = lecture en cours (mode édition seulement). */
     val ledState: LedNightModeState? = null,
+    /** Pilote de l'appareil édité (Shelly Gen2+ pour l'instant) — conditionne le redémarrage,
+     * propre au fabricant. Valeur par défaut sans portée hors mode édition. */
+    val driver: DriverType = DriverType.SHELLY_GEN2,
+    /** Résultat de la dernière vérification manuelle de mise à jour firmware. */
+    val firmwareCheck: FirmwareCheckResult? = null,
+    val firmwareChecking: Boolean = false,
+    val firmwareInstalling: Boolean = false,
+    /** Message transitoire de l'installation (démarrée ou en échec), consommé par l'UI. */
+    val firmwareInstallMessage: UserMessage? = null,
+    val rebooting: Boolean = false,
+    /** Message transitoire du redémarrage (lancé ou en échec), consommé par l'UI. */
+    val rebootMessage: UserMessage? = null,
 )
 
 @HiltViewModel
@@ -108,6 +122,7 @@ class AddEditDeviceViewModel @Inject constructor(
                             isGroupEdit = isGroupEdit,
                             name = editedName, ipAddress = device.ipAddress, type = device.type,
                             ipName = device.ipName, ip2Address = device.ip2Address, ip2Name = device.ip2Name,
+                            driver = device.driver,
                         )
                     }
                     val (component, ledState) = repository.getLedState(groupMembers)
@@ -127,6 +142,69 @@ class AddEditDeviceViewModel @Inject constructor(
             ledComponent = refreshedComponent
             _uiState.update { it.copy(ledState = ledState) }
         }
+    }
+
+    // --- Mise à jour et redémarrage firmware — par appareil physique (2026-08-19), un seul
+    // canal du groupe suffit (même firmware, même redémarrage pour tous). Anciennement dupliqué
+    // à l'identique sur l'écran Détail de chaque canal.
+
+    /** Vérification manuelle (seul appel du projet qui sort du réseau local). */
+    fun checkFirmwareUpdate() {
+        val dev = groupMembers.firstOrNull() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(firmwareChecking = true, firmwareInstallMessage = null) }
+            val result = repository.checkFirmwareUpdate(dev)
+            _uiState.update { it.copy(firmwareChecking = false, firmwareCheck = result) }
+        }
+    }
+
+    /** Démarre l'installation de la mise à jour stable ; l'appareil redémarre pour l'appliquer. */
+    fun installFirmwareUpdate() {
+        val dev = groupMembers.firstOrNull() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(firmwareInstalling = true) }
+            val result = repository.installFirmwareUpdate(dev)
+            _uiState.update {
+                it.copy(
+                    firmwareInstalling = false,
+                    // Redémarrage à venir : l'état vérifié devient obsolète.
+                    firmwareCheck = if (result is RpcResult.Success) null else it.firmwareCheck,
+                    firmwareInstallMessage = if (result is RpcResult.Success) {
+                        UserMessage(R.string.firmware_install_started)
+                    } else {
+                        UserMessage(R.string.firmware_install_error)
+                    },
+                )
+            }
+        }
+    }
+
+    fun consumeFirmwareInstallMessage() {
+        _uiState.update { it.copy(firmwareInstallMessage = null) }
+    }
+
+    /** Redémarre l'appareil (dépannage) ; jamais bloqué par un minuteur en cours. */
+    fun rebootDevice() {
+        val dev = groupMembers.firstOrNull() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(rebooting = true) }
+            val result = repository.rebootDevice(dev)
+            _uiState.update {
+                it.copy(
+                    rebooting = false,
+                    firmwareCheck = if (result is RpcResult.Success) null else it.firmwareCheck,
+                    rebootMessage = if (result is RpcResult.Success) {
+                        UserMessage(R.string.firmware_reboot_started)
+                    } else {
+                        UserMessage(R.string.firmware_reboot_error)
+                    },
+                )
+            }
+        }
+    }
+
+    fun consumeRebootMessage() {
+        _uiState.update { it.copy(rebootMessage = null) }
     }
 
     fun onNameChange(value: String) = _uiState.update {
@@ -306,8 +384,10 @@ class AddEditDeviceViewModel @Inject constructor(
                 _uiState.update { it.copy(error = UserMessage(R.string.error_device_exists)) }
             } else {
                 // Le nom est écrit en dur dans les scripts déployés (notifs ntfy) : les redéployer
-                // avec le nouveau nom si besoin, sans bloquer la fermeture de l'écran là-dessus.
-                if (nameChanged) viewModelScope.launch { repository.resyncDeviceName(updated) }
+                // avec le nouveau nom si besoin. Lancé par le dépôt sur sa propre portée (pas
+                // viewModelScope) : l'écran se ferme aussitôt après (voir onDone ci-dessous), ce
+                // qui tuerait la resynchro avant la fin si elle dépendait de ce ViewModel.
+                if (nameChanged) repository.resyncDeviceName(updated)
                 _uiState.update { it.copy(done = true) }
             }
         }
