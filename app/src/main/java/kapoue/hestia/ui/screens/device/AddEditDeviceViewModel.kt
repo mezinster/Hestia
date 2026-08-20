@@ -10,6 +10,7 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcResult
+import kapoue.hestia.domain.model.CloudInfo
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
 import kapoue.hestia.domain.model.FirmwareCheckResult
@@ -68,6 +69,9 @@ data class AddEditUiState(
     val rebooting: Boolean = false,
     /** Message transitoire du redémarrage (lancé ou en échec), consommé par l'UI. */
     val rebootMessage: UserMessage? = null,
+    /** État Cloud Shelly. Null = lecture en cours (mode édition seulement). */
+    val cloudInfo: CloudInfo? = null,
+    val cloudToggling: Boolean = false,
 )
 
 @HiltViewModel
@@ -128,6 +132,10 @@ class AddEditDeviceViewModel @Inject constructor(
                     val (component, ledState) = repository.getLedState(groupMembers)
                     ledComponent = component
                     _uiState.update { it.copy(ledState = ledState) }
+
+                    val cloudInfo = repository.getCloudInfo(device)
+                    _uiState.update { it.copy(cloudInfo = cloudInfo) }
+                    (cloudInfo as? CloudInfo.Available)?.macId?.let { repository.cacheCloudId(groupMembers, it) }
                 }
             }
         }
@@ -205,6 +213,20 @@ class AddEditDeviceViewModel @Inject constructor(
 
     fun consumeRebootMessage() {
         _uiState.update { it.copy(rebootMessage = null) }
+    }
+
+    // --- Cloud Shelly — par appareil physique, comme la LED et le firmware ci-dessus. Toujours
+    // à la demande explicite de l'utilisateur, jamais activé par Hestia de sa propre initiative.
+
+    fun onToggleCloud(enabled: Boolean) {
+        val dev = groupMembers.firstOrNull() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(cloudToggling = true) }
+            repository.setCloudEnabled(dev, enabled)
+            val cloudInfo = repository.getCloudInfo(dev)
+            _uiState.update { it.copy(cloudToggling = false, cloudInfo = cloudInfo) }
+            (cloudInfo as? CloudInfo.Available)?.macId?.let { repository.cacheCloudId(groupMembers, it) }
+        }
     }
 
     fun onNameChange(value: String) = _uiState.update {

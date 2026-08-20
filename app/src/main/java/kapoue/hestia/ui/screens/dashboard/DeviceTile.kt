@@ -16,7 +16,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -97,12 +99,16 @@ fun DeviceTile(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = tile.device.name,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = tile.device.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                ConnectivityBadge(tile.status, modifier = Modifier.padding(start = 4.dp))
+            }
 
             Spacer(Modifier.height(10.dp))
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -133,6 +139,24 @@ fun DeviceTile(
 
 // Plus de bouton « Réessayer » dédié : le rafraîchissement auto (5 s) + le tirage manuel
 // suffisent à rattraper un appareil redevenu joignable (voir DashboardViewModel.refresh).
+
+/**
+ * Picto Wifi (local) ou nuage (repli cloud) à côté du nom — jamais silencieux sur la provenance
+ * de l'état affiché (voir CLAUDE.md). Rien n'est affiché tant qu'aucune lecture n'a réussi
+ * (Chargement/Indisponible) : on ne peut alors revendiquer aucun des deux chemins.
+ */
+@Composable
+private fun ConnectivityBadge(status: TileStatus, modifier: Modifier = Modifier) {
+    val online = status as? TileStatus.Online ?: return
+    Icon(
+        imageVector = if (online.viaCloud) Icons.Filled.Cloud else Icons.Filled.Wifi,
+        contentDescription = stringResource(
+            if (online.viaCloud) R.string.tile_via_cloud else R.string.tile_via_local,
+        ),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.size(14.dp),
+    )
+}
 
 @Composable
 private fun RoundToggleButton(enabled: Boolean, onClick: () -> Unit) {
@@ -323,12 +347,19 @@ fun DeviceStripRow(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = groupLabel,
-                style = MaterialTheme.typography.titleSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = groupLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                // Tous les canaux d'un même bloc partagent la même IP, donc le même chemin
+                // (local/cloud) — un seul picto pour le groupe, pas un par mini-cercle.
+                val groupOnline = members.firstNotNullOfOrNull { it.status as? TileStatus.Online }
+                ConnectivityBadge(groupOnline ?: TileStatus.Offline, modifier = Modifier.padding(start = 4.dp))
+            }
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),

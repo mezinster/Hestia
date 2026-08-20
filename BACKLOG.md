@@ -6,6 +6,96 @@ Dernière mise à jour : 2026-08-17 (refonte du Tableau, lots 1-4/5 ; découvert
 
 ## Fait — en cours (à surveiller)
 
+- **Cloud Shelly, repli à distance — Lot 4 (transparence), codé le 2026-08-20, pas encore testé
+  en direct.** Test réel du repli lui-même déjà validé en direct pendant le lot 3 (allumage +
+  extinction d'un canal en 5G, Wi-Fi coupé). Reste la partie transparence : un petit picto Wifi ou
+  nuage à côté du nom, sur la tuile prise seule et sur l'en-tête du bloc multi-canaux (jamais un
+  par mini-cercle : tous les canaux d'un bloc partagent la même IP donc le même chemin) — jamais
+  silencieux sur la provenance de l'état affiché (CLAUDE.md). Visible en permanence dès qu'un état
+  est connu (Wifi si local, nuage si repli), absent tant que rien n'est encore chargé ou que
+  l'appareil est indisponible des deux côtés (ne peut alors revendiquer aucun chemin).
+  Nouveau `DeviceStatusResult(result, viaCloud)` dans `DeviceRepository` — `getStatus`/
+  `getStatuses` le renvoient désormais au lieu d'un `RpcResult` nu, propagé jusqu'à
+  `TileStatus.Online.viaCloud` via `toTileStatus()`. Tous les appelants mis à jour
+  (`SettingsViewModel`, `DashboardViewModel`, `NotificationWorker`) ; `DetailViewModel` compile
+  sans changement (signature déjà transparente pour lui).
+- **Cloud Shelly, repli à distance — Lot 3 (client cloud + repli automatique), codé le
+  2026-08-20, pas encore testé en direct.** `ShellyCloudClient` étendu : `getBatchStatus` (lecture
+  groupée, jusqu'à 10 appareils physiques par appel, paginé sinon) et `setSwitch` (pilotage
+  on/off). Un verrou central (`Mutex` + horodatage du dernier appel, ≥1,1 s entre deux) sérialise
+  **tous** les appels du singleton — lecture comme pilotage, rafraîchissement automatique comme
+  action bouton — pour ne plus jamais reproduire le couac observé en curl (extinction envoyée
+  juste après un allumage, silencieusement ignorée).
+  Côté `DeviceRepository` : `getStatus`/`userToggle` basculent automatiquement sur le cloud si
+  l'appel local échoue par injoignabilité (jamais pour une erreur applicative de l'appareil, qui
+  prouve que l'adresse est la bonne) **et** que la clé du compte est configurée **et** que
+  `Device.cloudId` est en cache (lot 2) — sinon l'échec local remonte tel quel, comportement
+  inchangé. Nouvelle `getStatuses(devices)` : relève le local en parallèle pour chacun comme
+  avant, puis un **seul** appel cloud groupé pour tous ceux injoignables — jamais un appel par
+  canal, un bloc à 4 canaux ne comptant que pour 1 identifiant cloud. Branchée dans
+  `DashboardViewModel.fetch()` (le rafraîchissement périodique du Tableau), à la place du relevé
+  par appareil précédent. `DetailViewModel.fetch()` et `SettingsViewModel.checkConnectivity()`
+  héritent du repli automatiquement via `getStatus` (aucune modification nécessaire de leur côté).
+  Pas d'indicateur visuel « via cloud » à ce stade — c'est le lot 4.
+  **Correctif le jour même** : `Device.cloudId` ne se remplissait qu'en ouvrant Modifier sur un
+  appareil joignable — jamais garanti avant le moment précis où le repli en a besoin. Bug vécu en
+  direct : clé cloud configurée et acceptée, mais Tableau entier en « Indisponible » une fois le
+  Wi-Fi coupé, faute de MAC en cache. `getLocalStatus` complète maintenant `cloudId` tout seul,
+  en tâche de fond (best-effort, ne retarde jamais l'affichage), dès qu'un appareil sans MAC connu
+  répond une fois en local — un simple usage normal du Tableau à la maison suffit désormais à
+  amorcer le cache, plus besoin de visiter Modifier.
+  **Deuxième correctif le jour même** : même après le cache rempli, le repli échouait encore
+  silencieusement — appel cloud réussi (200 OK) mais tuiles toujours « Indisponible ». Cause :
+  `Shelly.GetDeviceInfo.mac` est en MAJUSCULES (`D885ACEBE2CC`, cohérent avec le « Cloud ID »
+  affiché par l'interface native, voir écran Modifier), mais l'API cloud attend l'identifiant en
+  minuscules (`d885acebe2cc`, confirmé par tous les tests curl) — un 200 OK avec le mauvais
+  identifiant renvoie simplement un tableau vide, aucune erreur explicite. Corrigé par
+  `Device.cloudDeviceId()`, une normalisation au point d'usage (jamais supposée correcte en
+  cache) utilisée partout où `cloudId` sert à appeler le cloud — l'affichage du Cloud ID dans
+  Modifier reste lui inchangé, en majuscules, identique à l'interface native.
+- **Cloud Shelly, repli à distance — Lot 2 (cache de l'identifiant cloud), codé le 2026-08-20, pas
+  encore testé en direct.** Nouveau champ `Device.cloudId` (MAC de l'appareil physique, identique
+  sur tous les canaux d'un même bloc, comme `deviceName`) — migration v14→v15, additive, colonne
+  nullable. Alimenté passivement : dès que `getCloudInfo` lit un MAC en local (écran Modifier —
+  affichage du Cloud ID, ou bascule de l'interrupteur Cloud), `DeviceRepository.cacheCloudId`
+  l'écrit sur tous les canaux du groupe. Aucun nouvel appel réseau ; le but est que cette valeur
+  soit encore lisible **hors réseau**, au moment précis où le lot 3 (repli cloud) en aura besoin
+  et ne pourra plus la redemander à l'appareil.
+- **Cloud Shelly, repli à distance — Lot 1 (config de la clé), codé le 2026-08-20, pas encore
+  testé en direct.** Périmètre confirmé avec David après étude en curl : le Cloud Control API de
+  Shelly ne permet **que** de lire l'état complet d'un appareil et piloter un switch (on/off) —
+  aucune passerelle RPC générique côté cloud, donc `Schedule.Create`/`Script.Eval` (planning,
+  présence, seuil, minuteur bouton, LED, firmware) resteront **toujours strictement locaux**,
+  sans exception possible. Le repli cloud ne couvrira donc, dans les lots suivants, que le bouton
+  allumer/éteindre et la lecture d'état/conso du Tableau — jamais les écrans de configuration.
+  Validé en direct par une série de tests curl sur la Strip4 : authentification par clé
+  d'autorisation opaque (générée par le compte Shelly, jamais un mot de passe géré par Hestia),
+  `device_id` = MAC en minuscules sans séparateur (déjà lu via `Shelly.GetDeviceInfo.mac`), lecture
+  d'état complet et pilotage on/off tous deux fonctionnels par ce chemin. Point de vigilance
+  découvert en direct : l'API cloud est limitée à **1 requête/seconde** — un premier essai
+  d'extinction juste après l'allumage a été silencieusement ignoré (aucune erreur visible), rejoué
+  en espaçant les appels, confirmé résolu. Ce lot 1 pose seulement la brique de configuration
+  (Réglages → section « Cloud Shelly ») : coller la clé + l'adresse serveur (récupérées une fois
+  sur `control.shelly.cloud` → Utilisateur → Accès et autorisations → Clé d'autorisation cloud),
+  stockage chiffré (`AppPreferences`, `EncryptedSharedPreferences`, même mécanisme que le sujet
+  ntfy), jamais journalisé, bouton « Tester » (nouveau `ShellyCloudClient.testAuth` — un appel
+  `get` avec un identifiant d'appareil bidon, seul le code HTTP compte : 200 = clé acceptée, 401 =
+  invalide, pas besoin d'un appareil réel pour valider). Rien n'est encore branché au
+  rafraîchissement ni au bouton allumer/éteindre — lots suivants.
+- **Cloud Shelly, interrupteur par appareil — codé le 2026-08-20, pas encore testé en direct.**
+  Vérifié au préalable en curl sur Strip4 (`192.168.1.97`) avant tout code : `Cloud.SetConfig
+  {"enable":true}` suffit à connecter l'appareil (`Cloud.GetStatus.connected` bascule à `true`
+  sans redémarrage), désactivation propre et réversible, et le champ `mac` de
+  `Shelly.GetDeviceInfo` correspond **exactement** au « Cloud ID » affiché par l'interface native
+  de l'appareil — confirmé via une seconde vérification live après un doute exprimé par David sur
+  le fonctionnement réel. L'appairage compte↔appareil (via l'appli Shelly, scan réseau) est
+  entièrement hors du périmètre RPC local et a été testé séparément par David : réussi sur Strip4.
+  Nouveau `CloudInfo` (domain), `Cloud.GetConfig`/`Cloud.GetStatus`/`Cloud.SetConfig` (RPC),
+  `getCloudInfo`/`setCloudEnabled` (repository) — même emplacement et même schéma que LED/Firmware
+  dans l'écran Modifier (`AddEditDeviceScreen`/`AddEditDeviceViewModel`) : par appareil physique
+  (`groupMembers.firstOrNull()`), jamais mémorisé, toujours relu. Toujours opt-in, désactivé par
+  défaut, aucun champ d'identifiant/mot de passe/jeton — seul un interrupteur, le statut connecté,
+  le Cloud ID en lecture seule et un lien externe vers `control.shelly.cloud`.
 - **Renommer un appareil gardait l'ancien nom dans les notifs ntfy, corrigé le 2026-08-19** — bug
   vécu en direct : renommage, planning Unique déclenché ~3 min après, notif reçue avec l'ancien
   nom malgré une attente largement suffisante. Cause réelle : `resyncDeviceName` (qui redéploie

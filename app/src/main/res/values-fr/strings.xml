@@ -83,6 +83,23 @@
     <string name="settings_ntfy_test">Tester</string>
     <string name="ntfy_test_message">Si tu lis ce message, ntfy fonctionne. Si tu ne le lis pas, on a un problème de logique.</string>
 
+    <!-- Cloud Shelly, repli à distance (opt-in, désactivé par défaut — voir CLAUDE.md). Cette
+         section ne fait qu'enregistrer et vérifier la clé/le serveur pour l'instant ; le vrai
+         repli (allumer/éteindre, état) sera branché dans un lot ultérieur. -->
+    <string name="settings_cloud_section">Cloud Shelly</string>
+    <string name="settings_cloud_desc">Permet à Hestia de continuer à afficher l\'état et la conso de tes prises, et de les allumer/éteindre, même hors de ton réseau domestique. Désactivé par défaut : sans clé ci-dessous, Hestia ne parle qu\'en local à tes prises, comme aujourd\'hui.</string>
+    <string name="settings_cloud_where_before">Récupère ta clé d\'autorisation et l\'adresse du serveur sur </string>
+    <string name="settings_cloud_where_after"> → Utilisateur → Accès et autorisations → Clé d\'autorisation cloud.</string>
+    <string name="settings_cloud_key_label">Clé d\'autorisation</string>
+    <string name="settings_cloud_key_reveal">Afficher la clé</string>
+    <string name="settings_cloud_key_hide">Masquer la clé</string>
+    <string name="settings_cloud_server_label">Adresse du serveur</string>
+    <string name="settings_cloud_server_placeholder">ex. shelly-281-eu.shelly.cloud</string>
+    <string name="settings_cloud_test">Tester</string>
+    <string name="settings_cloud_test_success">Ça fonctionne — clé acceptée.</string>
+    <string name="settings_cloud_test_error">Échec. Vérifie la clé et l\'adresse du serveur.</string>
+    <string name="settings_cloud_clear">Retirer la clé</string>
+
     <!-- Canal et contenus des notifications -->
     <string name="notif_channel_name">Programmations</string>
     <string name="notif_channel_desc">Début et fin des plannings et des plages de présence</string>
@@ -209,6 +226,9 @@
     <!-- Actions de tuile -->
     <string name="tile_toggle">Interrupteur</string>
     <string name="tile_number">%1$s</string>
+    <!-- Provenance de l'état affiché — jamais silencieuse, voir CLAUDE.md -->
+    <string name="tile_via_local">Réseau local</string>
+    <string name="tile_via_cloud">Via le Cloud Shelly (repli à distance)</string>
     <!-- Modale rapide d'un canal, dans un bloc multi-prises -->
     <string name="tile_open_detail">Voir le détail</string>
 
@@ -284,6 +304,19 @@
     <string name="firmware_reboot_confirm_ok">Redémarrer</string>
     <string name="firmware_reboot_started">Redémarrage lancé.</string>
     <string name="firmware_reboot_error">Échec du lancement du redémarrage. Réessaie.</string>
+
+    <!-- Cloud Shelly (opt-in, désactivé par défaut — voir CLAUDE.md). Hestia ne fait que basculer
+         le canal cloud de l'appareil et afficher son état ; la création de compte/l'appairage se
+         font en dehors de l'application. -->
+    <string name="cloud_section_title">Cloud Shelly</string>
+    <string name="cloud_section_hint">Permet à cet appareil de se connecter aux serveurs cloud de Shelly — nécessaire pour l\'appli Shelly officielle, les assistants vocaux et l\'accès à distance hors de ton réseau local. Désactivé par défaut, et cet interrupteur ne pilote que la connexion de l\'appareil lui-même : la création d\'un compte Shelly et l\'ajout de l\'appareil dedans se font en dehors de Hestia, via l\'appli Shelly ou control.shelly.cloud. Hestia ne demande jamais d\'identifiants Shelly.</string>
+    <string name="cloud_loading">Vérification…</string>
+    <string name="cloud_unavailable">Indisponible sur cet appareil, ou injoignable.</string>
+    <string name="cloud_toggle_label">Connecter au Cloud Shelly</string>
+    <string name="cloud_status_connected">Connecté au serveur cloud.</string>
+    <string name="cloud_status_disconnected">Non connecté.</string>
+    <string name="cloud_id_label">Cloud ID : %1$s</string>
+    <string name="cloud_portal_link">Ouvrir control.shelly.cloud</string>
 
     <!-- Simulation de présence (lot 4 ; fusionnée dans le planning depuis le 2026-08-18, voir
          planning_* plus bas — les entrées ci-dessous ne servent plus qu'au sein de ce dialogue) -->

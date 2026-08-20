@@ -110,6 +110,25 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         prefs.edit().putString(KEY_NTFY_SYNCED, json.encodeToString(updated)).apply()
     }
 
+    // --- Cloud Shelly, repli à distance (opt-in, désactivé par défaut — voir CLAUDE.md) ---
+
+    /** Clé d'autorisation cloud, à traiter comme un mot de passe — stockée chiffrée, jamais en clair. */
+    private val _cloudAuthKey = MutableStateFlow(securePrefs.getString(KEY_CLOUD_AUTH_KEY, null))
+    val cloudAuthKey: StateFlow<String?> = _cloudAuthKey.asStateFlow()
+
+    /** Adresse du serveur cloud assigné au compte (ex. « shelly-281-eu.shelly.cloud ») — pas un secret. */
+    private val _cloudServer = MutableStateFlow(prefs.getString(KEY_CLOUD_SERVER, null))
+    val cloudServer: StateFlow<String?> = _cloudServer.asStateFlow()
+
+    fun setCloudCredentials(authKey: String?, server: String?) {
+        securePrefs.edit().putString(KEY_CLOUD_AUTH_KEY, authKey).apply()
+        prefs.edit().putString(KEY_CLOUD_SERVER, server).apply()
+        _cloudAuthKey.value = authKey
+        _cloudServer.value = server
+    }
+
+    fun clearCloudCredentials() = setCloudCredentials(null, null)
+
     // --- Minuteurs en attente (mémos pour notifier la fin d'un « Active pour » / coupure seuil) ---
 
     fun pendingTimers(): List<PendingTimer> =
@@ -137,6 +156,8 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_NTFY_GEN = "ntfy_generation"
         const val KEY_NTFY_SYNCED = "ntfy_synced_devices"
         const val KEY_PENDING_TIMERS = "pending_timers"
+        const val KEY_CLOUD_AUTH_KEY = "cloud_auth_key"
+        const val KEY_CLOUD_SERVER = "cloud_server"
         val json = Json { ignoreUnknownKeys = true }
     }
 }

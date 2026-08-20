@@ -2,6 +2,8 @@ package kapoue.hestia.data.rpc
 
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.rpc.model.CheckForUpdateResult
+import kapoue.hestia.data.rpc.model.CloudConfigResult
+import kapoue.hestia.data.rpc.model.CloudStatusResult
 import kapoue.hestia.data.rpc.model.ComponentsResult
 import kapoue.hestia.data.rpc.model.DeviceInfoResult
 import kapoue.hestia.data.rpc.model.LedUiConfigResult
@@ -181,6 +183,23 @@ class ShellyRpcClient @Inject constructor(
         },
         SetConfigResult.serializer(),
     )
+
+    // --- Cloud Shelly (opt-in, désactivé par défaut — voir CLAUDE.md) ---
+
+    suspend fun cloudGetConfig(ip: String): RpcResult<CloudConfigResult> =
+        call(ip, "Cloud.GetConfig", null, CloudConfigResult.serializer())
+
+    suspend fun cloudGetStatus(ip: String): RpcResult<CloudStatusResult> =
+        call(ip, "Cloud.GetStatus", null, CloudStatusResult.serializer())
+
+    /** Prend effet immédiatement, sans redémarrage (validé en direct le 2026-08-20). */
+    suspend fun cloudSetConfig(ip: String, enable: Boolean): RpcResult<SetConfigResult> =
+        call(
+            ip,
+            "Cloud.SetConfig",
+            buildJsonObject { put("config", buildJsonObject { put("enable", enable) }) },
+            SetConfigResult.serializer(),
+        )
 
     // --- Scripting (simulation de présence) ---
 

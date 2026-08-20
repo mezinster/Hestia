@@ -11,9 +11,11 @@ import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.notifications.NtfyClient
 import kapoue.hestia.data.prefs.AppPreferences
+import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.repository.DeviceStatusResult
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.isActiveNow
 import kotlinx.coroutines.Job
@@ -154,18 +156,22 @@ class DashboardViewModel @Inject constructor(
                 // États, présences et plannings relevés en parallèle : le temps total reste celui
                 // du plus lent, pas la somme.
                 val statusResults = async {
+                    // Local d'abord pour chacun, puis un seul appel cloud groupé pour ceux
+                    // injoignables (voir DeviceRepository.getStatuses) — jamais un appel cloud par
+                    // appareil, jamais de sondage cloud pour un appareil déjà joignable en local.
+                    val byDevice = repository.getStatuses(devices)
                     devices.map { device ->
-                        async {
-                            val tileStatus = repository.getStatus(device).toTileStatus()
-                            // Rattrapage ntfy best-effort : l'appareil répond, on en profite pour
-                            // vérifier s'il a raté une resynchro (aucune requête si déjà à jour).
-                            // Détaché du cycle de relevé (pas annulé par un tirage manuel suivant).
-                            if (tileStatus is TileStatus.Online) {
-                                viewModelScope.launch { repository.ntfyCatchUpIfNeeded(device) }
-                            }
-                            device.id to tileStatus
+                        val statusResult = byDevice[device.id]
+                            ?: DeviceStatusResult(RpcResult.Failure(RpcFailure.UNREACHABLE), viaCloud = false)
+                        val tileStatus = statusResult.toTileStatus()
+                        // Rattrapage ntfy best-effort : l'appareil répond, on en profite pour
+                        // vérifier s'il a raté une resynchro (aucune requête si déjà à jour).
+                        // Détaché du cycle de relevé (pas annulé par un tirage manuel suivant).
+                        if (tileStatus is TileStatus.Online) {
+                            viewModelScope.launch { repository.ntfyCatchUpIfNeeded(device) }
                         }
-                    }.awaitAll()
+                        device.id to tileStatus
+                    }
                 }
                 val presenceResults = async {
                     devices.filter { it.hasScripting }.map { device ->
@@ -302,6 +308,8 @@ class DashboardViewModel @Inject constructor(
     }
 
     private suspend fun fetchOne(device: Device) {
+        // getStatus (pas getStatuses) : un seul appareil, pas besoin du regroupement en un seul
+        // appel cloud — cette fonction gère aussi le repli si nécessaire.
         setStatus(device.id, repository.getStatus(device).toTileStatus())
     }
 

@@ -45,6 +45,9 @@ data class DeviceInfoResult(
     val ver: String? = null,
     @SerialName("app") val appName: String? = null,
     @SerialName("auth_en") val authEnabled: Boolean? = null,
+    /** Adresse MAC de l'appareil — identique au « Cloud ID » affiché dans son interface native
+     * une fois le cloud activé (validé en direct le 2026-08-20). */
+    val mac: String? = null,
 )
 
 /**
@@ -168,6 +171,21 @@ data class ScheduleCreateResult(val id: Int, val rev: Int? = null)
 /** Réponse de Schedule.Delete (on n'exploite que la présence d'un résultat). */
 @Serializable
 data class ScheduleDeleteResult(val rev: Int? = null)
+
+// --- Cloud Shelly (opt-in, désactivé par défaut — voir CLAUDE.md) ---
+
+/** Réponse de Cloud.GetConfig. [server] n'est renseigné qu'une fois déjà connecté au moins une fois. */
+@Serializable
+data class CloudConfigResult(
+    val enable: Boolean = false,
+    val server: String? = null,
+)
+
+/** Réponse de Cloud.GetStatus. */
+@Serializable
+data class CloudStatusResult(
+    val connected: Boolean = false,
+)
 
 /** Horloge de l'appareil, extraite de Shelly.GetStatus → sys (contrôle de dérive). */
 @Serializable

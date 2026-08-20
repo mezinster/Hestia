@@ -2,8 +2,8 @@ package kapoue.hestia.ui.screens.dashboard
 
 import android.os.SystemClock
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.repository.DeviceStatusResult
 import kapoue.hestia.data.rpc.RpcResult
-import kapoue.hestia.data.rpc.model.SwitchStatusResult
 import kapoue.hestia.domain.model.Planning
 
 /** État visuel d'un canal sur le Tableau. */
@@ -21,6 +21,9 @@ sealed interface TileStatus {
         val timerEndsAtElapsed: Long?,
         /** Puissance active instantanée en watts, si l'appareil la mesure. Null sinon. */
         val powerWatts: Double?,
+        /** Vrai si cette lecture vient du repli cloud (appareil injoignable en local) — jamais
+         * silencieux, voir CLAUDE.md : la tuile affiche un petit picto nuage dans ce cas. */
+        val viaCloud: Boolean = false,
     ) : TileStatus
 
     /** Appareil injoignable (timeout, réseau, erreur RPC) — inclut aussi le cas où la permission
@@ -68,11 +71,12 @@ data class DashboardUiState(
 )
 
 /** Convertit un résultat Switch.GetStatus en état de tuile. Partagé Tableau ↔ Détail. */
-internal fun RpcResult<SwitchStatusResult>.toTileStatus(): TileStatus = when (this) {
+internal fun DeviceStatusResult.toTileStatus(): TileStatus = when (val r = result) {
     is RpcResult.Success -> TileStatus.Online(
-        output = value.output,
-        timerEndsAtElapsed = timerEndsAtElapsed(value.timerStartedAt, value.timerDuration),
-        powerWatts = value.apower,
+        output = r.value.output,
+        timerEndsAtElapsed = timerEndsAtElapsed(r.value.timerStartedAt, r.value.timerDuration),
+        powerWatts = r.value.apower,
+        viaCloud = viaCloud,
     )
     // Un appareil injoignable (ou en erreur) n'empêche pas d'utiliser les autres.
     is RpcResult.RpcError -> TileStatus.Offline

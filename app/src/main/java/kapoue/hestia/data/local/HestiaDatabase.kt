@@ -19,7 +19,7 @@ import kapoue.hestia.data.local.entity.PresenceConfig
  */
 @Database(
     entities = [Device::class, PresenceConfig::class, DiagnosticLog::class, PausedPlanning::class],
-    version = 14, // jamais 13, voir CLAUDE.md
+    version = 15, // jamais 13, voir CLAUDE.md
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

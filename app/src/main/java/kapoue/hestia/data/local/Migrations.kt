@@ -162,3 +162,14 @@ val MIGRATION_12_14 = object : Migration(12, 14) {
         db.execSQL("ALTER TABLE paused_plannings ADD COLUMN marginMinutes INTEGER")
     }
 }
+
+/**
+ * v14 → v15 : Cloud Shelly, repli à distance, lot 2 (2026-08-20) — cache du MAC de l'appareil
+ * physique (« Cloud ID »), lu une fois en local, disponible ensuite même hors réseau pour le
+ * repli cloud (lot 3). Colonne nullable, absence = jamais lu, comportement inchangé.
+ */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN cloudId TEXT")
+    }
+}

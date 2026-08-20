@@ -5,6 +5,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.R
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.core.util.formatClockTime
+import kapoue.hestia.data.cloud.ShellyCloudClient
 import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.dao.PausedPlanningDao
 import kapoue.hestia.data.local.dao.PresenceConfigDao
@@ -29,6 +30,7 @@ import kapoue.hestia.data.rpc.model.ScheduleJob
 import kapoue.hestia.data.rpc.model.SwitchSetResult
 import kapoue.hestia.data.rpc.model.SwitchStatusResult
 import kapoue.hestia.di.ApplicationScope
+import kapoue.hestia.domain.model.CloudInfo
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.FirmwareCheckResult
@@ -39,15 +41,32 @@ import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.domain.model.isExpiredOnce
 import kapoue.hestia.domain.model.onceEndAt
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import java.time.LocalDateTime
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * Résultat d'une lecture d'état, avec sa provenance — jamais silencieuse (voir CLAUDE.md) : le
+ * Tableau affiche un petit picto nuage quand [viaCloud] est vrai, pour ne jamais laisser croire
+ * qu'on est sur le réseau local alors que non.
+ */
+data class DeviceStatusResult(
+    val result: RpcResult<SwitchStatusResult>,
+    val viaCloud: Boolean,
+)
 
 /** Point d'accès unique aux appareils : persistance locale, interrogation réseau. */
 @Singleton
@@ -56,6 +75,7 @@ class DeviceRepository @Inject constructor(
     private val presenceConfigDao: PresenceConfigDao,
     private val pausedPlanningDao: PausedPlanningDao,
     private val rpcClient: ShellyRpcClient,
+    private val cloudClient: ShellyCloudClient,
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
     @ApplicationContext private val context: Context,
@@ -121,13 +141,109 @@ class DeviceRepository @Inject constructor(
 
     suspend fun getDevice(id: Long): Device? = deviceDao.getById(id)
 
-    /** Lit l'état courant d'un canal (allumé/éteint, minuteur, puissance). */
-    suspend fun getStatus(device: Device): RpcResult<SwitchStatusResult> {
-        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return demoStatus(device)
-        return withIp(device) { ip -> rpcClient.getSwitchStatus(ip, device.switchId) }.second
+    /**
+     * Lit l'état courant d'un canal (allumé/éteint, minuteur, puissance) — repli cloud automatique
+     * si injoignable en local, la clé du compte est configurée dans Réglages, et le MAC de
+     * l'appareil est en cache (voir [Device.cloudId], lot 2). Pour rafraîchir plusieurs appareils
+     * d'un coup, préférer [getStatuses] : un seul appel cloud groupé au lieu d'un par appareil.
+     */
+    suspend fun getStatus(device: Device): DeviceStatusResult {
+        val local = getLocalStatus(device)
+        if (!local.isConnectivityFailure()) return DeviceStatusResult(local, viaCloud = false)
+        val cloud = cloudStatusFallback(device)
+        return if (cloud != null) DeviceStatusResult(cloud, viaCloud = true) else DeviceStatusResult(local, viaCloud = false)
     }
 
-    /** Bascule d'un canal déclenchée par l'utilisateur. */
+    /**
+     * Comme [getStatus], mais pour plusieurs appareils à la fois : le local reste interrogé en
+     * parallèle pour chacun comme avant, puis **un seul** appel cloud groupé (jusqu'à 10 appareils
+     * physiques distincts par appel Shelly) couvre tous ceux qui ont échoué en local — jamais un
+     * appel cloud par canal (un bloc à 4 canaux ne compte que pour 1 identifiant cloud), jamais de
+     * sondage cloud pour un appareil déjà joignable en local.
+     */
+    suspend fun getStatuses(devices: List<Device>): Map<Long, DeviceStatusResult> = coroutineScope {
+        val local = devices.map { device -> async { device to getLocalStatus(device) } }.awaitAll().toMap()
+        val needFallback = local.filterValues { it.isConnectivityFailure() }.keys.filter { it.cloudDeviceId() != null }
+        if (needFallback.isEmpty()) return@coroutineScope local.mapValues { DeviceStatusResult(it.value, viaCloud = false) }.mapKeys { it.key.id }
+
+        val (authKey, server) = cloudCredentialsOrNull()
+            ?: return@coroutineScope local.mapValues { DeviceStatusResult(it.value, viaCloud = false) }.mapKeys { it.key.id }
+        val cloudIds = needFallback.mapNotNull { it.cloudDeviceId() }
+        val cloudStatus = cloudClient.getBatchStatus(server, authKey, cloudIds)
+
+        local.mapValues { (device, result) ->
+            val cloudId = device.cloudDeviceId()
+            if (result.isConnectivityFailure() && cloudId != null) {
+                cloudStatus[cloudId]?.let { DeviceStatusResult(parseCloudSwitchStatus(it, device.switchId), viaCloud = true) }
+                    ?: DeviceStatusResult(result, viaCloud = false)
+            } else {
+                DeviceStatusResult(result, viaCloud = false)
+            }
+        }.mapKeys { it.key.id }
+    }
+
+    /**
+     * Identifiant cloud tel qu'attendu par l'API Shelly : MAC en minuscules, sans séparateur.
+     * [Device.cloudId] est mis en cache tel que lu (`Shelly.GetDeviceInfo.mac`, en MAJUSCULES —
+     * pour rester identique au « Cloud ID » affiché par l'interface native de l'appareil, voir
+     * l'écran Modifier), donc jamais utilisable tel quel pour appeler le cloud : bug vécu en
+     * direct le 2026-08-20, un appel qui réussit (200 OK) mais ne trouve aucun appareil, faute de
+     * casse correcte — normalisé ici, au point d'usage, plutôt que supposé correct en cache.
+     */
+    private fun Device.cloudDeviceId(): String? = cloudId?.lowercase()
+
+    private suspend fun getLocalStatus(device: Device): RpcResult<SwitchStatusResult> {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return demoStatus(device)
+        val (ip, result) = withIp(device) { i -> rpcClient.getSwitchStatus(i, device.switchId) }
+        // Sans ça, Device.cloudId ne se remplirait qu'en ouvrant Modifier sur un appareil
+        // joignable — jamais garanti avant le moment précis où on en a besoin (repli cloud, lot 3,
+        // bug vécu en direct le 2026-08-20 : clé configurée mais jamais utilisée faute de MAC en
+        // cache). Best-effort, détaché de ce relevé : ne retarde ni ne fait jamais échouer l'affichage.
+        if (result is RpcResult.Success && device.cloudId == null) backfillCloudId(device, ip)
+        return result
+    }
+
+    private fun backfillCloudId(device: Device, ip: String) {
+        appScope.launch {
+            rpcClient.getDeviceInfo(ip).getOrNull()?.mac?.let { mac ->
+                cacheCloudId(listOf(device) + siblingsSharingIp(device), mac)
+            }
+        }
+    }
+
+    private suspend fun cloudStatusFallback(device: Device): RpcResult<SwitchStatusResult>? {
+        val cloudId = device.cloudDeviceId() ?: return null
+        val (authKey, server) = cloudCredentialsOrNull() ?: return null
+        val cloudStatus = cloudClient.getBatchStatus(server, authKey, listOf(cloudId))
+        return cloudStatus[cloudId]?.let { parseCloudSwitchStatus(it, device.switchId) }
+    }
+
+    private fun cloudCredentialsOrNull(): Pair<String, String>? {
+        val authKey = appPreferences.cloudAuthKey.value ?: return null
+        val server = appPreferences.cloudServer.value ?: return null
+        return authKey to server
+    }
+
+    /** Reconstruit un [SwitchStatusResult] à partir du bloc `status` du cloud — mêmes champs que le RPC local. */
+    private fun parseCloudSwitchStatus(deviceStatus: JsonObject, switchId: Int): RpcResult<SwitchStatusResult> {
+        val switchJson = deviceStatus["switch:$switchId"]?.jsonObject
+            ?: return RpcResult.Failure(RpcFailure.UNREACHABLE)
+        return RpcResult.Success(
+            SwitchStatusResult(
+                id = switchId,
+                output = switchJson["output"]?.jsonPrimitive?.booleanOrNull ?: false,
+                apower = switchJson["apower"]?.jsonPrimitive?.doubleOrNull,
+                timerStartedAt = switchJson["timer_started_at"]?.jsonPrimitive?.doubleOrNull,
+                timerDuration = switchJson["timer_duration"]?.jsonPrimitive?.doubleOrNull,
+                source = switchJson["source"]?.jsonPrimitive?.contentOrNull,
+            ),
+        )
+    }
+
+    /**
+     * Bascule d'un canal déclenchée par l'utilisateur — repli cloud automatique si injoignable en
+     * local (mêmes conditions que [getStatus]).
+     */
     suspend fun userToggle(device: Device, on: Boolean): RpcResult<SwitchSetResult> {
         // Appareils démo : succès sans réseau (l'état affiché reste piloté par demoStatus).
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(SwitchSetResult())
@@ -135,12 +251,21 @@ class DeviceRepository @Inject constructor(
         // contrairement au script de coupure, il ne sait pas distinguer une fin naturelle d'une
         // extinction manuelle ; le supprimer avant l'extinction est ce qui l'empêche de se déclencher.
         if (!on) removeTimerNotifyScript(device)
-        val (_, result) = withIp(device) { ip -> rpcClient.setSwitch(ip, device.switchId, on) }
+        val (_, local) = withIp(device) { ip -> rpcClient.setSwitch(ip, device.switchId, on) }
+        val result = if (local.isConnectivityFailure()) cloudToggleFallback(device, on) ?: local else local
         if (result is RpcResult.Success) {
             // Extinction manuelle : un éventuel minuteur en attente est interrompu → pas de notif de fin.
             if (!on) appPreferences.removePendingTimer(device.id)
         }
         return result
+    }
+
+    private suspend fun cloudToggleFallback(device: Device, on: Boolean): RpcResult<SwitchSetResult>? {
+        val cloudId = device.cloudDeviceId() ?: return null
+        val (authKey, server) = cloudCredentialsOrNull() ?: return null
+        val ok = cloudClient.setSwitch(server, authKey, cloudId, device.switchId, on)
+        logger.info(DiagnosticLogger.RPC, "Repli cloud ${device.ipAddress}#${device.switchId} → ${if (ok) "réussi" else "échoué"}")
+        return if (ok) RpcResult.Success(SwitchSetResult()) else null
     }
 
     /**
@@ -1188,6 +1313,49 @@ class DeviceRepository @Inject constructor(
             is RpcResult.Success -> RpcResult.Success(Unit)
             is RpcResult.RpcError -> r
             is RpcResult.Failure -> r
+        }
+    }
+
+    // --- Cloud Shelly (opt-in, désactivé par défaut — voir CLAUDE.md) ---
+
+    /**
+     * Lit l'état cloud réel de l'appareil physique : jamais mémorisé par Hestia, toujours relu.
+     * Combine `Cloud.GetConfig` (activé + serveur assigné), `Cloud.GetStatus` (connecté) et
+     * `Shelly.GetDeviceInfo` (MAC, affiché comme « Cloud ID »).
+     */
+    suspend fun getCloudInfo(device: Device): CloudInfo {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return CloudInfo.Unavailable
+        val (ip, configResult) = withIp(device) { i -> rpcClient.cloudGetConfig(i) }
+        val config = configResult.getOrNull() ?: return CloudInfo.Unavailable
+        val connected = rpcClient.cloudGetStatus(ip).getOrNull()?.connected ?: false
+        val macId = rpcClient.getDeviceInfo(ip).getOrNull()?.mac
+        return CloudInfo.Available(
+            enabled = config.enable,
+            connected = connected,
+            server = config.server,
+            macId = macId,
+        )
+    }
+
+    /**
+     * Met en cache le MAC (« Cloud ID ») sur tous les canaux d'un même appareil physique — lu une
+     * fois en local, il reste disponible ensuite même hors réseau, pour le repli cloud (lot 3).
+     * N'écrit que les canaux dont la valeur a effectivement changé.
+     */
+    suspend fun cacheCloudId(members: List<Device>, macId: String) {
+        for (device in members) {
+            if (device.cloudId != macId) deviceDao.update(device.copy(cloudId = macId))
+        }
+    }
+
+    /** Active/désactive le canal Cloud du firmware. Toujours à la demande explicite de l'utilisateur. */
+    suspend fun setCloudEnabled(device: Device, enabled: Boolean): RpcResult<Unit> {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(Unit)
+        val (_, result) = withIp(device) { ip -> rpcClient.cloudSetConfig(ip, enabled) }
+        return when (result) {
+            is RpcResult.Success -> RpcResult.Success(Unit)
+            is RpcResult.RpcError -> result
+            is RpcResult.Failure -> result
         }
     }
 

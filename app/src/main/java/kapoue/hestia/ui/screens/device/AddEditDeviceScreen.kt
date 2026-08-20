@@ -1,5 +1,7 @@
 package kapoue.hestia.ui.screens.device
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -59,6 +61,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.core.util.isValidIpv4
+import kapoue.hestia.domain.model.CloudInfo
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
 import kapoue.hestia.domain.model.FirmwareCheckResult
@@ -230,6 +233,13 @@ fun AddEditDeviceScreen(
                     onCheck = viewModel::checkFirmwareUpdate,
                     onInstall = { showFirmwareInstallConfirm = true },
                     onReboot = { showRebootConfirm = true },
+                )
+
+                HorizontalDivider()
+                CloudSection(
+                    info = state.cloudInfo,
+                    toggling = state.cloudToggling,
+                    onToggle = viewModel::onToggleCloud,
                 )
             }
 
@@ -552,6 +562,74 @@ private fun nounFor(type: DeviceType): Int = when (type) {
     DeviceType.PLUG -> R.string.device_type_plug
     DeviceType.LAMP -> R.string.device_type_lamp
     DeviceType.SENSOR -> R.string.device_type_sensor
+}
+
+/**
+ * Cloud Shelly — canal opt-in du firmware, désactivé par défaut (voir CLAUDE.md). Hestia ne fait
+ * qu'activer/désactiver ce canal et afficher son état ; la création d'un compte Shelly et
+ * l'appairage de l'appareil se font entièrement en dehors de l'application (appli Shelly ou
+ * control.shelly.cloud) — aucun champ d'identifiant ici.
+ */
+@Composable
+private fun CloudSection(info: CloudInfo?, toggling: Boolean, onToggle: (Boolean) -> Unit) {
+    val context = LocalContext.current
+    val cloudUrl = stringResource(R.string.cloud_portal_url)
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.cloud_section_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.cloud_section_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        when (info) {
+            null -> Text(
+                text = stringResource(R.string.cloud_loading),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            CloudInfo.Unavailable -> Text(
+                text = stringResource(R.string.cloud_unavailable),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            is CloudInfo.Available -> {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = stringResource(R.string.cloud_toggle_label),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Switch(checked = info.enabled, onCheckedChange = onToggle, enabled = !toggling)
+                }
+                Text(
+                    text = stringResource(
+                        if (info.connected) R.string.cloud_status_connected else R.string.cloud_status_disconnected,
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                info.macId?.let { macId ->
+                    Text(
+                        text = stringResource(R.string.cloud_id_label, macId),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            }
+        }
+
+        TextButton(
+            onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cloudUrl))) } },
+        ) {
+            Text(stringResource(R.string.cloud_portal_link))
+        }
+    }
 }
 
 @Composable

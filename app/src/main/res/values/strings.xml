@@ -87,6 +87,23 @@
     <string name="settings_ntfy_test">Test</string>
     <string name="ntfy_test_message">If you\'re reading this, ntfy works. If you\'re not reading it, we have a logic problem.</string>
 
+    <!-- Cloud Shelly, remote fallback (opt-in, off by default — see CLAUDE.md). This section only
+         stores and validates the key/server for now; the actual fallback (on/off, state) is wired
+         up in a later batch. -->
+    <string name="settings_cloud_section">Shelly Cloud</string>
+    <string name="settings_cloud_desc">Lets Hestia keep showing your outlets\' state and consumption, and turn them on/off, even when you\'re away from your home network. Off by default: without a key below, Hestia only ever talks to your outlets over the local network, as usual.</string>
+    <string name="settings_cloud_where_before">Get your authorization key and server address from </string>
+    <string name="settings_cloud_where_after"> → User → Access and permissions → Authorization cloud key.</string>
+    <string name="settings_cloud_key_label">Authorization key</string>
+    <string name="settings_cloud_key_reveal">Show key</string>
+    <string name="settings_cloud_key_hide">Hide key</string>
+    <string name="settings_cloud_server_label">Server address</string>
+    <string name="settings_cloud_server_placeholder">e.g. shelly-281-eu.shelly.cloud</string>
+    <string name="settings_cloud_test">Test</string>
+    <string name="settings_cloud_test_success">It works — key accepted.</string>
+    <string name="settings_cloud_test_error">Failed. Check the key and server address.</string>
+    <string name="settings_cloud_clear">Remove key</string>
+
     <!-- Canal et contenus des notifications -->
     <string name="notif_channel_name">Schedules</string>
     <string name="notif_channel_desc">Start and end of plannings and presence windows</string>
@@ -213,6 +230,9 @@
     <!-- Actions de tuile -->
     <string name="tile_toggle">Switch</string>
     <string name="tile_number">%1$s</string>
+    <!-- Provenance de l'état affiché — jamais silencieuse, voir CLAUDE.md -->
+    <string name="tile_via_local">Local network</string>
+    <string name="tile_via_cloud">Via Shelly Cloud (remote fallback)</string>
     <!-- Modale rapide d'un canal, dans un bloc multi-prises -->
     <string name="tile_open_detail">View details</string>
 
@@ -288,6 +308,19 @@
     <string name="firmware_reboot_confirm_ok">Restart</string>
     <string name="firmware_reboot_started">Restart started.</string>
     <string name="firmware_reboot_error">Failed to start the restart. Try again.</string>
+
+    <!-- Cloud Shelly (opt-in, off by default — see CLAUDE.md). Hestia only flips the device's own
+         cloud toggle and shows its status; account creation/pairing happens outside the app. -->
+    <string name="cloud_section_title">Shelly Cloud</string>
+    <string name="cloud_section_hint">Lets this device connect to Shelly\'s cloud servers — needed for the official Shelly app, voice assistants, and remote access outside your local network. Off by default, and this switch only controls the device\'s own connection: creating a Shelly account and adding the device to it happens outside Hestia, via the Shelly app or control.shelly.cloud. Hestia never asks for a Shelly login.</string>
+    <string name="cloud_loading">Checking…</string>
+    <string name="cloud_unavailable">Unavailable on this device, or unreachable.</string>
+    <string name="cloud_toggle_label">Connect to Shelly Cloud</string>
+    <string name="cloud_status_connected">Connected to the cloud server.</string>
+    <string name="cloud_status_disconnected">Not connected.</string>
+    <string name="cloud_id_label">Cloud ID: %1$s</string>
+    <string name="cloud_portal_link">Open control.shelly.cloud</string>
+    <string name="cloud_portal_url" translatable="false">https://control.shelly.cloud</string>
 
     <!-- Simulation de présence (lot 4 ; fusionnée dans le planning depuis le 2026-08-18, voir
          planning_* ci-dessous — les entrées ci-dessous ne servent plus qu'au sein de ce dialogue) -->

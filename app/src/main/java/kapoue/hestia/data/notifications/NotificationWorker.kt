@@ -119,7 +119,7 @@ class NotificationWorker(
             }
             val reachedEnd = now >= timer.endMillis
             // Avant la fin prévue, ne lire l'état que pour repérer une coupure anticipée.
-            val offEarly = !reachedEnd && repository.getStatus(device).getOrNull()?.output == false
+            val offEarly = !reachedEnd && repository.getStatus(device).result.getOrNull()?.output == false
             if (!reachedEnd && !offEarly) continue // toujours en cours
 
             // Terminé (fin atteinte ou prise déjà coupée). Trop ancien → on efface sans notifier.

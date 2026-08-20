@@ -10,6 +10,7 @@ import kapoue.hestia.R
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.backup.BackupManager
 import kapoue.hestia.data.backup.ImportResult
+import kapoue.hestia.data.cloud.ShellyCloudClient
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.notifications.NotificationScheduler
 import kapoue.hestia.data.notifications.NtfyClient
@@ -35,6 +36,7 @@ class SettingsViewModel @Inject constructor(
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
     private val ntfyClient: NtfyClient,
+    private val cloudClient: ShellyCloudClient,
 ) : ViewModel() {
 
     // Même ordre que le Tableau (canaux d'un même appareil physique toujours groupés) — un
@@ -103,6 +105,50 @@ class SettingsViewModel @Inject constructor(
         val topic = ntfyTopic.value ?: return
         viewModelScope.launch {
             ntfyClient.send(topic, appContext.getString(R.string.app_name), appContext.getString(R.string.ntfy_test_message))
+        }
+    }
+
+    // --- Cloud Shelly, repli à distance (opt-in, désactivé par défaut) ---
+
+    val cloudAuthKey: StateFlow<String?> = appPreferences.cloudAuthKey
+    val cloudServer: StateFlow<String?> = appPreferences.cloudServer
+
+    private val _cloudTesting = MutableStateFlow(false)
+    val cloudTesting: StateFlow<Boolean> = _cloudTesting.asStateFlow()
+
+    private val _cloudTestMessage = MutableStateFlow<UserMessage?>(null)
+    val cloudTestMessage: StateFlow<UserMessage?> = _cloudTestMessage.asStateFlow()
+
+    fun consumeCloudTestMessage() {
+        _cloudTestMessage.value = null
+    }
+
+    fun setCloudCredentials(authKey: String, server: String) {
+        appPreferences.setCloudCredentials(authKey.trim().ifBlank { null }, server.trim().ifBlank { null })
+    }
+
+    fun clearCloudCredentials() {
+        appPreferences.clearCloudCredentials()
+        logger.info(DiagnosticLogger.UI, "Cloud Shelly (repli à distance) : identifiants effacés")
+    }
+
+    /**
+     * Valide clé + serveur sans dépendre d'un appareil réel (voir [ShellyCloudClient.testAuth]) —
+     * enregistre d'abord la saisie courante pour tester la bonne valeur, comme pour ntfy.
+     */
+    fun testCloudKey(authKey: String, server: String) {
+        val trimmedKey = authKey.trim()
+        val trimmedServer = server.trim().removePrefix("https://").removePrefix("http://")
+        if (trimmedKey.isBlank() || trimmedServer.isBlank()) return
+        setCloudCredentials(trimmedKey, trimmedServer)
+        viewModelScope.launch {
+            _cloudTesting.value = true
+            val ok = cloudClient.testAuth(trimmedServer, trimmedKey)
+            logger.info(DiagnosticLogger.UI, "Cloud Shelly (repli à distance) : test clé → ${if (ok) "réussi" else "échoué"}")
+            _cloudTesting.value = false
+            _cloudTestMessage.value = UserMessage(
+                if (ok) R.string.settings_cloud_test_success else R.string.settings_cloud_test_error,
+            )
         }
     }
 
@@ -175,7 +221,7 @@ class SettingsViewModel @Inject constructor(
             val current = repository.getDevicesOnce()
             _connectivity.value = current.associate { it.id to null }
             for (device in current) {
-                val online = repository.getStatus(device) is RpcResult.Success
+                val online = repository.getStatus(device).result is RpcResult.Success
                 _connectivity.value = _connectivity.value + (device.id to online)
                 _activeIp.value = _activeIp.value + (device.id to repository.activeIp(device))
             }

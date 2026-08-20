@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
@@ -106,6 +107,10 @@ fun SettingsScreen(
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val ntfyEnabled by viewModel.ntfyEnabled.collectAsStateWithLifecycle()
     val ntfyTopic by viewModel.ntfyTopic.collectAsStateWithLifecycle()
+    val cloudAuthKey by viewModel.cloudAuthKey.collectAsStateWithLifecycle()
+    val cloudServer by viewModel.cloudServer.collectAsStateWithLifecycle()
+    val cloudTesting by viewModel.cloudTesting.collectAsStateWithLifecycle()
+    val cloudTestMessage by viewModel.cloudTestMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var deviceToDelete by remember { mutableStateOf<Device?>(null) }
@@ -163,6 +168,13 @@ fun SettingsScreen(
         backupMessage?.let {
             Toast.makeText(context, context.getString(it.res), Toast.LENGTH_SHORT).show()
             viewModel.consumeBackupMessage()
+        }
+    }
+
+    LaunchedEffect(cloudTestMessage) {
+        cloudTestMessage?.let {
+            Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
+            viewModel.consumeCloudTestMessage()
         }
     }
 
@@ -275,6 +287,16 @@ fun SettingsScreen(
                     onToggle = viewModel::setNtfyEnabled,
                     onTopicChange = viewModel::setNtfyTopic,
                     onTest = viewModel::testNtfy,
+                )
+            }
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+            item {
+                CloudSection(
+                    authKey = cloudAuthKey.orEmpty(),
+                    server = cloudServer.orEmpty(),
+                    testing = cloudTesting,
+                    onTest = viewModel::testCloudKey,
+                    onClear = viewModel::clearCloudCredentials,
                 )
             }
         }
@@ -837,6 +859,111 @@ private fun NtfySection(
             ) {
                 Icon(Icons.Filled.NotificationsActive, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                 Text(stringResource(R.string.settings_ntfy_test))
+            }
+        }
+    }
+}
+
+/**
+ * Cloud Shelly, repli à distance (opt-in, désactivé par défaut — voir CLAUDE.md). Ne pilote encore
+ * rien : cette section ne fait qu'enregistrer la clé + le serveur (chiffrés, jamais journalisés)
+ * et vérifier qu'ils sont valides. Le repli réel (allumer/éteindre, lire l'état, hors réseau
+ * local) sera branché dans un lot ultérieur.
+ */
+@Composable
+private fun CloudSection(
+    authKey: String,
+    server: String,
+    testing: Boolean,
+    onTest: (authKey: String, server: String) -> Unit,
+    onClear: () -> Unit,
+) {
+    var keyField by remember { mutableStateOf(authKey) }
+    var serverField by remember { mutableStateOf(server) }
+    var keyVisible by remember { mutableStateOf(false) }
+
+    Column {
+        Text(
+            text = stringResource(R.string.settings_cloud_section),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
+            text = stringResource(R.string.settings_cloud_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+        )
+        val portalLink = LinkAnnotation.Url("https://control.shelly.cloud")
+        Text(
+            text = buildAnnotatedString {
+                append(stringResource(R.string.settings_cloud_where_before))
+                withLink(portalLink) {
+                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary, textDecoration = TextDecoration.Underline)) {
+                        append("control.shelly.cloud")
+                    }
+                }
+                append(stringResource(R.string.settings_cloud_where_after))
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+
+        OutlinedTextField(
+            value = keyField,
+            onValueChange = { keyField = it },
+            label = { Text(stringResource(R.string.settings_cloud_key_label)) },
+            singleLine = true,
+            visualTransformation = if (keyVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                IconButton(onClick = { keyVisible = !keyVisible }) {
+                    Icon(
+                        if (keyVisible) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = stringResource(
+                            if (keyVisible) R.string.settings_cloud_key_hide else R.string.settings_cloud_key_reveal,
+                        ),
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.size(8.dp))
+        OutlinedTextField(
+            value = serverField,
+            onValueChange = { serverField = it },
+            label = { Text(stringResource(R.string.settings_cloud_server_label)) },
+            placeholder = { Text(stringResource(R.string.settings_cloud_server_placeholder)) },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.size(8.dp))
+
+        Button(
+            onClick = { onTest(keyField, serverField) },
+            enabled = !testing && keyField.isNotBlank() && serverField.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (testing) {
+                CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp).size(18.dp), strokeWidth = 2.dp)
+            } else {
+                Icon(Icons.Filled.Cloud, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            }
+            Text(stringResource(R.string.settings_cloud_test))
+        }
+
+        if (authKey.isNotBlank() || server.isNotBlank()) {
+            TextButton(
+                onClick = {
+                    keyField = ""
+                    serverField = ""
+                    onClear()
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.settings_cloud_clear))
             }
         }
     }

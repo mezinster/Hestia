@@ -91,4 +91,12 @@ data class Device(
      */
     @ColumnInfo(defaultValue = "")
     val deviceName: String = "",
+    /**
+     * MAC de l'appareil physique (identique au « Cloud ID » Shelly), mis en cache dès qu'il est lu
+     * en local sur n'importe quel canal — c'est le seul moyen de le connaître au moment précis où
+     * l'appareil est injoignable en local et où on en aurait besoin pour le repli cloud (lot 3).
+     * Identique sur tous les canaux d'un même appareil physique, comme [deviceName]. Null tant que
+     * jamais lu.
+     */
+    val cloudId: String? = null,
 )
