@@ -1,134 +1,8 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-08-17 (refonte du Tableau, lots 1-4/5 ; découverte de la limite de
-3 scripts Shelly par appareil, chantier « script superviseur » à venir).
-
-## Fait — en cours (à surveiller)
-
-- **Cloud Shelly, repli à distance — Lot 4 (transparence), codé le 2026-08-20, pas encore testé
-  en direct.** Test réel du repli lui-même déjà validé en direct pendant le lot 3 (allumage +
-  extinction d'un canal en 5G, Wi-Fi coupé). Reste la partie transparence : un petit picto Wifi ou
-  nuage à côté du nom, sur la tuile prise seule et sur l'en-tête du bloc multi-canaux (jamais un
-  par mini-cercle : tous les canaux d'un bloc partagent la même IP donc le même chemin) — jamais
-  silencieux sur la provenance de l'état affiché (CLAUDE.md). Visible en permanence dès qu'un état
-  est connu (Wifi si local, nuage si repli), absent tant que rien n'est encore chargé ou que
-  l'appareil est indisponible des deux côtés (ne peut alors revendiquer aucun chemin).
-  Nouveau `DeviceStatusResult(result, viaCloud)` dans `DeviceRepository` — `getStatus`/
-  `getStatuses` le renvoient désormais au lieu d'un `RpcResult` nu, propagé jusqu'à
-  `TileStatus.Online.viaCloud` via `toTileStatus()`. Tous les appelants mis à jour
-  (`SettingsViewModel`, `DashboardViewModel`, `NotificationWorker`) ; `DetailViewModel` compile
-  sans changement (signature déjà transparente pour lui).
-- **Cloud Shelly, repli à distance — Lot 3 (client cloud + repli automatique), codé le
-  2026-08-20, pas encore testé en direct.** `ShellyCloudClient` étendu : `getBatchStatus` (lecture
-  groupée, jusqu'à 10 appareils physiques par appel, paginé sinon) et `setSwitch` (pilotage
-  on/off). Un verrou central (`Mutex` + horodatage du dernier appel, ≥1,1 s entre deux) sérialise
-  **tous** les appels du singleton — lecture comme pilotage, rafraîchissement automatique comme
-  action bouton — pour ne plus jamais reproduire le couac observé en curl (extinction envoyée
-  juste après un allumage, silencieusement ignorée).
-  Côté `DeviceRepository` : `getStatus`/`userToggle` basculent automatiquement sur le cloud si
-  l'appel local échoue par injoignabilité (jamais pour une erreur applicative de l'appareil, qui
-  prouve que l'adresse est la bonne) **et** que la clé du compte est configurée **et** que
-  `Device.cloudId` est en cache (lot 2) — sinon l'échec local remonte tel quel, comportement
-  inchangé. Nouvelle `getStatuses(devices)` : relève le local en parallèle pour chacun comme
-  avant, puis un **seul** appel cloud groupé pour tous ceux injoignables — jamais un appel par
-  canal, un bloc à 4 canaux ne comptant que pour 1 identifiant cloud. Branchée dans
-  `DashboardViewModel.fetch()` (le rafraîchissement périodique du Tableau), à la place du relevé
-  par appareil précédent. `DetailViewModel.fetch()` et `SettingsViewModel.checkConnectivity()`
-  héritent du repli automatiquement via `getStatus` (aucune modification nécessaire de leur côté).
-  Pas d'indicateur visuel « via cloud » à ce stade — c'est le lot 4.
-  **Correctif le jour même** : `Device.cloudId` ne se remplissait qu'en ouvrant Modifier sur un
-  appareil joignable — jamais garanti avant le moment précis où le repli en a besoin. Bug vécu en
-  direct : clé cloud configurée et acceptée, mais Tableau entier en « Indisponible » une fois le
-  Wi-Fi coupé, faute de MAC en cache. `getLocalStatus` complète maintenant `cloudId` tout seul,
-  en tâche de fond (best-effort, ne retarde jamais l'affichage), dès qu'un appareil sans MAC connu
-  répond une fois en local — un simple usage normal du Tableau à la maison suffit désormais à
-  amorcer le cache, plus besoin de visiter Modifier.
-  **Deuxième correctif le jour même** : même après le cache rempli, le repli échouait encore
-  silencieusement — appel cloud réussi (200 OK) mais tuiles toujours « Indisponible ». Cause :
-  `Shelly.GetDeviceInfo.mac` est en MAJUSCULES (`D885ACEBE2CC`, cohérent avec le « Cloud ID »
-  affiché par l'interface native, voir écran Modifier), mais l'API cloud attend l'identifiant en
-  minuscules (`d885acebe2cc`, confirmé par tous les tests curl) — un 200 OK avec le mauvais
-  identifiant renvoie simplement un tableau vide, aucune erreur explicite. Corrigé par
-  `Device.cloudDeviceId()`, une normalisation au point d'usage (jamais supposée correcte en
-  cache) utilisée partout où `cloudId` sert à appeler le cloud — l'affichage du Cloud ID dans
-  Modifier reste lui inchangé, en majuscules, identique à l'interface native.
-- **Cloud Shelly, repli à distance — Lot 2 (cache de l'identifiant cloud), codé le 2026-08-20, pas
-  encore testé en direct.** Nouveau champ `Device.cloudId` (MAC de l'appareil physique, identique
-  sur tous les canaux d'un même bloc, comme `deviceName`) — migration v14→v15, additive, colonne
-  nullable. Alimenté passivement : dès que `getCloudInfo` lit un MAC en local (écran Modifier —
-  affichage du Cloud ID, ou bascule de l'interrupteur Cloud), `DeviceRepository.cacheCloudId`
-  l'écrit sur tous les canaux du groupe. Aucun nouvel appel réseau ; le but est que cette valeur
-  soit encore lisible **hors réseau**, au moment précis où le lot 3 (repli cloud) en aura besoin
-  et ne pourra plus la redemander à l'appareil.
-- **Cloud Shelly, repli à distance — Lot 1 (config de la clé), codé le 2026-08-20, pas encore
-  testé en direct.** Périmètre confirmé avec David après étude en curl : le Cloud Control API de
-  Shelly ne permet **que** de lire l'état complet d'un appareil et piloter un switch (on/off) —
-  aucune passerelle RPC générique côté cloud, donc `Schedule.Create`/`Script.Eval` (planning,
-  présence, seuil, minuteur bouton, LED, firmware) resteront **toujours strictement locaux**,
-  sans exception possible. Le repli cloud ne couvrira donc, dans les lots suivants, que le bouton
-  allumer/éteindre et la lecture d'état/conso du Tableau — jamais les écrans de configuration.
-  Validé en direct par une série de tests curl sur la Strip4 : authentification par clé
-  d'autorisation opaque (générée par le compte Shelly, jamais un mot de passe géré par Hestia),
-  `device_id` = MAC en minuscules sans séparateur (déjà lu via `Shelly.GetDeviceInfo.mac`), lecture
-  d'état complet et pilotage on/off tous deux fonctionnels par ce chemin. Point de vigilance
-  découvert en direct : l'API cloud est limitée à **1 requête/seconde** — un premier essai
-  d'extinction juste après l'allumage a été silencieusement ignoré (aucune erreur visible), rejoué
-  en espaçant les appels, confirmé résolu. Ce lot 1 pose seulement la brique de configuration
-  (Réglages → section « Cloud Shelly ») : coller la clé + l'adresse serveur (récupérées une fois
-  sur `control.shelly.cloud` → Utilisateur → Accès et autorisations → Clé d'autorisation cloud),
-  stockage chiffré (`AppPreferences`, `EncryptedSharedPreferences`, même mécanisme que le sujet
-  ntfy), jamais journalisé, bouton « Tester » (nouveau `ShellyCloudClient.testAuth` — un appel
-  `get` avec un identifiant d'appareil bidon, seul le code HTTP compte : 200 = clé acceptée, 401 =
-  invalide, pas besoin d'un appareil réel pour valider). Rien n'est encore branché au
-  rafraîchissement ni au bouton allumer/éteindre — lots suivants.
-- **Cloud Shelly, interrupteur par appareil — codé le 2026-08-20, pas encore testé en direct.**
-  Vérifié au préalable en curl sur Strip4 (`192.168.1.97`) avant tout code : `Cloud.SetConfig
-  {"enable":true}` suffit à connecter l'appareil (`Cloud.GetStatus.connected` bascule à `true`
-  sans redémarrage), désactivation propre et réversible, et le champ `mac` de
-  `Shelly.GetDeviceInfo` correspond **exactement** au « Cloud ID » affiché par l'interface native
-  de l'appareil — confirmé via une seconde vérification live après un doute exprimé par David sur
-  le fonctionnement réel. L'appairage compte↔appareil (via l'appli Shelly, scan réseau) est
-  entièrement hors du périmètre RPC local et a été testé séparément par David : réussi sur Strip4.
-  Nouveau `CloudInfo` (domain), `Cloud.GetConfig`/`Cloud.GetStatus`/`Cloud.SetConfig` (RPC),
-  `getCloudInfo`/`setCloudEnabled` (repository) — même emplacement et même schéma que LED/Firmware
-  dans l'écran Modifier (`AddEditDeviceScreen`/`AddEditDeviceViewModel`) : par appareil physique
-  (`groupMembers.firstOrNull()`), jamais mémorisé, toujours relu. Toujours opt-in, désactivé par
-  défaut, aucun champ d'identifiant/mot de passe/jeton — seul un interrupteur, le statut connecté,
-  le Cloud ID en lecture seule et un lien externe vers `control.shelly.cloud`.
-- **Renommer un appareil gardait l'ancien nom dans les notifs ntfy, corrigé le 2026-08-19** — bug
-  vécu en direct : renommage, planning Unique déclenché ~3 min après, notif reçue avec l'ancien
-  nom malgré une attente largement suffisante. Cause réelle : `resyncDeviceName` (qui redéploie
-  planning/présence/bouton avec le nom à jour) était lancé via `viewModelScope.launch`, mais
-  l'écran Modifier se ferme **aussitôt** après l'enregistrement — détruisant le ViewModel et
-  annulant la resynchro avant son premier appel RPC, quel que soit le temps d'attente ensuite.
-  Corrigé avec une portée de coroutine applicative dédiée (`@ApplicationScope`, nouveau module
-  `CoroutineModule`), qui survit à la fermeture de l'écran — appliqué aussi à la resynchro
-  déclenchée par un changement de sujet ntfy dans Réglages (même défaut latent, jamais rapporté).
-  **Le bug a persisté après ce premier correctif** : retest en direct avec journal de diagnostic
-  à l'appui, **aucun** appel `Schedule.List`/`Create`/`Delete` après le renommage — la resynchro
-  n'était même pas tentée. Cause réelle, différente de la première : le renommage testé passait
-  par `RenameChannelDialog` (Réglages → renommer un canal, `SettingsViewModel.renameChannel`), un
-  **chemin entièrement distinct** de l'écran Modifier, qui ne touchait que Room
-  (`updateDevice`) sans jamais appeler `resyncDeviceName` — pas un souci de portée de coroutine
-  ici, une resynchro simplement absente sur ce second chemin. Corrigée en y ajoutant le même appel
-  `resyncDeviceName` que l'écran Modifier. Retest à refaire pour confirmer.
-  Au passage : `STRIP_NAME_MAX_LENGTH` (troncature du nom sous chaque cercle du bloc multi-canaux)
-  monté de 10 à 12 caractères, retour de test réel (l'ellipse « … » mange de la place déjà comptée).
-- **Traduction anglaise** : `values/strings.xml` (défaut) est désormais l'anglais, `values-fr/`
-  porte le français — Android choisit tout seul selon la langue système. Deux formats horaires
-  codés « à la française » corrigés au passage (`formatTimeRange`, les horaires des
-  notifications) via un nouveau `formatClockTime()` locale-aware (`DateTimeFormatter.
-  ofLocalizedTime`). Les étiquettes fixes du rapport de diagnostic (« Application :, Android :,
-  Thème : »…) déplacées en ressources au passage — elles ne l'étaient pas.
-  **Scope volontairement laissé de côté** : les messages individuels écrits via
-  `DiagnosticLogger.info/warn/error(...)` (une quinzaine de points d'appel, ex. "Bascule
-  192.168.1.96#0 → true") restent en français uniquement. Ce journal est accessible en
-  production (5 appuis sur le titre du Tableau) et partageable — un utilisateur anglophone qui
-  le partagerait verrait donc des lignes de log en français au milieu d'un rapport sinon
-  traduit. Accepté pour l'instant vu le volume de points d'appel dispersés ; à traiter si ça
-  pose un problème réel en usage. Les données de démo (noms des appareils fictifs, "Démo" comme
-  modèle) restent aussi en français, pour ne pas casser les captures d'écran F-Droid actuelles.
+Dernière mise à jour : 2026-08-20 (Cloud Shelly publié en 2.3.0 ; nettoyage du backlog — les
+entrées confirmées testées ont été condensées dans « Fait — pour mémoire »).
 
 ## Écarté
 
@@ -347,16 +221,22 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
 - **Audit des fonctions RPC de la prise non gérées** par Hestia (mesure d'énergie détaillée,
   métriques cumulées, etc.).
-- **Lecture à distance de la puissance tirée, hors réseau local** (2026-07-29) : David voudrait
-  voir la conso instantanée d'un appareil branché même hors Wi-Fi domestique, à l'image d'une
-  appli de suivi de charge de scooter — mais la prise ne connaît que le côté électrique (watts),
-  jamais un pourcentage de batterie ni un temps restant (ça, c'est propre au BMS de l'appareil
-  branché, la prise ne le voit pas). Passerait par le **cloud Shelly** (compte Allterco), en
-  lecture seule, opt-in et bien expliqué — jamais imposé. Chantier réel : API cloud distincte de
-  l'API locale, stockage d'identifiants (nouvelle catégorie de donnée sensible). Mis de côté
-  volontairement pour ne pas alourdir l'app pour un usage occasionnel. Deux idées écartées pour
-  le même besoin : notifications ntfy (résout la notification à distance, pas la lecture de
-  puissance) ; VPN personnel type Tailscale (fonctionnerait déjà, hors périmètre d'Hestia).
+- **Historique / graphique de consommation par prise** (2026-08-18) : histogramme ou courbe dans
+  le temps, pour repérer visuellement des cycles réguliers (recharge mensuelle d'un scooter
+  électrique, d'un Mac...). Pas trivial : l'API RPC classique n'expose qu'un compteur cumulatif
+  (`aenergy.total`, jamais remis à zéro) et une fenêtre glissante très courte (`aenergy.by_minute`,
+  3 valeurs seulement) — rien qui ressemble à un historique long terme côté appareil. Pour un vrai
+  graphique sur plusieurs semaines/mois, il faudrait qu'Hestia échantillonne et stocke lui-même
+  dans le temps (relevés périodiques de `aenergy.total`, deltas calculés) — une **nouvelle
+  catégorie de donnée** pour le projet (télémétrie historique, pas de la configuration d'appareil
+  ni un cache de confort comme aujourd'hui), à peser avant de s'engager : stockage qui grossit sans
+  fin (politique de rétention à définir), échantillonnage qui suppose une tâche de fond régulière
+  (à distinguer du principe « pas de scheduler pour piloter un appareil » — ici il s'agirait de
+  *lire*, jamais d'agir), et l'appareil doit rester joignable au moment de chaque relevé sous peine
+  de trous dans la courbe. À explorer : Shelly propose peut-être une fonction de journalisation
+  native plus riche sur certains modèles (EM/EM1/PM1, voir plus bas « Fonctions liées au firmware
+  2.0.0 ») qui simplifierait le besoin sans qu'Hestia ait à tout stocker lui-même — à vérifier
+  avant de partir sur la solution la plus lourde.
 - **Fonctions liées au firmware Shelly 2.0.0** (compteurs d'usage natifs du Switch, paramètre `tag`
   sur les commandes, `Script.addRpcHandler`) : évoquées le 2026-07-29, revues le 2026-08-14 — plus
   « écartées » mais pas encore planifiées. Principe retenu pour quand on s'y attaque : Hestia part
@@ -376,21 +256,6 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   automatique quand la sécurité renforcée (`enhanced_security`) est activée côté appareil — si un
   utilisateur l'active un jour, les appels HTTP en clair d'Hestia (`cleartextTrafficPermitted`)
   pourraient casser. Aucun de nos appareils de test ne l'a activée pour l'instant.
-- **Cloud Shelly activable par appareil** (2026-08-17) : un interrupteur, par appareil physique
-  (pas global à l'app), pour activer le cloud natif de Shelly (`cloud.enable`, déjà vu désactivé
-  dans nos dumps `Shelly.GetConfig` cette session). Permettrait de garder la plupart des appareils
-  strictement locaux tout en ouvrant ceux qui en profiteraient (détecteurs de fumée notamment,
-  utiles à surveiller même hors du réseau domestique) — opt-in, par appareil, cohérent avec le
-  principe déjà posé pour ntfy (« toute fonctionnalité qui fait sortir des données du réseau
-  local doit être opt-in et clairement expliquée »). Techniquement simple (un seul appel RPC
-  `Cloud.SetConfig`), l'essentiel de l'effort serait le texte d'explication : bien préciser que
-  c'est le cloud de **Shelly**, pas un service Hestia, qu'Hestia n'ajoute aucune fonction de
-  surveillance à distance elle-même (ça resterait dans l'app/compte Shelly), et qu'Hestia ne crée
-  ni ne gère jamais de compte (ligne rouge du projet, inchangée). **À vérifier avant tout code** :
-  est-ce que `cloud.enable=true` suffit à connecter l'appareil, ou faut-il un appairage préalable
-  via l'appli Shelly (compte créé par l'utilisateur lui-même, jamais par Hestia) — déterminerait
-  si Hestia ne fait qu'« ouvrir la porte » ou doit aussi expliquer une étape supplémentaire hors
-  de l'app.
 - **Trouver l'IP du hotspot directement depuis Hestia** (2026-08-14) : un bouton « Trouver l'IP »
   par champ IP, qui interroge l'admin de la prise (`192.168.33.1`) pendant qu'elle est encore en
   mode point d'accès, pour lire l'IP qu'elle vient d'obtenir sur le réseau cible. Ne fonctionne que
@@ -411,7 +276,9 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   au Wi-Fi), protocole de trame à écrire et tester, permissions BLE qui varient selon la version
   Android. **Pas encore testé de bout en bout** — à valider à la main (nRF Connect) avant d'estimer
   sérieusement l'effort. Priorité modérée : le bouton physique couvre déjà l'essentiel du cas
-  « à portée mais pas de Wi-Fi » pour une prise.
+  « à portée mais pas de Wi-Fi » pour une prise. Recoupe partiellement le repli cloud (voir « Fait
+  — pour mémoire ») : le cloud couvre déjà le cas « loin de la maison », le Bluetooth couvrirait
+  plutôt « à la maison mais Wi-Fi en panne » — pas le même besoin, garder les deux en tête séparés.
 - **Tags QR code** (2026-08-14) : coller un QR code physique sur un appareil (ex. un Mac) pour
   lancer directement sa programmation au scan, via un deep link Android (`hestia://tag/<uuid>`).
   Le tag encode un identifiant opaque, jamais un nom — robuste au renommage. Modèle retenu : des
@@ -421,36 +288,36 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   aussi fonctionner). Chantier de taille comparable à ntfy en son temps — plusieurs lots à prévoir
   (deep link, cycle de vie des tags, écran de gestion, export PDF pour impression via l'API PDF
   native Android, pas de nouvelle dépendance nécessaire).
-- ~~Déplacer « Mise à jour » et « Redémarrer » vers la page Modifier d'un appareil~~ **fait le
-  2026-08-19, pas encore testé.** Idée du 2026-08-18 : c'était dupliqué à l'identique sur l'écran
-  Détail de chaque canal d'un bloc multi-canaux (un seul appareil physique, donc un seul firmware,
-  un seul redémarrage). `FirmwareSection`/`RebootConfirmDialog`/`FirmwareInstallConfirmDialog`
-  déplacés de `DetailScreen` vers `AddEditDeviceScreen` (page « Modifier »), même logique que la
-  LED d'état déjà présente là — un seul canal du groupe suffit à porter l'appel (`groupMembers.
-  firstOrNull()`), les fonctions `checkFirmwareUpdate`/`installFirmwareUpdate`/`rebootDevice` du
-  dépôt n'ayant jamais dépendu du canal (juste l'IP). État déplacé en bloc dans `AddEditUiState`
-  (`driver`, `firmwareCheck`, `firmwareChecking`, `firmwareInstalling`, `firmwareInstallMessage`,
-  `rebooting`, `rebootMessage`), gated sur `state.isEditMode` comme la LED.
-- **Historique / graphique de consommation par prise** (2026-08-18) : histogramme ou courbe dans
-  le temps, pour repérer visuellement des cycles réguliers (recharge mensuelle d'un scooter
-  électrique, d'un Mac...). Pas trivial : l'API RPC classique n'expose qu'un compteur cumulatif
-  (`aenergy.total`, jamais remis à zéro) et une fenêtre glissante très courte (`aenergy.by_minute`,
-  3 valeurs seulement) — rien qui ressemble à un historique long terme côté appareil. Pour un vrai
-  graphique sur plusieurs semaines/mois, il faudrait qu'Hestia échantillonne et stocke lui-même
-  dans le temps (relevés périodiques de `aenergy.total`, deltas calculés) — une **nouvelle
-  catégorie de donnée** pour le projet (télémétrie historique, pas de la configuration d'appareil
-  ni un cache de confort comme aujourd'hui), à peser avant de s'engager : stockage qui grossit sans
-  fin (politique de rétention à définir), échantillonnage qui suppose une tâche de fond régulière
-  (à distinguer du principe « pas de scheduler pour piloter un appareil » — ici il s'agirait de
-  *lire*, jamais d'agir), et l'appareil doit rester joignable au moment de chaque relevé sous peine
-  de trous dans la courbe. À explorer : Shelly propose peut-être une fonction de journalisation
-  native plus riche sur certains modèles (EM/EM1/PM1, voir plus haut « Fonctions liées au firmware
-  2.0.0 ») qui simplifierait le besoin sans qu'Hestia ait à tout stocker lui-même — à vérifier
-  avant de partir sur la solution la plus lourde.
+
 ## Fait — pour mémoire
 
 Points sortis du backlog, avec ce qui a été tranché :
 
+- **Cloud Shelly : interrupteur par appareil + repli à distance** (2026-08-20, testé en direct —
+  allumage/extinction et lecture d'état/conso réels depuis un téléphone en 5G, Wi-Fi coupé ;
+  publié en 2.3.0). Deux briques indépendantes, toutes deux opt-in et désactivées par défaut :
+  un interrupteur par appareil physique (écran Modifier) pour `cloud.enable`, avec statut connecté
+  et Cloud ID en lecture seule ; et un repli à distance (clé de compte + adresse serveur dans
+  Réglages, stockées chiffrées, jamais journalisées) qui bascule le Tableau sur l'API Cloud
+  Control de Shelly uniquement quand le réseau local échoue. Portée volontairement limitée à
+  l'état/conso et au bouton allumer/éteindre : planning, présence, seuil, minuteur, LED et
+  firmware restent strictement locaux, l'API cloud de Shelly n'exposant aucune passerelle RPC
+  générique pour le reste. `Device.cloudId` (MAC mis en cache dès qu'un appareil répond une fois
+  en local, normalisé en minuscules au point d'usage — l'API cloud est sensible à la casse) et un
+  verrou d'1,1 s entre deux appels cloud (limite Shelly d'1 requête/seconde, découverte en testant
+  un allumage suivi d'une extinction trop rapprochée). Picto Wifi/antenne à côté du nom indique
+  d'où vient l'état affiché — jamais silencieux sur la provenance.
+- **Renommer un appareil gardait l'ancien nom dans les notifs ntfy** (2026-08-19, confirmé
+  corrigé). Deux causes distinctes sur deux écrans différents : `resyncDeviceName` lancé sur la
+  portée du ViewModel de l'écran Modifier, tuée par la fermeture quasi immédiate de cet écran après
+  l'enregistrement (corrigé par une portée applicative dédiée, `@ApplicationScope`) ; et le
+  renommage d'un canal depuis Réglages, qui n'appelait cette resynchro nulle part (corrigé en
+  l'ajoutant). Au passage, `STRIP_NAME_MAX_LENGTH` monté de 10 à 12 caractères (retour de test réel).
+- **Traduction anglaise** (2026-08-19) : `values/strings.xml` (défaut) porte désormais l'anglais,
+  `values-fr/` le français — Android choisit selon la langue système. Formats horaires rendus
+  locale-aware (`formatClockTime`). Scope volontairement laissé de côté : les messages du journal
+  de diagnostic restent en français uniquement (volume de points d'appel trop élevé pour l'instant) ;
+  les données de démo aussi, pour ne pas casser les captures d'écran F-Droid actuelles.
 - **Rouleaux crantés** (minuteur et horaires de présence/planning) : `TimeWheelPicker` maison,
   défilement infini + retour haptique, sans dépendance.
 - **Relire les horaires de présence depuis l'appareil** (c'était un défaut de correction : un
