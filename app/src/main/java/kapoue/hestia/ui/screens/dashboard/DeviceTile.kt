@@ -16,8 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -141,7 +141,7 @@ fun DeviceTile(
 // suffisent à rattraper un appareil redevenu joignable (voir DashboardViewModel.refresh).
 
 /**
- * Picto Wifi (local) ou nuage (repli cloud) à côté du nom — jamais silencieux sur la provenance
+ * Picto Wifi (local) ou antenne (repli cloud) à côté du nom — jamais silencieux sur la provenance
  * de l'état affiché (voir CLAUDE.md). Rien n'est affiché tant qu'aucune lecture n'a réussi
  * (Chargement/Indisponible) : on ne peut alors revendiquer aucun des deux chemins.
  */
@@ -149,7 +149,7 @@ fun DeviceTile(
 private fun ConnectivityBadge(status: TileStatus, modifier: Modifier = Modifier) {
     val online = status as? TileStatus.Online ?: return
     Icon(
-        imageVector = if (online.viaCloud) Icons.Filled.Cloud else Icons.Filled.Wifi,
+        imageVector = if (online.viaCloud) Icons.Filled.SettingsInputAntenna else Icons.Filled.Wifi,
         contentDescription = stringResource(
             if (online.viaCloud) R.string.tile_via_cloud else R.string.tile_via_local,
         ),
