@@ -237,25 +237,43 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   native plus riche sur certains modèles (EM/EM1/PM1, voir plus bas « Fonctions liées au firmware
   2.0.0 ») qui simplifierait le besoin sans qu'Hestia ait à tout stocker lui-même — à vérifier
   avant de partir sur la solution la plus lourde.
-- **Fonctions liées au firmware Shelly 2.0.0** (compteurs d'usage natifs du Switch, paramètre `tag`
-  sur les commandes, `Script.addRpcHandler`) : évoquées le 2026-07-29, revues le 2026-08-14 — plus
-  « écartées » mais pas encore planifiées. Principe retenu pour quand on s'y attaque : Hestia part
-  du principe que l'utilisateur met ses appareils à jour, **pas de rétrocompatibilité artificielle
-  à maintenir**. Chaque fonction propre à 2.0.0 vérifie juste la version installée (déjà lue en
-  local, `Shelly.GetDeviceInfo`, aucun appel réseau) contre le minimum qu'elle exige ; si en
-  dessous, message clair invitant à mettre à jour via le bouton « Vérifier une mise à jour » déjà
-  existant (qui, lui, reste seul à contacter les serveurs Shelly, toujours manuel). Pas de scan de
-  capacités RPC au cas par cas (jugé inutilement lourd) — juste ce test de version.
-  **Revue complète du changelog officiel le 2026-08-15**, points supplémentaires identifiés :
-  alarmes seuil natives sur EM/EM1/PM1 (recoupe la coupure sur seuil actuelle, gérée par script
-  maison — à voir si ça la simplifierait, matériel EM/PM différent d'un Switch classique donc pas
-  garanti applicable) ; réglages LED du PowerStrip **Gen4** en interface web native (à vérifier le
-  jour où un Strip Gen4 est testé — schéma RPC potentiellement différent de ce qu'on a validé sur
-  Gen3 pour la LED d'état) ; objet `alt` dans `CheckForUpdate` (pourrait enrichir l'écran firmware
-  existant). **Point de vigilance repéré, pas un bug vécu** : la 2.0.0 ajoute un redirect HTTP→HTTPS
-  automatique quand la sécurité renforcée (`enhanced_security`) est activée côté appareil — si un
-  utilisateur l'active un jour, les appels HTTP en clair d'Hestia (`cleartextTrafficPermitted`)
-  pourraient casser. Aucun de nos appareils de test ne l'a activée pour l'instant.
+- **Fonctions liées au firmware Shelly 2.0.0 — revue de la doc officielle le 2026-08-21.**
+  Alarmes seuil natives sur EM/EM1/PM1 : toujours en attente (recoupe la coupure sur seuil actuelle,
+  gérée par script maison — à voir si ça la simplifierait ; matériel EM/PM différent d'un Switch
+  classique donc pas garanti applicable).
+  **LED du PowerStrip Gen4 : résolu, confirmé par la doc et par David (Strip4 réellement en Gen4)**
+  — le composant `POWERSTRIP_UI` (majuscules) et le schéma `leds.night_mode.{enable,brightness,
+  active_between}` sont identiques à ce qui a été validé sur Gen3. Rien à corriger, la LED
+  fonctionne déjà (vert ON / éteint OFF confirmé en usage réel).
+  **Compteurs d'usage natifs du Switch (`counts.on_time`/`switch_on`/`on_above_thr` sur
+  Switch.GetStatus, déjà lus mais jamais affichés) : écarté le 2026-08-21.** Seulement un cumul
+  brut depuis la dernière remise à zéro, aucune notion de période (mois, coût) — l'afficher
+  inviterait immanquablement des demandes qu'Hestia ne peut pas satisfaire proprement (répartition
+  mensuelle, coût cumulé) sans un vrai historique horodaté, cf. l'entrée « Historique/graphique de
+  consommation » ci-dessus, déjà écartée pour les mêmes raisons de fond.
+  **`Script.addRpcHandler`** (permettrait à un script de s'exposer comme une vraie méthode RPC,
+  `Script.MaFonction`, réponse JSON structurée au lieu de `Script.Eval` + reparsing de chaîne) :
+  **repoussé le 2026-08-21**, pas maintenant — pourrait un jour remplacer `Script.Eval` dans les
+  scripts superviseurs (bouton/seuil/présence), mais pas de complexité de script supplémentaire
+  tant que la limite des 3 scripts simultanés reste un souvenir récent et douloureux.
+  Objet `alt` dans `CheckForUpdate` (firmware alternatif, ex. Zigbee sur la Strip4) : **abandonné
+  le 2026-08-21**, hors sujet pour un projet Wi-Fi local uniquement.
+- **HTTPS forcée sans possibilité de désactivation sur le matériel neuf (`enhanced_security`)**
+  (2026-08-21, priorité identifiée mais pas encore planifiée). Depuis le firmware 2.0.0, tout
+  appareil **sorti d'usine** avec ce firmware (de plus en plus fréquent avec le temps) a HTTPS et
+  la redirection HTTP→HTTPS activés en permanence, **sans aucun moyen de les désactiver** —
+  contrairement à un appareil juste mis à jour vers 2.0.0 (le cas de tout le parc actuel), qui
+  reste en HTTP simple par défaut, rien à changer là. Risque concret : le prochain appareil acheté,
+  neuf, pourrait être **totalement injoignable par Hestia dès le déballage**, sans que rien dans
+  l'app n'explique pourquoi (juste « injoignable », comme n'importe quel autre problème réseau) —
+  scénario redouté : un utilisateur F-Droid qui abandonne l'app en pensant qu'elle est cassée.
+  Piste technique à creuser le jour où on s'y attaque : les certificats posés par Shelly sont
+  auto-signés (PKI interne à Shelly, pas une autorité reconnue) — un client HTTPS strict rejetterait
+  la connexion par défaut ; il faudrait soit faire confiance à ces certificats explicitement pour
+  les appels vers le réseau local (le risque MITM y est déjà limité, l'intérêt du certificat ici
+  est surtout de contourner le blocage de redirection, pas d'authentifier un tiers), soit une
+  logique d'épinglage au premier contact (TOFU). Décision de confiance à trancher avant de coder,
+  pas juste un détail d'implémentation.
 - **Trouver l'IP du hotspot directement depuis Hestia** (2026-08-14) : un bouton « Trouver l'IP »
   par champ IP, qui interroge l'admin de la prise (`192.168.33.1`) pendant qu'elle est encore en
   mode point d'accès, pour lire l'IP qu'elle vient d'obtenir sur le réseau cible. Ne fonctionne que
