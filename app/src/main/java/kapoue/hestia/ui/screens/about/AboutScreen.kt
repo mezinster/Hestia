@@ -8,7 +8,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -135,18 +137,20 @@ fun AboutScreen() {
         Spacer(Modifier.height(16.dp))
         Text(stringResource(R.string.about_contact_title), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
         Text(stringResource(R.string.about_contact_body), style = MaterialTheme.typography.bodyMedium)
-        Text(
-            text = stringResource(R.string.about_contact_mastodon),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable { context.openUrl(mastodonUrl) },
-        )
-        Text(
-            text = stringResource(R.string.about_contact_telegram),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.clickable { context.openUrl(telegramUrl) },
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(32.dp)) {
+            Text(
+                text = stringResource(R.string.about_contact_mastodon),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { context.openUrl(mastodonUrl) },
+            )
+            Text(
+                text = stringResource(R.string.about_contact_telegram),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { context.openUrl(telegramUrl) },
+            )
+        }
 
         // Partage : bouton (texte + lien F-Droid via le système Android) ou QR code, au choix.
         Spacer(Modifier.height(16.dp))

@@ -77,19 +77,28 @@ fun Planning.isActiveNow(): Boolean {
         val startAt = date.atTime(startHour, startMinute)
         return !now.isBefore(startAt) && now.isBefore(onceEndAt(date))
     }
+    // Simulation de présence (marge non nulle) : élargit la fenêtre de ±marge, pour que
+    // « Présence » reste affiché tant que l'horaire réellement tiré au sort par le script peut
+    // encore être en cours — sans ça, l'étiquette retombait sur « Actif » générique dès la fin de
+    // la fenêtre nominale, alors que la prise peut légitimement rester allumée jusqu'à [marge]
+    // minutes de plus (retour de test réel, 2026-08-22). Nul pour un planning précis, sans effet.
+    val margin = marginMinutes ?: 0
     val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
     val dow = LocalDate.now().dayOfWeek.value // 1 = lundi … 7 = dimanche
-    val cronDay = if (dow == 7) 0 else dow // cron : 0 = dimanche … 6 = samedi
-    return if (endMinutes > startMinutes) {
-        // Créneau de journée.
-        cronDay in days && nowMin >= startMinutes && nowMin < endMinutes
-    } else {
-        // Créneau à cheval sur minuit : la soirée (jour de début) ou le matin (lendemain).
-        val evening = cronDay in days && nowMin >= startMinutes
-        val yesterday = (cronDay + 6) % 7
-        val morning = yesterday in days && nowMin < endMinutes
-        evening || morning
+    val cronDayToday = if (dow == 7) 0 else dow // cron : 0 = dimanche … 6 = samedi
+    // Place la fenêtre élargie sur une ligne de temps continue ancrée sur le jour [dayOffset]
+    // (0 = aujourd'hui, -1 = hier) — un seul mécanisme pour un créneau qui passe minuit par
+    // lui-même et pour une marge qui le pousse au-delà (se réduit à l'ancien calcul si marge = 0).
+    fun window(dayOffset: Int): IntRange {
+        val dayStart = dayOffset * 1440
+        val end = if (endMinutes > startMinutes) endMinutes else endMinutes + 1440
+        return (dayStart + startMinutes - margin) until (dayStart + end + margin)
     }
+    for (dayOffset in -1..0) {
+        val cronDay = ((cronDayToday + dayOffset) % 7 + 7) % 7
+        if (cronDay in days && nowMin in window(dayOffset)) return true
+    }
+    return false
 }
 
 /** Vrai si ce planning Unique est passé (sa fin est révolue). Toujours faux pour un récurrent. */

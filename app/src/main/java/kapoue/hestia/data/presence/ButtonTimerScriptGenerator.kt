@@ -2,6 +2,11 @@ package kapoue.hestia.data.presence
 
 import kapoue.hestia.data.notifications.NtfyScriptSupport
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Script **persistant** : veille en permanence un appui sur le bouton physique et arme un
@@ -85,6 +90,11 @@ object ButtonTimerScriptGenerator {
         ntfyTopic: String? = null,
         ntfyEndBody: String = "",
         ntfyCutoffBody: String = "",
+        /** État vivant à reprendre tel quel (JSON de `STATE`, lu via [evalReadFull]) — pour le
+         * réalignement de la flash après une mutation `Eval` (2026-08-22, voir `DeviceRepository.
+         * realignButtonTimerFlash`) : le script redémarre avec exactement la mémoire qu'il avait,
+         * minuteurs armés compris. Null = premier déploiement, état vierge par canal. */
+        initialStateJson: String? = null,
     ): String {
         val marker = configs.joinToString(",", "[", "]") {
             "[${it.switchId},${it.durationSec ?: "null"},${it.thresholdW ?: "null"}]"
@@ -92,14 +102,16 @@ object ButtonTimerScriptGenerator {
         val cfgArray = configs.joinToString(",\n          ", "[\n          ", "\n        ]") { channelLiteral(it) }
         val notifyEnd = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyEndBody)
         val notifyCutoff = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyCutoffBody)
+        val stateInit = if (initialStateJson != null) {
+            "let STATE = $initialStateJson;"
+        } else {
+            "let STATE = [];\n        for (let i = 0; i < CFG.length; i++) {\n          STATE.push($FRESH_STATE);\n        }"
+        }
         return """
         // Généré par Hestia — minuteur déclenché par le bouton physique (plusieurs canaux)
         $MARKER$marker
         let CFG = $cfgArray;
-        let STATE = [];
-        for (let i = 0; i < CFG.length; i++) {
-          STATE.push($FRESH_STATE);
-        }
+        $stateInit
 
         // La valeur exacte de "source" pour un appui bouton varie selon le modèle de prise
         // (ex. "button" sur Plug M, "short_push" sur Strip 4) — accepte les variantes plausibles.
@@ -241,4 +253,29 @@ object ButtonTimerScriptGenerator {
             Triple(r[0]!!, r[1], r[2])
         }
     }
+
+    /** Code `Script.Eval` pour lire le snapshot vivant complet (config **et** état) — réalignement flash. */
+    fun evalReadFull(): String = "JSON.stringify({cfg:CFG,state:STATE})"
+
+    /**
+     * Décode le snapshot de [evalReadFull] : la config typée (pour régénérer le script, marqueur
+     * compris) et l'état brut (JSON de `STATE`, réinjecté tel quel via `initialStateJson` de
+     * [generate] — jamais interprété par Hestia, seule sa position par canal compte). Null si
+     * illisible, ou si config et état ne sont plus alignés (jamais vu, pur garde-fou).
+     */
+    fun parseLiveSnapshot(json: String): Pair<List<ChannelConfig>, String>? = runCatching {
+        val root = Json.parseToJsonElement(json) as? JsonObject ?: return null
+        val cfgArr = root["cfg"] as? JsonArray ?: return null
+        val stateArr = root["state"] as? JsonArray ?: return null
+        if (cfgArr.size != stateArr.size) return null
+        val configs = cfgArr.map { el ->
+            val obj = el as? JsonObject ?: return null
+            val switchId = obj["switchId"]?.jsonPrimitive?.intOrNull ?: return null
+            val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return null
+            val durationSec = obj["durationSec"]?.jsonPrimitive?.intOrNull
+            val thresholdW = obj["thresholdW"]?.jsonPrimitive?.intOrNull
+            ChannelConfig(switchId, durationSec, thresholdW, name)
+        }
+        configs to stateArr.toString()
+    }.getOrNull()
 }

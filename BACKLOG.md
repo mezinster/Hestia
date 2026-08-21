@@ -1,8 +1,163 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-08-20 (Cloud Shelly publié en 2.3.0 ; nettoyage du backlog — les
-entrées confirmées testées ont été condensées dans « Fait — pour mémoire »).
+Dernière mise à jour : 2026-08-22 (correctif de persistance des scripts superviseurs et
+étiquette « Présence » publiés en 2.4.0).
+
+## Fait — en cours (à surveiller)
+
+- **Bug de fond découvert en direct le 2026-08-21 : les modifications par `Script.Eval` sur un
+  script superviseur ne survivent jamais à un redémarrage matériel — priorité haute, pas encore
+  planifié.** Vécu en conditions réelles sur la Strip4 : présence configurée sur la prise 2 (un
+  reliquat de tests antérieurs, jamais visible dans Hestia tant que l'écran Détail de ce canal
+  précis n'avait pas été ouvert), supprimée depuis l'app, puis la prise déplacée (débranchée/
+  rebranchée) — **la présence est revenue** telle qu'avant la suppression.
+  Cause racine, confirmée par deux lectures différentes de l'état du script : `Script.GetCode`
+  lit le **texte enregistré sur la flash** (celui du tout premier déploiement) ; `Script.Eval`
+  (utilisé pour tout ajout/retrait/modif de canal sans redéployer, afin de ne jamais perturber les
+  autres canaux déjà suivis) ne modifie que la **mémoire vive du script en cours d'exécution** —
+  jamais ce texte enregistré. Les deux divergent dès la première modification faite après le
+  déploiement initial, et rien ne les resynchronise ensuite. Piège pour le diagnostic lui-même :
+  `Script.GetCode` semblait « prouver » que la suppression avait échoué (il montrait toujours
+  l'ancienne config) alors qu'elle avait réellement eu lieu en mémoire (confirmé par `Script.Eval`
+  avec `JSON.stringify(CFG)`, qui lit le véritable état vivant) — **c'est ce dernier qu'il faut
+  toujours utiliser pour vérifier l'état réel d'un script superviseur, jamais `GetCode`.**
+  Un redémarrage matériel (coupure secteur, déplacement de la prise — pas un cas rare en usage
+  réel) fait donc **toujours** revenir un script superviseur (présence, minuteur bouton — tous
+  deux censés être persistants) à sa toute première config déployée, silencieusement, quel que
+  soit le nombre de modifications faites depuis. Déjà noté comme limite acceptée pour les *ajouts*
+  de canal (« cas rare, sans danger », lot B/A bis du chantier script superviseur) — se révèle
+  tout aussi vrai pour les *suppressions*, et bien plus gênant en pratique que prévu.
+  **Correctif ponctuel appliqué manuellement sur la Strip4 le jour même** (`Script.Stop` +
+  `Script.PutCode` avec un `CFG` vide correspondant à l'état réel + `Script.Start`) — réaligne le
+  texte enregistré sur la mémoire vive pour ce script précis, corrige le symptôme sur cet appareil,
+  ne corrige pas la cause. Le vrai chantier reste entier : rendre les modifications persistantes
+  sans perdre l'état vivant des autres canaux — exactement le compromis qui avait fait choisir
+  `Eval` plutôt qu'un redéploiement complet au départ. Pistes à peser le jour où on s'y attaque :
+  redéployer le texte complet (via `PutCode`) à chaque modification significative plutôt qu'au
+  seul premier déploiement (mais `PutCode` exige `Stop` au préalable — perd la mémoire vive des
+  *autres* canaux, déjà testé et refusé pour cette raison) ; ou un mécanisme de resynchronisation
+  périodique qui réécrit le texte depuis l'état vivant sans jamais arrêter le script en cours
+  (à explorer, aucune piste validée pour l'instant).
+  **Trouvé au passage, plus petit** : impossible de modifier un planning/présence une fois mis en
+  pause (`PausedPlanningRow` n'offre que Reprendre/Supprimer, jamais Éditer) — pas de chemin pour
+  changer les horaires d'un planning actif sans passer par une suppression puis recréation
+  complète. À corriger, sans lien avec le bug ci-dessus.
+  **Lot 1 (validation curl du mécanisme de correctif) — fait le 2026-08-22, concluant.** Cycle
+  complet validé en direct sur la Strip4 : lecture de l'état vivant (`CFG` **et** `STATE`) par
+  `Script.Eval`, `Script.Stop`, `Script.PutCode` avec ces valeurs écrites en dur comme état
+  initial, `Script.Start` — l'état redémarre **à l'identique** (vérifié sur des valeurs tirées au
+  sort, impossibles à reconstruire : les horaires randomisés d'une plage de présence de test), la
+  flash est enfin à jour, et le tout **survit à un vrai débranchement/rebranchement** de la prise
+  (test final réussi : CFG et STATE intacts après coupure secteur). Interruption du script ~1-2 s
+  par réalignement, invisible pour un timer à la minute.
+  **Piège d'outillage découvert en route, sans impact sur l'app** : le parseur JSON embarqué de
+  Shelly rejette les échappements `\uXXXX` (`-103 Missing or bad argument 'code'`) — il faut
+  envoyer l'UTF-8 brut. Python `json.dumps` échappe par défaut (`ensure_ascii=True`), d'où des
+  échecs trompeurs en test ; kotlinx.serialization envoie l'UTF-8 brut, l'app n'est pas concernée.
+  **Observation à surveiller, non reproduite ensuite** : après une vraie coupure secteur (subie,
+  pas provoquée — vers 09h30 le 2026-08-22), `hestia_presence` (`enable:true`) n'a PAS redémarré
+  au boot alors que `hestia_button_timer` (`enable:true` aussi) si — même code en flash qui avait
+  correctement redémarré au boot précédent. L'auto-démarrage des scripts au boot n'est donc
+  peut-être pas fiable à 100 % côté firmware Shelly. Reproduit une seule fois ; les deux
+  redémarrages testés ensuite ont fonctionné. Si ça se confirme un jour, c'est une variante de
+  panne silencieuse indépendante de notre correctif (rien côté Hestia ne peut relancer un script
+  sans tâche de fond) — à documenter plutôt qu'à « corriger ».
+  **Lot 2 (`enable=false` pour les scripts transitoires) — codé et validé en test réel le
+  2026-08-22** (minuteur à seuil lancé depuis l'app → `hestia_charge` déployé `enable=false` +
+  `running=true` ; débranchement/rebranchement en plein minuteur → le script ne repart pas au
+  boot, le bouton — persistant — repart bien, comportement exact attendu). `hestia_charge` et `hestia_timer_notify_<canal>` ne redémarrent plus jamais seuls au
+  boot : le minuteur natif qu'ils accompagnent ne survit pas au redémarrage, eux non plus ne le
+  doivent pas — aligne sur le script de coupure de planning, seul à faire déjà `enable=false`
+  (l'incohérence entre les trois était révélatrice). Deux chemins pour charge : le déploiement
+  complet, et un rattrapage dans le chemin `Eval` (`Script.SetConfig enable=false` sans arrêter
+  le script — enable ne joue qu'au boot) pour les scripts déjà déployés en `enable=true` sur le
+  matériel existant, qui se corrigent ainsi au premier minuteur à seuil relancé.
+  **Lot 3 (réalignement flash après chaque `Eval`, présence + bouton) — codé le 2026-08-22, pas
+  encore testé.** `PresenceScriptGenerator.generateSupervisor`/`ButtonTimerScriptGenerator.
+  generate` gagnent un paramètre `initialStateJson` optionnel (défaut null = comportement
+  inchangé, état vierge) : quand fourni, le `STATE` initial du script généré est l'état vivant
+  lu juste avant, pas un état neuf — c'est ce qui permet au réalignement de ne rien perdre.
+  Nouvelles `evalReadFull()`/`parseLiveSnapshot()` sur les deux générateurs : lisent `{cfg,state}`
+  en un seul `Script.Eval` (mécanisme validé au Lot 1), `state` gardé en JSON brut, jamais
+  interprété par Hestia — seule sa position par canal compte, elle voyage telle quelle du script
+  vers le script.
+  `DeviceRepository.realignPresenceFlash`/`realignButtonTimerFlash` : appelées après **chaque**
+  `Script.Eval` réussi (ajout, retrait, ou modification d'un canal) sur un script déjà en cours —
+  lisent le snapshot vivant, `Stop`, régénèrent le code avec cet état en dur, `PutCode`, `Start`.
+  Sur `withContext(NonCancellable)` : une fois commencée, la séquence va au bout même si l'écran
+  appelant se ferme entre-temps (même risque que le bug de renommage ntfy corrigé le 2026-08-19 —
+  jamais un script laissé à l'arrêt parce qu'un ViewModel a été détruit au milieu). Best-effort à
+  chaque étape (snapshot illisible, `Stop`/`PutCode` refusés) : ne fait jamais échouer l'action
+  utilisateur qui a déclenché la mutation, se contente de journaliser et laisser la flash en
+  retard pour cette fois — pas pire qu'avant ce lot. Si le snapshot revient avec zéro canal (tout
+  retiré), le script est supprimé plutôt que réécrit vide — libère un des 3 emplacements de
+  script de l'appareil au passage.
+  **Mécanisme revalidé le 2026-08-22 sur le vrai scénario ciblé** (curl, en attendant l'APK) :
+  bootstrap d'une présence sur la prise 2, puis **modification pendant que le script tourne**
+  (le chemin `Eval` que ce lot corrige) — la flash reflète bien la modif après réalignement,
+  l'état vivant redémarre à l'identique du snapshot capturé juste avant, et le script continue
+  de tourner normalement ensuite (tick suivant vérifié). Strip4 renettoyée après test.
+  **Lot 4 (test réel complet avec l'app) — fait et concluant le 2026-08-22.** Scénario final,
+  entièrement piloté depuis l'app installée : présence créée sur la prise 2 (14h56-15h05, marge
+  15 min) — modification impossible pendant qu'elle tourne, confirmé volontaire (règle déjà
+  actée) ; ajout d'une **seconde** présence sur la prise 4 pendant que le script tournait déjà
+  pour la prise 2 (contourne la règle ci-dessus, exerce directement le chemin `Eval` +
+  réalignement) — flash et mémoire vive identiques après coup, **l'historique déjà vivant de la
+  prise 2 (horaires tirés au sort lors de son propre tick) intact**, rien réinitialisé. Débranchement/
+  rebranchement réel avec la prise 4 allumée au moment de la coupure : script correctement
+  redémarré (`reset_reason:1` confirmé), config des deux canaux identique avant/après, et la
+  prise 4 s'est **rallumée toute seule** au tick suivant (`source:"loopback"`), preuve que la
+  restauration n'est pas que des données mais un vrai comportement fonctionnel retrouvé.
+  **Chantier persistance des scripts superviseurs considéré clos.** Les deux petits trous
+  identifiés en route (planning en pause non éditable ; l'audit du firmware 2.0.0, déjà dans ce
+  fichier) restent en attente séparément, sans lien avec ce correctif.
+
+- **Étiquette « Présence » qui retombait sur « Actif » pendant la marge de fin — corrigé le
+  2026-08-22.** Observé en conditions réelles sur la prise 2 : la fenêtre nominale d'une présence
+  se terminait, la prise restait allumée (comportement correct — l'horaire réel avait été tiré au
+  sort à +13 min dans la marge de ±15 min configurée), mais le Tableau affichait « Actif »
+  générique au lieu de « Présence », `Planning.isActiveNow()` ne comparant qu'à la fenêtre
+  nominale, sans connaître la marge. Pas un bug de planification (la prise suivait bien sa propre
+  config), un défaut d'affichage seulement — confirmé en relisant l'état vivant du script.
+  Corrigé en élargissant la fenêtre vérifiée de ±`marginMinutes` (nul pour un planning précis,
+  sans effet) via un petit calcul sur ligne de temps continue (`window(dayOffset)`), qui se réduit
+  strictement à l'ancien calcul quand la marge est nulle — voir [Planning.kt](app/src/main/java/kapoue/hestia/domain/model/Planning.kt).
+  Effet de bord positif au passage, pas seulement cosmétique : `isActiveNow()` sert aussi à
+  bloquer l'édition/la pause d'un planning « en cours » et à déclencher la confirmation « Arrêter
+  la simulation ? » — ces protections couvrent désormais toute la plage où la prise peut
+  réellement être encore pilotée par le script, pas seulement la fenêtre nominale. Pas encore
+  testé en conditions réelles (attend le prochain cycle de présence avec marge) ; pas encore
+  compilé (attend l'APK de David).
+
+- **HTTPS forcée (`enhanced_security`) — chantier mis en pause le 2026-08-21, Lot 1 codé puis
+  volontairement annulé (`git restore`) le jour même, jamais commité.** Raison : trop de
+  chantiers enchaînés sans test réel — le bug de persistance des scripts superviseurs
+  (ci-dessus), découvert en plein milieu, passe devant. À reprendre plus tard **en repartant de
+  zéro côté code**, mais tout ce qui a été appris et décidé reste valable :
+  - **Décision actée : épinglage TOFU (confirmation au premier contact), jamais d'acceptation
+    aveugle.** Un `TrustManager` qui accepte tout est un motif de rejet connu (Google Play le
+    bloque, F-Droid/linsui le repérerait) ; Home Assistant refuse aussi les certificats
+    auto-signés plutôt que de les accepter en silence. Design retenu : lire le certificat sans le
+    valider (poignée de main dédiée, aucune donnée échangée), afficher l'empreinte SHA-256 dans
+    une boîte de dialogue, n'enregistrer l'épingle (`sha256/<base64 du SPKI>`, format
+    `CertificatePinner` d'OkHttp) qu'après confirmation explicite ; ensuite épinglage strict, et
+    alerte claire si le certificat change un jour.
+  - **Piège technique validé en direct sur un faux serveur** (script Python + certificat
+    auto-signé, recréable à la demande — supprimé depuis) : les redirections 301/302/303
+    transforment silencieusement un POST en GET **en perdant le corps JSON-RPC** (comportement
+    standard, OkHttp comme curl) ; seuls 307/308 préservent la méthode, et le code exact renvoyé
+    par un vrai appareil Shelly est inconnu (non documenté). Conclusion ferme : client HTTP local
+    dédié avec `followRedirects(false)`, détection manuelle du 3xx + `Location: https://…`, et
+    relance explicite de la requête d'origine avec son corps.
+  - **Parc actuel non concerné, vérifié en direct** : Plug M et Strip4 mis à jour vers 2.0.0
+    (pas sortis d'usine avec), `enhanced_security: false` sur la Strip4, jamais activable par
+    accident (et irréversible sauf réinitialisation d'usine — ne jamais l'activer pour tester ;
+    David accepte de reconfigurer la Strip4 si un test réel final s'avère nécessaire).
+  - Le squelette annulé couvrait : `@LocalRpcHttpClient` (NetworkModule), `RpcFailure.
+    HTTPS_REQUIRED`, `ShellyRpcClient.peekCertificate()`, `CertPeek` (domain), boîte de dialogue
+    dans Ajouter/Modifier, `Device.certPin` + migration v15→v16 — **la migration v16 n'a jamais
+    été livrée, le numéro est de nouveau libre.**
 
 ## Écarté
 

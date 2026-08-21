@@ -5,6 +5,8 @@ import kapoue.hestia.domain.model.PresenceWindow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -85,19 +87,26 @@ object PresenceScriptGenerator {
         ntfyTopic: String? = null,
         ntfyStartBody: String = "",
         ntfyEndBody: String = "",
+        /** État vivant à reprendre tel quel (JSON de `STATE`, lu via [evalReadFull]) — pour le
+         * réalignement de la flash après une mutation `Eval` (2026-08-22, voir `DeviceRepository.
+         * realignPresenceFlash`) : le script redémarre avec exactement la mémoire qu'il avait.
+         * Null = premier déploiement, état vierge par canal. */
+        initialStateJson: String? = null,
     ): String {
         val marker = configs.joinToString(",", "[", "]") { "[${it.switchId},${windowsLiteral(it.windows)}]" }
         val cfgArray = configs.joinToString(",\n          ", "[\n          ", "\n        ]") { channelLiteral(it) }
         val notifyStart = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyStartBody)
         val notifyEnd = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyEndBody)
+        val stateInit = if (initialStateJson != null) {
+            "let STATE = $initialStateJson;"
+        } else {
+            "let STATE = [];\n        for (let i = 0; i < CFG.length; i++) {\n          STATE.push($FRESH_STATE);\n        }"
+        }
         return """
         // Généré par Hestia — simulation de présence (plusieurs canaux)
         $SUPERVISOR_MARKER$marker
         let CFG = $cfgArray;
-        let STATE = [];
-        for (let i = 0; i < CFG.length; i++) {
-          STATE.push($FRESH_STATE);
-        }
+        $stateInit
 
         function rnd(m) { return Math.floor(Math.random() * (2 * m + 1)) - m; }
 
@@ -190,6 +199,30 @@ object PresenceScriptGenerator {
           return JSON.stringify(r);
         })();
     """.trimIndent()
+
+    /** Code `Script.Eval` pour lire le snapshot vivant complet (config **et** état) — réalignement flash. */
+    fun evalReadFull(): String = "JSON.stringify({cfg:CFG,state:STATE})"
+
+    /**
+     * Décode le snapshot de [evalReadFull] : la config typée (pour régénérer le script, marqueur
+     * compris) et l'état brut (JSON de `STATE`, réinjecté tel quel via `initialStateJson` de
+     * [generateSupervisor] — jamais interprété par Hestia, seule sa position par canal compte).
+     * Null si illisible, ou si config et état ne sont plus alignés (jamais vu, pur garde-fou).
+     */
+    fun parseLiveSnapshot(json: String): Pair<List<ChannelConfig>, String>? = runCatching {
+        val root = Json.parseToJsonElement(json) as? JsonObject ?: return null
+        val cfgArr = root["cfg"] as? JsonArray ?: return null
+        val stateArr = root["state"] as? JsonArray ?: return null
+        if (cfgArr.size != stateArr.size) return null
+        val configs = cfgArr.map { el ->
+            val obj = el as? JsonObject ?: return null
+            val switchId = obj["switchId"]?.jsonPrimitive?.intOrNull ?: return null
+            val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return null
+            val windows = (obj["windows"] as? JsonArray)?.mapNotNull { parseWindow(it) } ?: return null
+            ChannelConfig(switchId, name, windows)
+        }
+        configs to stateArr.toString()
+    }.getOrNull()
 
     /**
      * Décode `[[canal,[[début,fin,marge,[jours]],…]],…]`, qu'il vienne du marqueur du script

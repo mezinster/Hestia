@@ -41,11 +41,13 @@ import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.domain.model.isExpiredOnce
 import kapoue.hestia.domain.model.onceEndAt
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -307,7 +309,12 @@ class DeviceRepository @Inject constructor(
         rpcClient.scriptStop(ip, scriptId)
         val code = TimerNotifyScriptGenerator.generate(device.switchId, scriptId, topic, device.name, body)
         rpcClient.scriptPutCode(ip, scriptId, code)
-        rpcClient.scriptSetConfig(ip, scriptId, enable = true)
+        // enable=false (2026-08-22) : script transitoire — le minuteur natif qu'il accompagne ne
+        // survit pas à un redémarrage de l'appareil, lui non plus ne doit pas redémarrer au boot.
+        // Avec enable=true, il repartait avec la prise et envoyait une notification « minuteur
+        // terminé » périmée à la première extinction manuelle venue, même des jours plus tard.
+        // Même choix que le script de coupure d'un planning (seul à faire déjà enable=false).
+        rpcClient.scriptSetConfig(ip, scriptId, enable = false)
         rpcClient.scriptStart(ip, scriptId)
     }
 
@@ -392,7 +399,14 @@ class DeviceRepository @Inject constructor(
 
         if (existing != null && existing.running) {
             val eval = rpcClient.scriptEval(ip, existing.id, ChargeScriptGenerator.evalUpsertChannel(config))
-            return eval.errorOrNull() ?: RpcResult.Success(Unit)
+            eval.errorOrNull()?.let { return it }
+            // Rattrapage des scripts déployés avant le 2026-08-22 en enable=true : couper
+            // l'auto-démarrage sans arrêter le script (enable ne joue qu'au boot). Sans ça, un
+            // redémarrage de l'appareil relancerait le script avec la config flash d'origine —
+            // canaux périmés compris, qui couperaient une prise allumée manuellement dès 60 s
+            // sous leur seuil (variante du bug de persistance, trouvée à l'audit du 2026-08-21).
+            rpcClient.scriptSetConfig(ip, existing.id, enable = false)
+            return RpcResult.Success(Unit)
         }
 
         val scriptId = existing?.id ?: run {
@@ -407,7 +421,11 @@ class DeviceRepository @Inject constructor(
             ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
-        rpcClient.scriptSetConfig(ip, scriptId, enable = true).errorOrNull()?.let { return it }
+        // enable=false (2026-08-22) : script transitoire — le minuteur natif qu'il surveille ne
+        // survit pas à un redémarrage de l'appareil, lui non plus ne doit pas redémarrer au boot.
+        // Avec enable=true, il repartait avec la config flash d'origine (canaux périmés compris)
+        // et pouvait couper une prise allumée manuellement, sans aucun minuteur en cours.
+        rpcClient.scriptSetConfig(ip, scriptId, enable = false).errorOrNull()?.let { return it }
         rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return it }
         return RpcResult.Success(Unit)
     }
@@ -546,13 +564,71 @@ class DeviceRepository @Inject constructor(
                 PresenceScriptGenerator.evalRemoveChannel(device.switchId)
             }
             val eval = rpcClient.scriptEval(ip, running.id, evalCode)
-            return eval.errorOrNull() ?: RpcResult.Success(Unit)
+            eval.errorOrNull()?.let { return it }
+            // La mutation n'existe qu'en mémoire vive à ce stade : réaligner la flash tout de
+            // suite, sinon le prochain redémarrage de l'appareil la ferait disparaître (bug de
+            // fond vécu en direct le 2026-08-21, un planning supprimé ressuscité au rebranchement).
+            realignPresenceFlash(ip, running.id)
+            return RpcResult.Success(Unit)
         }
 
         val (_, existing) = loadOrMigratePresenceScript(device)
         val others = existing.filterNot { it.switchId == device.switchId }
         val updated = if (config != null) others + config else others
         return deployPresenceScript(ip, updated)
+    }
+
+    /**
+     * Réécrit le texte enregistré (flash) du script de présence pour qu'il corresponde exactement
+     * à sa mémoire vive — config **et** état, minuteurs de plages tirés au sort compris — puis le
+     * redémarre : le script repart avec la mémoire qu'il avait (~1-2 s d'interruption, invisible
+     * pour un tick à la minute). Mécanisme validé en direct le 2026-08-22 (Lot 1, y compris la
+     * survie à une vraie coupure secteur). Sans ce réalignement, toute mutation `Eval` disparaît
+     * au prochain redémarrage de l'appareil, le script relisant la flash au boot.
+     *
+     * Best-effort : un échec laisse le script tourner avec une flash en retard — pas pire
+     * qu'avant ce correctif, et le prochain passage retente. [NonCancellable] : une fois commencé,
+     * va au bout même si l'écran appelant se ferme (jamais un script laissé à l'arrêt parce qu'un
+     * ViewModel a été détruit entre le Stop et le Start — leçon du bug de renommage ntfy).
+     */
+    private suspend fun realignPresenceFlash(ip: String, scriptId: Int) = withContext(NonCancellable) {
+        val json = rpcClient.scriptEval(ip, scriptId, PresenceScriptGenerator.evalReadFull()).getOrNull()?.result
+        val snapshot = json?.let { PresenceScriptGenerator.parseLiveSnapshot(it) }
+        if (snapshot == null) {
+            logger.warn(DiagnosticLogger.RPC, "Réalignement présence @ $ip : snapshot illisible, flash laissée en l'état")
+            return@withContext
+        }
+        val (configs, stateJson) = snapshot
+        if (configs.isEmpty()) {
+            // Plus aucun canal suivi : suppression complète, comme deployPresenceScript avec une
+            // liste vide — libère au passage un des 3 emplacements de script de l'appareil.
+            rpcClient.scriptStop(ip, scriptId)
+            rpcClient.scriptDelete(ip, scriptId)
+            logger.info(DiagnosticLogger.RPC, "Script présence supprimé (plus aucun canal) @ $ip")
+            return@withContext
+        }
+        val topic = ntfyTopic()
+        val code = PresenceScriptGenerator.generateSupervisor(
+            configs,
+            ntfyTopic = topic,
+            ntfyStartBody = if (topic != null) context.getString(R.string.notif_ntfy_presence_started) else "",
+            ntfyEndBody = if (topic != null) context.getString(R.string.notif_ntfy_presence_ended) else "",
+            initialStateJson = stateJson,
+        )
+        rpcClient.scriptStop(ip, scriptId).errorOrNull()?.let {
+            logger.warn(DiagnosticLogger.RPC, "Réalignement présence @ $ip : Stop refusé, flash laissée en l'état")
+            return@withContext
+        }
+        val put = rpcClient.scriptPutCode(ip, scriptId, code)
+        if (put.errorOrNull() != null) {
+            // Flash inchangée (ancienne version toujours valide) : on relance simplement le script.
+            logger.warn(DiagnosticLogger.RPC, "Réalignement présence @ $ip : PutCode refusé, redémarrage sur l'ancien texte")
+            rpcClient.scriptStart(ip, scriptId)
+            return@withContext
+        }
+        rpcClient.scriptSetConfig(ip, scriptId, enable = true)
+        rpcClient.scriptStart(ip, scriptId)
+        logger.info(DiagnosticLogger.RPC, "Flash présence réalignée @ $ip (${configs.size} canal(aux))")
     }
 
     /**
@@ -767,7 +843,11 @@ class DeviceRepository @Inject constructor(
                 ButtonTimerScriptGenerator.evalRemoveChannel(device.switchId)
             }
             val eval = rpcClient.scriptEval(ip, running.id, evalCode)
-            return eval.errorOrNull() ?: RpcResult.Success(Unit)
+            eval.errorOrNull()?.let { return it }
+            // Même réalignement que la présence : sans lui, la mutation disparaît au prochain
+            // redémarrage de l'appareil (voir realignPresenceFlash).
+            realignButtonTimerFlash(ip, running.id)
+            return RpcResult.Success(Unit)
         }
 
         val (_, existing) = loadOrMigrateButtonTimerScript(device)
@@ -778,6 +858,44 @@ class DeviceRepository @Inject constructor(
             others
         }
         return deployButtonTimerScript(ip, updated)
+    }
+
+    /** Pendant du réalignement de présence pour le minuteur bouton — voir [realignPresenceFlash]. */
+    private suspend fun realignButtonTimerFlash(ip: String, scriptId: Int) = withContext(NonCancellable) {
+        val json = rpcClient.scriptEval(ip, scriptId, ButtonTimerScriptGenerator.evalReadFull()).getOrNull()?.result
+        val snapshot = json?.let { ButtonTimerScriptGenerator.parseLiveSnapshot(it) }
+        if (snapshot == null) {
+            logger.warn(DiagnosticLogger.RPC, "Réalignement bouton @ $ip : snapshot illisible, flash laissée en l'état")
+            return@withContext
+        }
+        val (configs, stateJson) = snapshot
+        if (configs.isEmpty()) {
+            rpcClient.scriptStop(ip, scriptId)
+            rpcClient.scriptDelete(ip, scriptId)
+            logger.info(DiagnosticLogger.RPC, "Script bouton supprimé (plus aucun canal) @ $ip")
+            return@withContext
+        }
+        val topic = ntfyTopic()
+        val code = ButtonTimerScriptGenerator.generate(
+            configs,
+            ntfyTopic = topic,
+            ntfyEndBody = if (topic != null) context.getString(R.string.notif_button_timer_ended) else "",
+            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
+            initialStateJson = stateJson,
+        )
+        rpcClient.scriptStop(ip, scriptId).errorOrNull()?.let {
+            logger.warn(DiagnosticLogger.RPC, "Réalignement bouton @ $ip : Stop refusé, flash laissée en l'état")
+            return@withContext
+        }
+        val put = rpcClient.scriptPutCode(ip, scriptId, code)
+        if (put.errorOrNull() != null) {
+            logger.warn(DiagnosticLogger.RPC, "Réalignement bouton @ $ip : PutCode refusé, redémarrage sur l'ancien texte")
+            rpcClient.scriptStart(ip, scriptId)
+            return@withContext
+        }
+        rpcClient.scriptSetConfig(ip, scriptId, enable = true)
+        rpcClient.scriptStart(ip, scriptId)
+        logger.info(DiagnosticLogger.RPC, "Flash bouton réalignée @ $ip (${configs.size} canal(aux))")
     }
 
 
