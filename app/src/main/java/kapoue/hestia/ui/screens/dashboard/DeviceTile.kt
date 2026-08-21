@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
@@ -113,6 +114,21 @@ fun DeviceTile(
             Spacer(Modifier.height(10.dp))
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 PlugCircle(visual = visual)
+            }
+
+            if (!visual.loading) {
+                Spacer(Modifier.height(6.dp))
+                val stateLine = visual.countdown?.let { "${visual.label} · $it" } ?: visual.label
+                Text(
+                    text = stateLine,
+                    color = visual.textColor,
+                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             Spacer(Modifier.height(10.dp))
@@ -196,13 +212,18 @@ private data class TileVisual(
     val loading: Boolean = false,
 )
 
-/** Cercle inspiré de la vraie prise (deux trous) : anneau = fait physique, texte = régime. */
+/**
+ * Cercle inspiré de la vraie prise (deux trous) : anneau = fait physique. Le texte de régime
+ * (« Planifié », compte à rebours…) est affiché par l'appelant sur sa propre ligne, sous le
+ * cercle — trop à l'étroit à l'intérieur d'un cercle de 76dp dès qu'il dépassait un mot court
+ * (retour de test réel, 2026-08-22).
+ */
 @Composable
 private fun PlugCircle(visual: TileVisual) {
     // Le disque reprend la teinte de fond de la tuile (comme demandé après test réel — un disque
     // blanc détonnait) ; les trous, eux, tranchent en blanc/surface pour rester visibles dessus.
     val holeColor = MaterialTheme.colorScheme.surface
-    Box(modifier = Modifier.size(76.dp), contentAlignment = Alignment.BottomCenter) {
+    Box(modifier = Modifier.size(76.dp), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(76.dp)) {
             val strokeWidthPx = 2.dp.toPx()
             val radius = size.minDimension / 2 - strokeWidthPx / 2
@@ -226,27 +247,10 @@ private fun PlugCircle(visual: TileVisual) {
         }
         if (visual.loading) {
             CircularProgressIndicator(
-                modifier = Modifier.padding(bottom = 24.dp).size(14.dp),
+                modifier = Modifier.size(14.dp),
                 strokeWidth = 2.dp,
                 color = visual.ringColor,
             )
-        } else {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 10.dp)) {
-                Text(
-                    text = visual.label,
-                    color = visual.textColor,
-                    fontWeight = FontWeight.Medium,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                visual.countdown?.let {
-                    Text(
-                        text = it,
-                        color = visual.textColor,
-                        fontFamily = FontFamily.Monospace,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
         }
     }
 }

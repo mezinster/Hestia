@@ -18,7 +18,8 @@
     <string name="about_name_origin_title">Origin of the name</string>
     <string name="about_name_origin">In Greek mythology, Hestia is the goddess of the hearth and domestic fire. She watches over the home, quietly.</string>
     <string name="about_positioning_title">Local control by default</string>
-    <string name="about_positioning">Hestia controls your devices entirely on the local network, with no cloud and no account. One separate, off-by-default option — instant notifications via ntfy, in Settings — sends the text of your notifications to an external service of your choice, and only if you turn it on yourself.</string>
+    <string name="about_positioning">Hestia controls your devices entirely on the local network, with no cloud and no account, by default. Two separate options exist, both off by default and opt-in: instant notifications via ntfy (Settings), which send the text of your notifications to an external service of your choice; and connecting a device to Shelly Cloud (Edit screen), which lets you keep control from a mobile network away from home.</string>
+    <string name="about_positioning_network">On local Wi-Fi: every feature works. On mobile data (cloud fallback, if enabled): only state, power use and on/off — everything else (schedules, presence simulation, button timer, threshold cutoff, LED, firmware update) requires being on the same Wi-Fi network as the plug.</string>
     <string name="about_permission_title">Local network permission</string>
     <string name="about_permission_body">Since Android 17, an app must ask your permission to talk to devices on your local network. Hestia needs it to talk to your devices. It only contacts the addresses you\'ve entered yourself, never scans your network, and never sends anything outside it.</string>
     <string name="about_independence_title">Independence</string>

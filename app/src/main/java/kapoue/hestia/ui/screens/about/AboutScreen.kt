@@ -111,6 +111,12 @@ fun AboutScreen() {
 
         Section(R.string.about_name_origin_title, R.string.about_name_origin)
         Section(R.string.about_positioning_title, R.string.about_positioning)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.about_positioning_network),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Section(R.string.about_permission_title, R.string.about_permission_body)
         Section(R.string.about_independence_title, R.string.about_independence)
 
