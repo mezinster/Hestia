@@ -1,0 +1,1 @@
+Version 2.4.1. Dashboard: an outlet's state text ("Scheduled", countdown…) now sits on its own line under the plug, instead of being cramped inside the circle. About: Mastodon/Telegram links now sit side by side, and the text was updated to clearly explain what works on local Wi-Fi versus the Shelly Cloud fallback on mobile data.

@@ -1,0 +1,1 @@
+Version 2.4.1. Tableau : le texte d'état d'une prise (« Planifié », compte à rebours…) est maintenant sur sa propre ligne sous la prise, plus lisible qu'à l'étroit dans le cercle. À propos : liens Mastodon/Telegram côte à côte, et texte mis à jour pour bien expliquer ce qui fonctionne en Wifi local et en repli Cloud Shelly sur réseau mobile.
