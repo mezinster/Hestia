@@ -86,17 +86,21 @@ class DashboardViewModel @Inject constructor(
     // La tuile ne l'affiche que si l'appareil confirme lui-même un minuteur en cours.
     private val pendingThresholds = MutableStateFlow<Map<Long, Int>>(emptyMap())
 
+    // Instant d'allumage du canal (référentiel SystemClock.elapsedRealtime), déduit du compteur
+    // natif counts.on_time — voir le calcul dans fetch() et la doc de TileUiState.onSinceElapsed.
+    private val onSinceElapsed = MutableStateFlow<Map<Long, Long>>(emptyMap())
+
     // Renseigné par la couche UI (qui seule connaît le Context) à chaque reprise d'écran.
     private val _permissionUsable = MutableStateFlow(true)
 
     /** Lu par l'écran pour afficher (ou non) le bandeau de permission manquante. */
     val permissionUsable: StateFlow<Boolean> = _permissionUsable.asStateFlow()
 
-    // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils en un seul.
-    private val extras = combine(presences, plannings, pendingThresholds) { p, pl, th -> Triple(p, pl, th) }
+    // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils + on_since en un seul.
+    private val extras = combine(presences, plannings, pendingThresholds, onSinceElapsed) { p, pl, th, os -> Extras(p, pl, th, os) }
 
     val uiState: StateFlow<DashboardUiState> =
-        combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, (presenceMap, planningMap, thresholdMap) ->
+        combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, extras ->
             val ordered = repository.groupedForDisplay(devices)
             val byIp = ordered.groupBy { it.ipAddress }
             var lastIp: String? = null
@@ -109,9 +113,10 @@ class DashboardViewModel @Inject constructor(
                     TileUiState(
                         device = device,
                         status = statusMap[device.id] ?: TileStatus.Loading,
-                        presence = presenceMap[device.id],
-                        plannings = planningMap[device.id].orEmpty(),
-                        pendingThresholdW = thresholdMap[device.id],
+                        presence = extras.presence[device.id],
+                        plannings = extras.plannings[device.id].orEmpty(),
+                        pendingThresholdW = extras.pendingThresholds[device.id],
+                        onSinceElapsed = extras.onSinceElapsed[device.id],
                         groupLabel = groupDisplayName(members),
                         isFirstInGroup = isFirstInGroup,
                         isMultiChannel = isMultiChannel,
@@ -199,6 +204,39 @@ class DashboardViewModel @Inject constructor(
                 // sinon on l'efface tout de suite, pas la peine d'attendre le nettoyage périodique.
                 val nowWall = System.currentTimeMillis()
                 val nowElapsed = SystemClock.elapsedRealtime()
+                // Durée du ON en cours, déduite de counts.on_time (compteur natif cumulé, jamais
+                // remis à zéro par Hestia) : on retient sa valeur à chaque extinction observée, la
+                // différence avec la valeur actuelle donne la durée exacte du allumage en cours —
+                // fiable même après une app fermée ou hors réseau entre-temps, contrairement à un
+                // simple horodatage local pris à la première ouverture qui voit le canal allumé
+                // (voir échange avec David, 2026-08-22).
+                //
+                // Le point de départ (onSinceEpoch) n'est calculé QU'UNE FOIS par allumage, au
+                // premier cycle où on le voit allumé avec une référence d'extinction connue —
+                // jamais recalculé aux cycles suivants tant que le canal reste allumé. Recalculer
+                // à chaque cycle à partir de la dernière valeur de on_time faisait dériver
+                // l'affichage (précision du compteur natif pas garantie à la seconde près d'un
+                // cycle à l'autre) : le compte à rebours semblait revenir en arrière en rouvrant
+                // la modale — bug remonté par David le 2026-08-22. Rien à afficher tant qu'aucune
+                // référence n'a encore été observée (première fois que Hestia voit ce canal).
+                onSinceElapsed.value = statuses.value.mapNotNull { (deviceId, status) ->
+                    if (status !is TileStatus.Online) return@mapNotNull null
+                    if (!status.output) {
+                        status.onTimeSec?.let { appPreferences.setOnTimeBaseline(deviceId, it) }
+                        appPreferences.clearOnSinceEpoch(deviceId)
+                        return@mapNotNull null
+                    }
+                    var epoch = appPreferences.onSinceEpoch(deviceId)
+                    if (epoch == null) {
+                        val onTimeSec = status.onTimeSec ?: return@mapNotNull null
+                        val baseline = appPreferences.onTimeBaseline(deviceId) ?: return@mapNotNull null
+                        val streakSec = onTimeSec - baseline
+                        if (streakSec < 0) return@mapNotNull null // compteur remis à zéro côté appareil, référence invalide
+                        epoch = nowWall - (streakSec * 1000).toLong()
+                        appPreferences.setOnSinceEpoch(deviceId, epoch)
+                    }
+                    deviceId to (nowElapsed - (nowWall - epoch))
+                }.toMap()
                 pendingThresholds.value = appPreferences.pendingTimers().mapNotNull { timer ->
                     val thresholdW = timer.thresholdW ?: return@mapNotNull null
                     val deviceEndsAtElapsed = (statuses.value[timer.deviceId] as? TileStatus.Online)?.timerEndsAtElapsed
@@ -335,3 +373,11 @@ private fun groupDisplayName(members: List<Device>): String {
     val deviceName = members.first().deviceName
     return deviceName.ifBlank { (members.minByOrNull { it.switchId } ?: members.first()).name }
 }
+
+/** Regroupe les flux dérivés annexes pour ne pas dépasser le plafond de 5 flux de `combine`. */
+private data class Extras(
+    val presence: Map<Long, PresenceInfo>,
+    val plannings: Map<Long, List<Planning>>,
+    val pendingThresholds: Map<Long, Int>,
+    val onSinceElapsed: Map<Long, Long>,
+)

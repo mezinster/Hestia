@@ -109,6 +109,15 @@ fun DurationPickerSheet(
                         onCheckedChange = { unlimited = it; if (it) { cutoffEnabled = true; showError = false } },
                     )
                 }
+                // Sans ça, le seuil configuré semble ne jamais se déclencher pendant les 15
+                // premières minutes — vécu en test réel, pris pour un bug (retour David, 2026-08-22).
+                if (unlimited) {
+                    Text(
+                        text = stringResource(R.string.duration_picker_unlimited_grace_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             if (!unlimited) {

@@ -24,6 +24,10 @@ sealed interface TileStatus {
         /** Vrai si cette lecture vient du repli cloud (appareil injoignable en local) — jamais
          * silencieux, voir CLAUDE.md : la tuile affiche un petit picto nuage dans ce cas. */
         val viaCloud: Boolean = false,
+        /** Compteur natif cumulé de secondes ON (`counts.on_time`), brique interne pour calculer
+         * la durée du ON en cours (voir [kapoue.hestia.data.rpc.model.SwitchCounts]) — jamais
+         * affiché tel quel. Null si l'appareil ne le fournit pas. */
+        val onTimeSec: Double? = null,
     ) : TileStatus
 
     /** Appareil injoignable (timeout, réseau, erreur RPC) — inclut aussi le cas où la permission
@@ -54,6 +58,15 @@ data class TileUiState(
     /** Seuil du minuteur en attente (mémo local), affiché à côté du décompte si actif. */
     val pendingThresholdW: Int? = null,
     /**
+     * Instant d'allumage du canal, dans le référentiel SystemClock.elapsedRealtime (ms) — même
+     * mécanique que [TileStatus.Online.timerEndsAtElapsed] mais pour un point de départ passé
+     * plutôt qu'une fin future. Calculé par [kapoue.hestia.ui.screens.dashboard.DashboardViewModel]
+     * à partir du compteur natif `counts.on_time` (voir sa doc) : durée exacte du ON en cours,
+     * robuste à une app fermée/hors réseau entre-temps. Null si non allumé, ou si aucune
+     * référence fiable n'a encore été observée (première fois que Hestia voit ce canal allumé).
+     */
+    val onSinceElapsed: Long? = null,
+    /**
      * Nom de l'appareil physique (celui de Réglages, pas le modèle technique), affiché dans
      * l'en-tête au-dessus du canal — pour tous les appareils, mono ou multi-canaux.
      */
@@ -77,6 +90,7 @@ internal fun DeviceStatusResult.toTileStatus(): TileStatus = when (val r = resul
         timerEndsAtElapsed = timerEndsAtElapsed(r.value.timerStartedAt, r.value.timerDuration),
         powerWatts = r.value.apower,
         viaCloud = viaCloud,
+        onTimeSec = r.value.counts?.onTime,
     )
     // Un appareil injoignable (ou en erreur) n'empêche pas d'utiliser les autres.
     is RpcResult.RpcError -> TileStatus.Offline

@@ -245,4 +245,19 @@ data class SwitchStatusResult(
      * 2026-08-17. Persiste jusqu'à la bascule suivante, utile pour savoir après coup qui a coupé.
      */
     val source: String? = null,
+    /** Compteurs natifs cumulés (secondes/nombre de bascules) — voir [SwitchCounts]. */
+    val counts: SwitchCounts? = null,
+)
+
+/**
+ * Sous-ensemble de `counts` dans `Switch.GetStatus` : compteurs cumulés côté appareil, jamais
+ * remis à zéro par Hestia (`on_time_rst_ts` existe côté firmware mais n'est pas utilisé ici).
+ * [onTime] sert uniquement de brique interne pour calculer la durée du ON **en cours** (voir
+ * `DashboardViewModel`, mémorise la valeur relevée à la dernière extinction connue, la
+ * différence donne une durée exacte même après une app fermée/hors réseau entre-temps) — jamais
+ * affiché tel quel (cumul depuis toujours, pas la donnée demandée par l'utilisateur).
+ */
+@Serializable
+data class SwitchCounts(
+    @SerialName("on_time") val onTime: Double? = null,
 )

@@ -374,6 +374,69 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
 ## Fonctionnalités futures
 
+- **Le seuil configuré n'apparaît pas sur la tuile quand il n'y a pas de décompte — repéré le
+  2026-08-22 en listant tous les états textuels de la tuile pour la refonte graphique envisagée
+  par David.** Deux volets distincts, tranchés séparément :
+  - **Formulation du seuil déjà affiché (cas `Planifié` + décompte) — faite.** Le suffixe brut
+    `· 10 W` prêtait à confusion avec la vraie consommation instantanée affichée juste en dessous
+    sur la tuile. Remplacé par le libellé déjà utilisé ailleurs dans l'app pour ce même réglage
+    (`timer_preset_cutoff_detail`, « Coupure à 10 W ») plutôt qu'un nouveau mot inventé (« seuil »
+    aurait rompu la cohérence avec l'écran Détail) — voir
+    [DeviceTile.kt](app/src/main/java/kapoue/hestia/ui/screens/dashboard/DeviceTile.kt).
+  - **Durée du ON en cours affichée sur « Actif » — Lot 1 codé le 2026-08-22, pas encore
+    testé en direct.** En creusant l'idée de David (retenir l'heure de départ localement), trouvé
+    mieux que ce qui avait été envisagé au départ : `Switch.GetStatus` renvoie déjà
+    `counts.on_time`, un compteur natif cumulant les secondes ON côté appareil, indépendant de
+    l'app. On retient sa valeur à chaque extinction observée (`AppPreferences.setOnTimeBaseline`) ;
+    dès que le canal est vu allumé, la durée du ON en cours = valeur actuelle − dernière valeur
+    retenue à l'extinction — exacte même après une app fermée ou hors réseau entre-temps,
+    contrairement à un horodatage pris à la première ouverture qui voit le canal allumé. Pas de
+    nouvel appel RPC : réutilise `Switch.GetStatus`, déjà relu à chaque cycle de 5 s pour tous les
+    canaux. Nouveau champ `SwitchCounts.onTime` ([RpcModels.kt](app/src/main/java/kapoue/hestia/data/rpc/model/RpcModels.kt)),
+    `TileStatus.Online.onTimeSec` (brut) → `TileUiState.onSinceElapsed` (dérivé, calculé dans
+    `DashboardViewModel.fetch`, référentiel `SystemClock.elapsedRealtime` comme
+    `timerEndsAtElapsed` mais pour un point de départ passé). Affiché « depuis 12:34 » (libellé
+    explicite, `tile_on_since`) plutôt qu'un nombre nu — pour ne pas se lire comme un décompte qui
+    descend, alors que celui-ci grimpe. Couvre tuile prise seule **et** modale du bloc (même
+    `toVisual()` partagé).
+    **Bug remonté en test réel le 2026-08-22, corrigé le jour même** : le point de départ était
+    recalculé à **chaque** cycle de 5 s à partir de la dernière valeur de `on_time` — la précision
+    du compteur natif n'étant pas garantie à la seconde près d'un cycle à l'autre, l'affichage
+    dérivait (le compte à rebours semblait revenir en arrière en rouvrant la modale du bloc), et
+    un « kill » de l'app pouvait le faire repartir de zéro. Corrigé en ne calculant le point de
+    départ (`AppPreferences.onSinceEpoch`, en epoch ms) **qu'une seule fois par allumage** — au
+    premier cycle où le canal est vu allumé avec une référence d'extinction connue — puis en le
+    gelant jusqu'à la prochaine extinction observée. Persisté (epoch, pas `elapsedRealtime`, pour
+    survivre correctement à un « kill » de l'app). Limite acceptée, documentée mais pas résolue :
+    si l'app est fermée pendant un cycle **complet** éteint→rallumé (raté en entier, jamais observé),
+    la durée affichée au retour surestimera en comptant aussi l'allumage précédent manqué — cas
+    rare, pas traité dans ce lot. Autre limite acceptée : rien ne s'affiche tant qu'aucune
+    extinction n'a encore été observée par Hestia pour ce canal (première utilisation, ou après
+    réinstallation).
+
+  - **Faux signalement au passage, corrigé quand même : la grâce de 15 min avant surveillance
+    du seuil n'était dite nulle part — corrigé le 2026-08-22.** David a testé un minuteur « sans
+    limite de durée » (seuil 5 W), constaté que la coupure ne se déclenchait pas et l'a d'abord
+    pris pour un bug — en réalité `ChargeScriptGenerator`/`ButtonTimerScriptGenerator` attendent
+    tous deux 15 min après l'allumage avant de commencer à surveiller la consommation (évite une
+    coupure prématurée le temps qu'un appareil branché commence vraiment à tirer du courant),
+    comportement volontaire déjà en place, jamais communiqué à l'écran. Ajouté une note explicative
+    dans [DurationPickerSheet.kt](app/src/main/java/kapoue/hestia/ui/screens/detail/DurationPickerSheet.kt),
+    affichée dès qu'on active « Sans limite de durée » — un seul composant partagé par les 4 usages
+    (Manuel, Perso ×2, minuteur bouton), donc corrigé partout à la fois.
+
+  - **Valeur du seuil sur « Actif » (Lot 2) — pas encore attaqué, à échanger avant de coder.**
+    Sur la tuile prise seule **et** dans la modale du bloc multi-canaux :
+    - un minuteur bouton « sans limite de durée » (coupure sur seuil uniquement, pas de
+      `timerEndsAtElapsed`) affiche juste « Actif » (bientôt « Actif · depuis 12:34 » avec le lot
+      ci-dessus, mais toujours sans le seuil) ;
+    - un planning (précis ou récurrent) avec coupure sur seuil (`Planning.cutoffThresholdW`)
+      affiche juste l'horaire, la branche `activePlanning != null` de `DeviceTile.toVisual` ne lit
+      jamais ce champ.
+    Contrairement à la durée du ON, cette donnée n'existe nulle part dans `Switch.GetStatus` — elle
+    ne vit que dans la mémoire du script (`hestia_button_timer` ou `hestia_charge`), invisible sans
+    l'interroger directement (`Script.Eval`, même famille de coût qu'une lecture de présence).
+
 - **Audit des fonctions RPC de la prise non gérées** par Hestia (mesure d'énergie détaillée,
   métriques cumulées, etc.).
 - **Historique / graphique de consommation par prise** (2026-08-18) : histogramme ou courbe dans

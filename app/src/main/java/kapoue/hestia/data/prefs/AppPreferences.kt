@@ -147,6 +147,48 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         prefs.edit().putString(KEY_PENDING_TIMERS, json.encodeToString(updated)).apply()
     }
 
+    // --- Durée du ON en cours (mémo local, voir DashboardViewModel/SwitchCounts) ---
+
+    /**
+     * Dernière valeur connue de `counts.on_time` (secondes cumulées) relevée à l'extinction d'un
+     * canal — sert de référence pour calculer la durée exacte du ON en cours, même après une app
+     * fermée entre-temps (voir doc de [kapoue.hestia.data.rpc.model.SwitchCounts]).
+     */
+    fun onTimeBaseline(deviceId: Long): Double? = onTimeBaselineMap()[deviceId.toString()]
+
+    fun setOnTimeBaseline(deviceId: Long, onTimeSec: Double) {
+        val updated = onTimeBaselineMap() + (deviceId.toString() to onTimeSec)
+        prefs.edit().putString(KEY_ON_TIME_BASELINE, json.encodeToString(updated)).apply()
+    }
+
+    private fun onTimeBaselineMap(): Map<String, Double> =
+        runCatching { json.decodeFromString<Map<String, Double>>(prefs.getString(KEY_ON_TIME_BASELINE, null) ?: "{}") }
+            .getOrDefault(emptyMap())
+
+    /**
+     * Instant estimé (epoch ms) du début de l'allumage **en cours** — calculé une seule fois par
+     * allumage (au premier cycle où on le voit allumé), jamais recalculé aux cycles suivants.
+     * Recalculer à chaque cycle à partir de `counts.on_time` faisait dériver l'affichage (la
+     * précision du compteur natif n'est pas garantie à la seconde près) : le compte à rebours
+     * paraissait revenir en arrière en rouvrant la modale — bug remonté par David le 2026-08-22.
+     * Effacé dès qu'on revoit le canal éteint, pour qu'un allumage suivant recalcule le sien.
+     */
+    fun onSinceEpoch(deviceId: Long): Long? = onSinceEpochMap()[deviceId.toString()]
+
+    fun setOnSinceEpoch(deviceId: Long, epochMillis: Long) {
+        val updated = onSinceEpochMap() + (deviceId.toString() to epochMillis)
+        prefs.edit().putString(KEY_ON_SINCE_EPOCH, json.encodeToString(updated)).apply()
+    }
+
+    fun clearOnSinceEpoch(deviceId: Long) {
+        val updated = onSinceEpochMap() - deviceId.toString()
+        prefs.edit().putString(KEY_ON_SINCE_EPOCH, json.encodeToString(updated)).apply()
+    }
+
+    private fun onSinceEpochMap(): Map<String, Long> =
+        runCatching { json.decodeFromString<Map<String, Long>>(prefs.getString(KEY_ON_SINCE_EPOCH, null) ?: "{}") }
+            .getOrDefault(emptyMap())
+
     private companion object {
         const val KEY_THEME = "theme_mode"
         const val KEY_NOTIFS = "notifications_enabled"
@@ -156,6 +198,8 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_NTFY_GEN = "ntfy_generation"
         const val KEY_NTFY_SYNCED = "ntfy_synced_devices"
         const val KEY_PENDING_TIMERS = "pending_timers"
+        const val KEY_ON_TIME_BASELINE = "on_time_baseline"
+        const val KEY_ON_SINCE_EPOCH = "on_since_epoch"
         const val KEY_CLOUD_AUTH_KEY = "cloud_auth_key"
         const val KEY_CLOUD_SERVER = "cloud_server"
         val json = Json { ignoreUnknownKeys = true }

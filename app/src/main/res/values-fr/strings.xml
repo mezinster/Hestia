@@ -226,6 +226,7 @@
 
     <!-- Actions de tuile -->
     <string name="tile_toggle">Interrupteur</string>
+    <string name="tile_on_since">depuis %1$s</string>
     <string name="tile_number">%1$s</string>
     <!-- Provenance de l'état affiché — jamais silencieuse, voir CLAUDE.md -->
     <string name="tile_via_local">Réseau local</string>
@@ -263,6 +264,7 @@
     <string name="timer_cutoff_label">Couper si la consommation passe sous</string>
     <string name="duration_picker_min_error">La durée minimale est de 1 minute.</string>
     <string name="duration_picker_unlimited_label">Sans limite de durée</string>
+    <string name="duration_picker_unlimited_grace_note">La coupure sur seuil ne surveille la consommation qu\'à partir de 15 min après l\'allumage — le temps que l\'appareil branché commence vraiment à consommer.</string>
 
     <!-- Deux réglages personnalisés enregistrables (puces nommées sous 1h/2h/3h/Manuel) -->
     <string name="timer_preset_chip">Perso</string>

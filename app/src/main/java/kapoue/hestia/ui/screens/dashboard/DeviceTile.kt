@@ -81,7 +81,7 @@ fun DeviceTile(
     // elapsedNow (rafraîchi à la seconde par le parent) force le recalcul du planning en cours
     // au fil du temps, sans attendre le prochain relevé réseau.
     val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
-    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW)
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed)
 
     // Fin de créneau : dès que le planning en cours cesse de l'être, on force un relevé pour
     // confirmer l'extinction tout de suite (sinon la tuile afficherait le dernier état connu —
@@ -262,6 +262,7 @@ private fun TileStatus.toVisual(
     presence: PresenceInfo?,
     activePlanning: Planning?,
     pendingThresholdW: Int?,
+    onSinceElapsed: Long?,
 ): TileVisual = when (this) {
     TileStatus.Loading -> TileVisual(
         bgColor = colors.idleBg,
@@ -283,8 +284,12 @@ private fun TileStatus.toVisual(
             remaining != null && remaining > 0 -> TileVisual(
                 bgColor = physicalBg, ringColor = ringColor, textColor = colors.timedText,
                 label = stringResource(R.string.state_planned),
-                // Format technique (comme formatPower) : jamais localisé phrase par phrase.
-                countdown = formatCountdown(remaining) + (pendingThresholdW?.let { " · $it W" } ?: ""),
+                // Le seuil réutilise le libellé déjà utilisé pour ce même réglage dans l'écran
+                // Détail (timer_preset_cutoff_detail) — pas de « · 10 W » nu, ambigu avec la
+                // vraie consommation instantanée affichée juste en dessous sur la tuile
+                // (retour David, 2026-08-22).
+                countdown = formatCountdown(remaining) +
+                    (pendingThresholdW?.let { " · " + stringResource(R.string.timer_preset_cutoff_detail, it) } ?: ""),
                 dashed = false,
             )
             presence != null -> TileVisual(
@@ -308,7 +313,13 @@ private fun TileStatus.toVisual(
             output -> TileVisual(
                 bgColor = colors.activeBg, ringColor = ringColor, textColor = colors.activeText,
                 label = stringResource(R.string.state_active),
-                countdown = null,
+                // Durée du ON en cours (voir DashboardViewModel.onSinceElapsed) : null tant
+                // qu'aucune référence fiable n'a encore été observée pour ce canal. Préfixée
+                // (« depuis »/« for ») pour ne pas se lire comme un décompte qui descend, alors
+                // que celui-ci grimpe (retour David, 2026-08-22).
+                countdown = onSinceElapsed?.let {
+                    stringResource(R.string.tile_on_since, formatCountdown(((elapsedNow - it) / 1000).coerceAtLeast(0)))
+                },
                 dashed = false,
             )
             else -> TileVisual(
@@ -387,7 +398,7 @@ private const val STRIP_NAME_MAX_LENGTH = 12
 private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> Unit) {
     val colors = MaterialTheme.stateColors
     val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
-    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW)
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed)
     // Même logique que PlugCircle : disque = teinte d'état du canal, trous = blanc/surface.
     val holeColor = MaterialTheme.colorScheme.surface
 
@@ -449,7 +460,7 @@ fun ChannelQuickSheet(
 ) {
     val colors = MaterialTheme.stateColors
     val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
-    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW)
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed)
     val online = tile.status as? TileStatus.Online
     val powerWatts = online?.powerWatts?.takeIf { tile.device.hasPowerMetering }
 

@@ -230,6 +230,7 @@
 
     <!-- Actions de tuile -->
     <string name="tile_toggle">Switch</string>
+    <string name="tile_on_since">for %1$s</string>
     <string name="tile_number">%1$s</string>
     <!-- Provenance de l'état affiché — jamais silencieuse, voir CLAUDE.md -->
     <string name="tile_via_local">Local network</string>
@@ -267,6 +268,7 @@
     <string name="timer_cutoff_label">Switch off if power drops below</string>
     <string name="duration_picker_min_error">The minimum duration is 1 minute.</string>
     <string name="duration_picker_unlimited_label">No duration limit</string>
+    <string name="duration_picker_unlimited_grace_note">The threshold cutoff only starts watching power use 15 min after power-on — enough time for the plugged-in device to actually start drawing power.</string>
 
     <!-- Deux réglages personnalisés enregistrables (puces nommées sous 1h/2h/3h/Manuel) -->
     <string name="timer_preset_chip">Preset</string>
