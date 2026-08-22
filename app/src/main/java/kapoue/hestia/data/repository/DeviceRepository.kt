@@ -820,6 +820,43 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
+     * Seuil de coupure actuellement surveillé sur ce canal par le script `hestia_charge`, ou null
+     * s'il n'y en a pas (script absent, arrêté, ou canal non suivi) — jamais stocké, relu à
+     * chaque appel. Coûte un `Script.List` (+ un `Script.Eval` seulement si le script tourne) :
+     * réservé aux canaux « Actif » sans planning/présence/décompte connu (seul cas où ce seuil
+     * serait sinon invisible, voir [kapoue.hestia.ui.screens.dashboard.DashboardViewModel]) —
+     * jamais appelé pour tous les canaux à chaque cycle. Mécanisme validé en direct sur la
+     * Strip4 le 2026-08-22.
+     */
+    suspend fun getActiveChargeThreshold(device: Device): Int? {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return null
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        val running = listResult.getOrNull()?.scripts
+            ?.firstOrNull { it.name == ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME && it.running }
+            ?: return null
+        val json = rpcClient.scriptEval(ip, running.id, ChargeScriptGenerator.evalReadConfig()).getOrNull()?.result
+            ?: return null
+        return ChargeScriptGenerator.parseEvalResult(json).firstOrNull { it.first == device.switchId }?.second
+    }
+
+    /**
+     * Même chose que [getActiveChargeThreshold], côté minuteur bouton : seuil du canal **si et
+     * seulement si** il est actuellement armé (`STATE[i].armed`) — un canal configuré mais pas
+     * armé (aucun appui bouton en cours) ne doit rien retourner, contrairement à
+     * [getButtonTimerConfig] qui lit la config pour le **prochain** appui, armé ou non.
+     */
+    suspend fun getActiveButtonThreshold(device: Device): Int? {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return null
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        val running = listResult.getOrNull()?.scripts
+            ?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME && it.running }
+            ?: return null
+        val json = rpcClient.scriptEval(ip, running.id, ButtonTimerScriptGenerator.evalReadArmedThresholds()).getOrNull()?.result
+            ?: return null
+        return ButtonTimerScriptGenerator.parseArmedThresholds(json).firstOrNull { it.first == device.switchId }?.second
+    }
+
+    /**
      * Active/reconfigure ou désactive le minuteur déclenché par le bouton physique **de ce
      * canal**, sans jamais toucher aux autres canaux configurés du même appareil. Si le script
      * partagé tourne déjà, la modification passe par `Script.Eval` (mémoire des autres canaux
@@ -1096,7 +1133,32 @@ class DeviceRepository @Inject constructor(
             scriptId?.let { rpcClient.scriptDelete(ip, it) }
             return CreatePlanningResult.Error
         }
+        applyIfAlreadyActive(ip, device, startHour, startMinute, endHour, endMinute, days, date)
         return CreatePlanningResult.Success
+    }
+
+    /**
+     * Un planning précis dont la fenêtre couvre déjà l'instant de sa création (ou modification)
+     * ne s'applique **jamais** tout seul : le programme cron ne déclenche qu'à sa prochaine
+     * occurrence (demain, si l'heure de départ du jour est déjà passée) — jamais rétroactivement.
+     * Sans ce rattrapage, la tuile affichait « Planifié » (l'heure du téléphone tombe dans le
+     * créneau) alors que la prise, elle, n'avait jamais reçu l'ordre — bug vécu en direct par
+     * David le 2026-08-22 (pire encore pour un Unique créé après son heure de départ : le
+     * programme ne se déclenche alors plus *jamais*, une seule occurrence ratée pour toujours).
+     * Best-effort, ne fait jamais échouer la création/modification elle-même si ce rattrapage rate.
+     */
+    private suspend fun applyIfAlreadyActive(
+        ip: String,
+        device: Device,
+        startHour: Int,
+        startMinute: Int,
+        endHour: Int,
+        endMinute: Int,
+        days: Set<Int>,
+        date: LocalDate?,
+    ) {
+        val nowActive = Planning(startHour, startMinute, endHour, endMinute, days, date = date).isActiveNow()
+        if (nowActive) rpcClient.setSwitch(ip, device.switchId, on = true)
     }
 
     private data class NtfyPlanningTexts(val topic: String, val title: String, val startBody: String, val endBody: String)
@@ -1250,6 +1312,7 @@ class DeviceRepository @Inject constructor(
             old.offJobId?.let { rpcClient.scheduleDelete(ip, it) }
             old.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
         }
+        applyIfAlreadyActive(ip, device, startHour, startMinute, endHour, endMinute, days, date)
         return CreatePlanningResult.Success
     }
 

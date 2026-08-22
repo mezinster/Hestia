@@ -193,6 +193,28 @@ class DashboardViewModel @Inject constructor(
                     .mapNotNull { (id, info) -> info?.let { id to it } }
                     .toMap()
                 plannings.value = planningResults.await().toMap()
+                // Seuil d'un minuteur « sans limite de durée » surveillé par hestia_charge (lancé
+                // depuis l'app) ou hestia_button_timer (armé par un vrai appui bouton — deux
+                // scripts distincts, jamais les deux à la fois pour un même canal), pour les
+                // canaux « Actif » sans autre explication (pas de décompte natif, pas de présence,
+                // pas de planning en cours) — le seul cas où ce seuil serait sinon invisible
+                // (aucun `timerEndsAtElapsed` pour le signaler autrement, voir BACKLOG.md). Coûte
+                // un Script.List + Eval par canal concerné (× 2 scripts vérifiés), mais seulement
+                // pour ceux-là, jamais pour tous les canaux à chaque cycle (voir
+                // DeviceRepository.getActiveChargeThreshold/getActiveButtonThreshold, mécanismes
+                // validés en direct le 2026-08-22).
+                val activeChargeThresholds = devices.filter { it.hasScripting }.map { device ->
+                    async {
+                        val status = statuses.value[device.id] as? TileStatus.Online
+                        val hasActivePlanning = plannings.value[device.id]?.any { it.isActiveNow() } == true
+                        val bareActive = status != null && status.output && status.timerEndsAtElapsed == null &&
+                            presences.value[device.id] == null && !hasActivePlanning
+                        if (!bareActive) return@async null
+                        val threshold = repository.getActiveChargeThreshold(device)
+                            ?: repository.getActiveButtonThreshold(device)
+                        threshold?.let { device.id to it }
+                    }
+                }.awaitAll().filterNotNull().toMap()
                 // Lecture locale (SharedPreferences), pas de RPC : pas besoin de la paralléliser.
                 // Ce souvenir ne date que des minuteurs lancés depuis l'app (Manuel/Perso) — un
                 // minuteur bouton (armé par un appui physique) ne le touche jamais, ni pour
@@ -237,6 +259,9 @@ class DashboardViewModel @Inject constructor(
                     }
                     deviceId to (nowElapsed - (nowWall - epoch))
                 }.toMap()
+                // Fusionné avec le seuil calculé ci-dessus pour les canaux "Actif" sans décompte :
+                // même concept (un seuil surveille actuellement ce canal), deux sources selon le
+                // cas (souvenir local confirmé par le minuteur natif, ou lecture live du script).
                 pendingThresholds.value = appPreferences.pendingTimers().mapNotNull { timer ->
                     val thresholdW = timer.thresholdW ?: return@mapNotNull null
                     val deviceEndsAtElapsed = (statuses.value[timer.deviceId] as? TileStatus.Online)?.timerEndsAtElapsed
@@ -247,7 +272,7 @@ class DashboardViewModel @Inject constructor(
                         return@mapNotNull null
                     }
                     timer.deviceId to thresholdW
-                }.toMap()
+                }.toMap() + activeChargeThresholds
                 loaded.value = true
             }
             if (userInitiated) refreshing.value = true
@@ -263,20 +288,20 @@ class DashboardViewModel @Inject constructor(
     }
 
     /**
-     * Arrête la simulation de présence **puis** applique la bascule demandée.
-     *
-     * Sans cela, éteindre une prise pilotée par le script n'aurait qu'un effet fugace : le
-     * programme la rallumerait quelques instants plus tard, donnant l'impression d'un
-     * interrupteur défaillant.
+     * Arrête la simulation de présence — seule action du bouton ON/OFF pendant qu'une présence
+     * est active, jamais suivie d'une bascule (retour David, 2026-08-22 : visuellement un
+     * interrupteur ON/OFF, l'utilisateur s'attend à couper le programme en cours, pas à en
+     * relancer un autre à la place). Retire le canal du script pour de bon (tous les jours),
+     * pas juste pour aujourd'hui — la boîte de dialogue de confirmation le dit avant d'agir.
      */
-    fun stopPresenceThenToggle(device: Device, turnOn: Boolean) {
+    fun stopPresence(device: Device) {
         if (!_permissionUsable.value) return
         viewModelScope.launch {
             when (repository.stopPresence(device)) {
                 is RpcResult.Success -> {
                     logger.info(DiagnosticLogger.RPC, "Simulation de présence arrêtée depuis le Tableau (${device.ipAddress})")
                     presences.value = presences.value - device.id
-                    applyToggle(device, turnOn)
+                    fetchOne(device)
                 }
                 else -> setStatus(device.id, TileStatus.Offline)
             }

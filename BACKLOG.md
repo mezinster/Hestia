@@ -1,10 +1,32 @@
 # Backlog — Hestia
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
-Dernière mise à jour : 2026-08-22 (correctif de persistance des scripts superviseurs et
-étiquette « Présence » publiés en 2.4.0).
+Dernière mise à jour : 2026-08-22 (correctif d'application immédiate des plannings, durée du
+ON, seuils et refonte des couleurs d'état publiés en 2.5.0).
 
 ## Fait — en cours (à surveiller)
+
+- **Bug de fond trouvé et corrigé le 2026-08-22 : un planning créé (ou modifié) alors que son
+  créneau couvre déjà l'instant présent ne s'applique jamais tout seul.** Découvert en creusant
+  un faux-négatif apparent (un canal noté « Planifié » mais réellement éteint, repéré grâce au
+  nouvel anneau des tuiles qui reflète le fait physique indépendamment du régime affiché en
+  texte/centre — voir refonte couleurs ci-dessous). Cause identifiée par David lui-même en testant
+  en direct : `createPlanning`/`updatePlanning` ne font que poser deux programmes cron
+  (`Schedule.Create` allumage + extinction) — un programme cron ne déclenche qu'à sa **prochaine**
+  occurrence, jamais rétroactivement. Créer un planning « 9h–19h » à 17h30 ne fait donc **rien**
+  aujourd'hui : le programme d'allumage de 9h est déjà passé, le prochain sera demain 9h (si
+  récurrent) — la tuile affiche pourtant « Planifié » tout de suite, puisque `isActiveNow()`
+  compare seulement l'heure du téléphone au créneau configuré, sans jamais vérifier que l'appareil
+  a réellement obéi. Pire pour un Unique créé après son heure de départ : son programme ne se
+  déclenchera alors plus **jamais**, une seule occurrence ratée pour toujours.
+  **Corrigé** : `createPlanning`/`updatePlanning` appliquent maintenant immédiatement
+  `Switch.Set(on:true)` si le créneau qui vient d'être créé/modifié couvre déjà l'instant présent
+  (nouvelle fonction `DeviceRepository.applyIfAlreadyActive`, réutilise `Planning.isActiveNow()` —
+  même calcul que l'affichage, aucune divergence possible entre ce qui est montré et ce qui est
+  appliqué). Best-effort, ne fait jamais échouer la création/modification si ce rattrapage rate.
+  Pas encore testé en direct (identifié et codé en fin de session, David n'a plus le temps ce
+  soir) — à valider : créer un planning couvrant l'instant présent doit désormais allumer la prise
+  tout de suite, pas seulement colorer la tuile.
 
 - **Bug de fond découvert en direct le 2026-08-21 : les modifications par `Script.Eval` sur un
   script superviseur ne survivent jamais à un redémarrage matériel — priorité haute, pas encore
@@ -374,6 +396,32 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
 ## Fonctionnalités futures
 
+- **Couper une présence « pour aujourd'hui seulement », sans toucher aux jours suivants — idée
+  de David, 2026-08-22, mécanisme vérifié faisable mais pas codé.** Depuis que le bouton ON/OFF
+  arrête la présence en cas d'appui pendant qu'elle tourne (voir « Fait — pour mémoire »), l'arrêt
+  est définitif (retire le canal du script, tous les jours programmés) — David voudrait plutôt un
+  arrêt local au jour, le programme reprenant normalement le lendemain. Exemple donné : présence
+  10h–19h, retour à la maison à 15h, on coupe pour aujourd'hui seulement, demain ça repart de 10h.
+  - **Bouton de l'app — faisable, mécanisme déjà vérifié dans le script.** `hestia_presence`
+    garde en mémoire vive, par canal, l'heure d'extinction **du jour** déjà tirée au sort
+    (`STATE[i].off[j]`, recalculée chaque nouveau jour par `planDay()` à partir de la config
+    permanente `CFG[i].windows`, jamais touchée). Il suffirait d'un `Script.Eval` qui met à jour
+    `STATE[i].off[j]` à l'heure actuelle pour la ou les fenêtres en cours, puis éteint la prise —
+    aucune mutation de `CFG`, donc rien à réappliquer le lendemain, `planDay` repart d'elle-même
+    de la config permanente au jour suivant. Même famille de mutation `Eval` déjà pratiquée ce
+    soir pour d'autres besoins — pas un nouveau mécanisme, une nouvelle fonction du même genre
+    (`evalShrinkToday(switchId)` ou proche) sur `PresenceScriptGenerator`, branchée dans
+    `DeviceRepository`/`DashboardViewModel` à la place de l'arrêt définitif actuel du bouton
+    (qui resterait disponible ailleurs, ex. suppression explicite depuis l'écran Détail).
+  - **Bouton physique — plus dur, chantier à part si voulu.** Le script ne regarde jamais la
+    provenance d'un changement (`source`) — contrairement au minuteur bouton, il compare juste
+    « censé être dans une fenêtre » à « la prise est allumée » et **réimpose** l'état voulu à
+    chaque tick en cas d'écart, sans distinguer un appui bouton d'une coupure de courant à
+    corriger. Il faudrait apprendre au script à reconnaître un appui bouton pendant la fenêtre et
+    le traiter comme une intention plutôt qu'un écart — une vraie réécriture de sa logique
+    interne. Limite structurelle en prime : le script ne tique qu'une fois par minute
+    (`Timer.set(60000,...)`), donc jusqu'à 60 s avant de réagir à un appui.
+
 - **Le seuil configuré n'apparaît pas sur la tuile quand il n'y a pas de décompte — repéré le
   2026-08-22 en listant tous les états textuels de la tuile pour la refonte graphique envisagée
   par David.** Deux volets distincts, tranchés séparément :
@@ -425,17 +473,71 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
     affichée dès qu'on active « Sans limite de durée » — un seul composant partagé par les 4 usages
     (Manuel, Perso ×2, minuteur bouton), donc corrigé partout à la fois.
 
-  - **Valeur du seuil sur « Actif » (Lot 2) — pas encore attaqué, à échanger avant de coder.**
-    Sur la tuile prise seule **et** dans la modale du bloc multi-canaux :
-    - un minuteur bouton « sans limite de durée » (coupure sur seuil uniquement, pas de
-      `timerEndsAtElapsed`) affiche juste « Actif » (bientôt « Actif · depuis 12:34 » avec le lot
-      ci-dessus, mais toujours sans le seuil) ;
-    - un planning (précis ou récurrent) avec coupure sur seuil (`Planning.cutoffThresholdW`)
-      affiche juste l'horaire, la branche `activePlanning != null` de `DeviceTile.toVisual` ne lit
-      jamais ce champ.
-    Contrairement à la durée du ON, cette donnée n'existe nulle part dans `Switch.GetStatus` — elle
-    ne vit que dans la mémoire du script (`hestia_button_timer` ou `hestia_charge`), invisible sans
-    l'interroger directement (`Script.Eval`, même famille de coût qu'une lecture de présence).
+  - **Valeur du seuil sur « Actif » (Lot 2) — Cas A et Cas B codés, validés en direct et testés
+    depuis l'app le 2026-08-22 (retours pris en compte : espacement seuil/décompte).**
+    - **Cas A — déclenché depuis l'app (Perso/Manuel/toggle) : fait.** Un minuteur « sans limite de
+      durée » lancé depuis l'app passe toujours par le script partagé `hestia_charge`, jamais par
+      `hestia_button_timer` (confirmé en direct : `CFG` du script contenait bien
+      `{switchId,thresholdW,...}` du canal armé). Nouvelle lecture ciblée
+      `ChargeScriptGenerator.evalReadConfig()`/`parseEvalResult()` (juste switchId+seuil, pas le
+      reste de `CFG`) et `DeviceRepository.getActiveChargeThreshold(device)`
+      ([DeviceRepository.kt](app/src/main/java/kapoue/hestia/data/repository/DeviceRepository.kt)).
+    - **Cas B — déclenché par un vrai appui sur le bouton physique : fait.** Contrairement au Cas
+      A, `CFG` de `hestia_button_timer` liste **tous** les canaux configurés pour un futur appui,
+      armés ou non (confirmé en direct sur la Strip4 : 4 canaux dans `CFG`, un seul `armed:true`
+      dans `STATE` au même indice) — `evalReadConfig()` existant (config statique) ne suffisait
+      donc pas, nouvelle lecture dédiée `evalReadArmedThresholds()`/`parseArmedThresholds()` qui
+      croise `CFG[i].thresholdW` et `STATE[i].armed` par indice, et
+      `DeviceRepository.getActiveButtonThreshold(device)`.
+    - **Branchement commun** : les deux fonctions ci-dessus sont appelées depuis
+      `DashboardViewModel` **seulement** pour les canaux « Actif » sans planning ni présence ni
+      décompte connu (le seul cas où ce seuil serait sinon invisible), jamais pour tous les canaux
+      à chaque cycle — Cas A essayé en premier, Cas B en repli (les deux ne sont jamais vrais en
+      même temps pour un canal donné). Résultat fusionné dans `TileUiState.pendingThresholdW`
+      (même champ que pour un minuteur avec durée, une seule source pour `DeviceTile`). Affiché
+      sur sa propre ligne, jamais concaténé au décompte — la combinaison sur une seule ligne
+      (« Actif · depuis 12:34 · Coupure à 5 W ») entrait en collision avec l'interrupteur sur la
+      tuile prise seule (retour David, 2026-08-22) :
+      ```
+      Actif · depuis 12:34
+      Coupure à 5 W
+      ```
+    - **Trouvé au passage, fait le 2026-08-22 : un planning avec coupure sur seuil n'affichait
+      que l'horaire sur la tuile.** La donnée était déjà là (`Planning.cutoffThresholdW`, relue
+      systématiquement par `DeviceRepository.getPlannings` via `Script.GetCode` — fiable ici, ce
+      script-là est un one-shot jamais modifié par `Eval` après son premier déploiement,
+      contrairement aux superviseurs partagés) : juste jamais affichée. Pur ajout d'affichage dans
+      la branche `activePlanning != null` de `DeviceTile.toVisual`, aucune nouvelle lecture réseau.
+
+  - **Refonte des couleurs/libellés d'état — faite le 2026-08-22, en discutant de la valeur du
+    seuil ci-dessus.** David a repéré une incohérence en testant : un minuteur natif en cours
+    (bouton avec durée, ou Perso/Manuel) était étiqueté « Planifié » comme un vrai planning —
+    alors que pour lui « Planification » ne veut dire qu'une chose : un début et une fin décidés
+    **à l'avance**, jamais un minuteur lancé maintenant. Ça expliquait aussi une remarque
+    précédente sur la couleur orange, perçue comme une alerte.
+    - **Minuteur natif en cours reclassé « Actif »** (vert), qu'il ait une durée (décompte) ou
+      pas (déjà fait juste avant, seuil sans durée) — les deux se rejoignent enfin sous le même
+      libellé, cohérent avec la définition de David. Seul un vrai planning (`activePlanning`)
+      garde « Planifié ».
+    - **Présence et Planifié, jusque-là même couleur (orange, `timedText`), séparés en deux
+      teintes distinctes** — maquettes comparées en direct avec David (Bleu/Turquoise/Violet/Rose
+      pour Présence, Violet/Rose/Indigo/Ambre pour Planifié) : retenu **indigo pour Présence**
+      (`presenceLed`/`presenceText`, `#378ADD`/`#0C447C` en clair) et **violet pour Planifié**
+      (`plannedLed`/`plannedText`, `#7F77DD`/`#534AB7` en clair) — `StateColors.kt`
+      ([StateColors.kt](app/src/main/java/kapoue/hestia/ui/theme/StateColors.kt)). Valeurs sombres
+      choisies dans la même famille (bleu/violet clairs, cohérents avec le reste de la palette
+      sombre déjà en place) mais pas testées en direct (David est en thème clair). **À vérifier
+      que les deux teintes ne se confondent pas à l'usage réel, sur écran — David a prévenu que
+      c'était son inquiétude principale avant de valider.**
+    - Répercuté sur l'écran Détail (`DetailScreen.PlanningRow`, la mise en avant « En cours »
+      partagée planning/présence choisit maintenant la bonne couleur selon `Planning.isPresence`).
+    - **Effet de bord accepté, pas corrigé ici** : le badge d'état de l'écran Détail
+      (`StatusBadge.kt`, tout en haut de l'écran) a sa propre logique plus simple, un seul état
+      « Minuterie » pour tout minuteur en cours (seuil ou pas, jamais distingué de Planifié à cet
+      endroit) — récupère maintenant la couleur violette de `plannedLed` par simple renommage de
+      champ, sans que ce soit un choix délibéré pour cet endroit précis. Incohérent avec le
+      reclassement « Actif » ci-dessus, mais écran/composant différent, pas demandé, à revoir
+      séparément si ça gêne à l'usage.
 
 - **Audit des fonctions RPC de la prise non gérées** par Hestia (mesure d'énergie détaillée,
   métriques cumulées, etc.).

@@ -13,61 +13,52 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import kapoue.hestia.R
+import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.ui.screens.dashboard.PresenceInfo
 import kapoue.hestia.ui.screens.dashboard.TileStatus
+import kapoue.hestia.ui.screens.dashboard.toVisual
 import kapoue.hestia.ui.theme.stateColors
 
-private enum class BadgeLed { FILLED, HOLLOW, SPINNER }
-
 /**
- * Badge d'état d'un canal (LED + libellé texte), cohérent avec les tuiles du Tableau.
- * La couleur seule ne porte jamais l'information : le libellé l'accompagne toujours.
+ * Badge d'état d'un canal (point + libellé texte), en haut de l'écran Détail — même
+ * classification que les tuiles du Tableau ([TileStatus.toVisual], réutilisé tel quel) : Actif,
+ * Présence, Planifié, Éteint, Indisponible ont chacun leur couleur, jamais mélangés (2026-08-22 —
+ * avant ça, ce badge avait sa propre logique plus pauvre, ne distinguait ni Présence ni Planifié).
+ * Même principe que le cercle des tuiles : l'**anneau** du point reflète le fait physique (courant
+ * ou non), le **centre** reflète le régime (même couleur que le libellé) — lisible même sans lire
+ * le texte (retour David, 2026-08-22). La couleur seule ne porte jamais l'information : le
+ * libellé l'accompagne toujours. Le seuil (« Coupure à X W ») n'est volontairement pas repris
+ * ici, déjà affiché plus bas sur l'écran (section minuteur) — ce badge ne montre que l'état
+ * général.
  */
 @Composable
 fun StatusBadge(
     status: TileStatus,
     elapsedNow: Long,
+    presence: PresenceInfo? = null,
+    activePlanning: Planning? = null,
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.stateColors
-    val online = status as? TileStatus.Online
-    val remaining = online?.timerEndsAtElapsed?.let { ((it - elapsedNow) / 1000).coerceAtLeast(0) }
-
-    val led: BadgeLed
-    val color: Color
-    val labelRes: Int
-    when {
-        status is TileStatus.Loading -> {
-            led = BadgeLed.SPINNER; color = colors.idleText; labelRes = R.string.state_loading
-        }
-        remaining != null && remaining > 0 -> {
-            led = BadgeLed.FILLED; color = colors.timedLed; labelRes = R.string.state_timed
-        }
-        online != null && online.output -> {
-            led = BadgeLed.FILLED; color = colors.activeLed; labelRes = R.string.state_active
-        }
-        online != null -> {
-            led = BadgeLed.HOLLOW; color = colors.idleLed; labelRes = R.string.state_idle
-        }
-        else -> {
-            led = BadgeLed.FILLED; color = colors.offlineLed; labelRes = R.string.state_offline
-        }
-    }
+    val visual = status.toVisual(colors, elapsedNow, presence, activePlanning, pendingThresholdW = null, onSinceElapsed = null)
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        when (led) {
-            BadgeLed.FILLED -> Box10(Modifier.clip(RoundedCornerShape(50)).background(color))
-            BadgeLed.HOLLOW -> Box10(Modifier.border(1.5.dp, color, RoundedCornerShape(50)))
-            BadgeLed.SPINNER -> CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp)
+        if (visual.loading) {
+            CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 2.dp)
+        } else {
+            Box10(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(visual.textColor)
+                    .border(1.5.dp, visual.ringColor, RoundedCornerShape(50)),
+            )
         }
         Spacer(Modifier.size(8.dp))
         Text(
-            text = stringResource(labelRes),
+            text = visual.label,
             style = MaterialTheme.typography.titleSmall,
-            color = if (led == BadgeLed.SPINNER) MaterialTheme.colorScheme.onSurfaceVariant else color,
+            color = if (visual.loading) MaterialTheme.colorScheme.onSurfaceVariant else visual.textColor,
         )
     }
 }

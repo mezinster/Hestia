@@ -25,8 +25,16 @@ data class StateColorSet(
     val idleLed: Color,
     val idleText: Color,
     val idleBg: Color,
-    val timedLed: Color,
-    val timedText: Color,
+    /** Simulation de présence en cours — distinct de [plannedLed]/[plannedText] depuis le
+     * 2026-08-22 (retour David : un « vrai » planning décidé à l'avance n'est pas la même chose
+     * qu'une présence simulée, gardait pourtant la même couleur jusque-là). */
+    val presenceLed: Color,
+    val presenceText: Color,
+    /** Vrai planning (jours/horaires décidés à l'avance) uniquement — un minuteur natif en cours
+     * (bouton, Perso/Manuel) est reclassé « Actif » depuis le 2026-08-22, ce n'est pas de la
+     * planification au sens de David (« début et fin décidés pour plus tard »). */
+    val plannedLed: Color,
+    val plannedText: Color,
     val offlineLed: Color,
     val offlineText: Color,
     val offlineBg: Color,
@@ -35,14 +43,16 @@ data class StateColorSet(
 private val DarkStateColors = StateColorSet(
     activeLed = Color(0xFF4ADE80), activeText = Color(0xFF4ADE80), activeBg = Color(0xFF1E2B1C),
     idleLed = Color(0xFF5A616B), idleText = Color(0xFF949AA4), idleBg = Color(0xFF232323),
-    timedLed = Color(0xFFF5843F), timedText = Color(0xFFF5843F),
+    presenceLed = Color(0xFF85B7EB), presenceText = Color(0xFF85B7EB),
+    plannedLed = Color(0xFFAFA9EC), plannedText = Color(0xFFAFA9EC),
     offlineLed = Color(0xFFF0716E), offlineText = Color(0xFFF0716E), offlineBg = Color(0xFF2E1918),
 )
 
 private val LightStateColors = StateColorSet(
     activeLed = Color(0xFF22B04B), activeText = Color(0xFF178C46), activeBg = Color(0xFFEAF3DE),
     idleLed = Color(0xFF9AA0A8), idleText = Color(0xFF5A6167), idleBg = Color(0xFFF1EFE8),
-    timedLed = Color(0xFFE8622C), timedText = Color(0xFFC24E1B),
+    presenceLed = Color(0xFF378ADD), presenceText = Color(0xFF0C447C),
+    plannedLed = Color(0xFF7F77DD), plannedText = Color(0xFF534AB7),
     offlineLed = Color(0xFFD8342A), offlineText = Color(0xFFC0342B), offlineBg = Color(0xFFFCEBEB),
 )
 

@@ -1,6 +1,7 @@
 package kapoue.hestia.data.presence
 
 import kapoue.hestia.data.notifications.NtfyScriptSupport
+import kotlinx.serialization.json.Json
 
 /**
  * Génère le script de **coupure sur seuil de consommation** (« Active pour … + coupe sous X W »).
@@ -288,4 +289,27 @@ object ChargeScriptGenerator {
           STATE = keptState;
         })();
     """.trimIndent()
+
+    /**
+     * Code `Script.Eval` pour lire (canal, seuil) de tous les canaux actuellement surveillés —
+     * juste ce qu'il faut pour afficher « Actif · Coupure à X W » sur un minuteur sans limite de
+     * durée (aucun décompte natif pour le signaler autrement), validé en direct sur la Strip4 le
+     * 2026-08-22. N'expose que switchId/thresholdW, pas le reste de CFG (nom, grâce…), pour ne
+     * pas coupler cette lecture à la forme interne du script.
+     */
+    fun evalReadConfig(): String = """
+        (function () {
+          let r = [];
+          for (let i = 0; i < CFG.length; i++) {
+            r.push([CFG[i].switchId, CFG[i].thresholdW]);
+          }
+          return JSON.stringify(r);
+        })();
+    """.trimIndent()
+
+    /** Décode le JSON renvoyé par [evalReadConfig] (champ `result` de `Script.Eval`). */
+    fun parseEvalResult(json: String): List<Pair<Int, Int>> {
+        val rows = runCatching { Json.decodeFromString<List<List<Int>>>(json) }.getOrNull() ?: return emptyList()
+        return rows.mapNotNull { r -> if (r.size < 2) null else r[0] to r[1] }
+    }
 }

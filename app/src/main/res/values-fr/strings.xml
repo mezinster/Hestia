@@ -211,7 +211,6 @@
     <string name="state_idle">Éteint</string>
     <!-- Encore utilisé par le badge d'état de l'écran Détail (StatusBadge), qui n'a pas besoin
          de distinguer minuteur/présence/planning comme le faisait la tuile du Tableau. -->
-    <string name="state_timed">Minuterie</string>
     <!-- Tuile du Tableau uniquement : un seul mot pour minuteur ou planning précis en cours — le
          régime exact se lit sur l'écran détail, pas sur la tuile (2026-08-17). La présence a son
          propre libellé ci-dessous (2026-08-19, retour de test réel : ne pas savoir si c'est une
@@ -348,7 +347,7 @@
 
     <!-- Bascule manuelle pendant une simulation de présence (Tableau) -->
     <string name="presence_toggle_title">Simulation de présence active</string>
-    <string name="presence_toggle_message">Agir sur l\'interrupteur n\'aura qu\'un effet passager : le programme reprendra la main sur la prise.</string>
+    <string name="presence_toggle_message">L\'interrupteur coupe la simulation en cours — pas seulement pour aujourd\'hui, tous les jours programmés.</string>
     <string name="presence_toggle_stop">Arrêter la simulation</string>
 
     <!-- Conflit minuteur / présence -->

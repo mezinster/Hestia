@@ -195,12 +195,13 @@ fun DashboardScreen(
                                         tile = tile,
                                         elapsedNow = elapsedNow,
                                         onToggle = { turnOn ->
-                                            // Une simulation en cours reprendrait la main : on demande
-                                            // d'abord si l'on doit l'arrêter, plutôt que de laisser
-                                            // l'utilisateur croire à un interrupteur défaillant.
+                                            // Présence active : le bouton ON/OFF ne fait que
+                                            // couper la simulation, jamais relancer autre chose à
+                                            // la place (retour David, 2026-08-22) — confirmation
+                                            // d'abord, la portée (tous les jours) le mérite.
                                             val running = tile.presence
                                             if (running != null) {
-                                                pendingToggle = PendingToggle(tile.device, turnOn, running)
+                                                pendingToggle = PendingToggle(tile.device, running)
                                             } else {
                                                 viewModel.toggle(tile.device, turnOn)
                                             }
@@ -221,7 +222,7 @@ fun DashboardScreen(
         PresenceToggleDialog(
             presence = pending.presence,
             onStopSimulation = {
-                viewModel.stopPresenceThenToggle(pending.device, pending.turnOn)
+                viewModel.stopPresence(pending.device)
                 pendingToggle = null
             },
             onDismiss = { pendingToggle = null },
@@ -233,12 +234,12 @@ fun DashboardScreen(
             tile = tile,
             elapsedNow = elapsedNow,
             onToggle = { turnOn ->
-                // Même garde-fou que la tuile solo : une simulation en cours reprendrait la
-                // main, on demande d'abord si l'on doit l'arrêter.
+                // Même règle que la tuile solo : présence active = le bouton coupe la
+                // simulation, point, jamais un toggle à la place.
                 val running = tile.presence
                 quickSheetTile = null
                 if (running != null) {
-                    pendingToggle = PendingToggle(tile.device, turnOn, running)
+                    pendingToggle = PendingToggle(tile.device, running)
                 } else {
                     viewModel.toggle(tile.device, turnOn)
                 }
@@ -252,10 +253,9 @@ fun DashboardScreen(
     }
 }
 
-/** Bascule demandée sur une prise pilotée par une simulation, en attente de confirmation. */
+/** Interruption demandée sur une prise pilotée par une simulation, en attente de confirmation. */
 private data class PendingToggle(
     val device: Device,
-    val turnOn: Boolean,
     val presence: PresenceInfo,
 )
 
@@ -299,10 +299,11 @@ private fun PermissionBanner() {
 }
 
 /**
- * Prévient que la prise est pilotée par un programme avant d'agir sur l'interrupteur, et
- * propose de l'arrêter. Deux issues seulement : arrêter la simulation puis basculer, ou
- * renoncer — on ne propose pas de « basculer quand même », dont l'effet ne durerait que
- * jusqu'à la prochaine action du script.
+ * Confirme avant de couper une simulation de présence depuis l'interrupteur ON/OFF — visuellement
+ * un bouton ON/OFF, l'utilisateur s'attend à couper le programme en cours, pas à en relancer un
+ * autre à la place (retour David, 2026-08-22). Deux issues seulement : arrêter la simulation, ou
+ * renoncer — jamais de bascule après coup, et jamais de « basculer quand même » (son effet ne
+ * durerait que jusqu'à la prochaine action du script).
  */
 @Composable
 private fun PresenceToggleDialog(

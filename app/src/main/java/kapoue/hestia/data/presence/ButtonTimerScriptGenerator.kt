@@ -254,6 +254,31 @@ object ButtonTimerScriptGenerator {
         }
     }
 
+    /**
+     * Code `Script.Eval` pour lire (canal, seuil) des seuls canaux **actuellement armés** avec un
+     * seuil configuré — contrairement à [evalReadConfig], qui liste tous les canaux configurés
+     * pour un futur appui, armés ou non. Sert à afficher « Actif · Coupure à X W » sur un minuteur
+     * bouton sans limite de durée (aucun décompte natif pour le signaler autrement), validé en
+     * direct sur la Strip4 le 2026-08-22 (`CFG`/`STATE` alignés par indice, croisés ici).
+     */
+    fun evalReadArmedThresholds(): String = """
+        (function () {
+          let r = [];
+          for (let i = 0; i < CFG.length; i++) {
+            if (STATE[i].armed && CFG[i].thresholdW !== null) {
+              r.push([CFG[i].switchId, CFG[i].thresholdW]);
+            }
+          }
+          return JSON.stringify(r);
+        })();
+    """.trimIndent()
+
+    /** Décode le JSON renvoyé par [evalReadArmedThresholds] (champ `result` de `Script.Eval`). */
+    fun parseArmedThresholds(json: String): List<Pair<Int, Int>> {
+        val rows = runCatching { Json.decodeFromString<List<List<Int>>>(json) }.getOrNull() ?: return emptyList()
+        return rows.mapNotNull { r -> if (r.size < 2) null else r[0] to r[1] }
+    }
+
     /** Code `Script.Eval` pour lire le snapshot vivant complet (config **et** état) — réalignement flash. */
     fun evalReadFull(): String = "JSON.stringify({cfg:CFG,state:STATE})"
 

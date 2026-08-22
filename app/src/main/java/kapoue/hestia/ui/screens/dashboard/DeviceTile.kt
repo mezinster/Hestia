@@ -129,6 +129,21 @@ fun DeviceTile(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                // Seuil sur sa propre ligne, jamais concaténé à la ligne ci-dessus : la combinaison
+                // sur une seule ligne entrait en collision avec l'interrupteur (retour David,
+                // 2026-08-22).
+                visual.thresholdText?.let {
+                    Text(
+                        text = it,
+                        color = visual.textColor,
+                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.labelSmall,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
 
             Spacer(Modifier.height(10.dp))
@@ -202,7 +217,7 @@ private fun RoundToggleButton(enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
-private data class TileVisual(
+internal data class TileVisual(
     val bgColor: Color,
     val ringColor: Color,
     val textColor: Color,
@@ -210,24 +225,32 @@ private data class TileVisual(
     val countdown: String?,
     val dashed: Boolean,
     val loading: Boolean = false,
+    /**
+     * Seuil de coupure surveillant ce canal, sur sa **propre ligne** — jamais concaténé au
+     * [countdown] : la combinaison des deux (ex. « Actif · depuis 12:34 · Coupure à 5 W »)
+     * entrait en collision avec l'interrupteur sur la tuile prise seule, en une seule ligne trop
+     * longue (retour David, 2026-08-22).
+     */
+    val thresholdText: String? = null,
 )
 
 /**
- * Cercle inspiré de la vraie prise (deux trous) : anneau = fait physique. Le texte de régime
- * (« Planifié », compte à rebours…) est affiché par l'appelant sur sa propre ligne, sous le
- * cercle — trop à l'étroit à l'intérieur d'un cercle de 76dp dès qu'il dépassait un mot court
- * (retour de test réel, 2026-08-22).
+ * Cercle inspiré de la vraie prise (deux trous) : anneau = fait physique (courant ou non),
+ * disque = régime (même couleur que le texte d'état en dessous — Actif vert, Présence indigo,
+ * Planifié violet…), lisible même sans lire le texte (retour David, 2026-08-22 : avant ça, le
+ * disque suivait aussi le fait physique, aucune distinction visuelle entre les régimes sans lire
+ * le texte). Le texte de régime lui-même (« Planifié », compte à rebours…) est affiché par
+ * l'appelant sur sa propre ligne, sous le cercle — trop à l'étroit à l'intérieur d'un cercle de
+ * 76dp dès qu'il dépassait un mot court (retour de test réel, 2026-08-22).
  */
 @Composable
 private fun PlugCircle(visual: TileVisual) {
-    // Le disque reprend la teinte de fond de la tuile (comme demandé après test réel — un disque
-    // blanc détonnait) ; les trous, eux, tranchent en blanc/surface pour rester visibles dessus.
     val holeColor = MaterialTheme.colorScheme.surface
     Box(modifier = Modifier.size(76.dp), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(76.dp)) {
             val strokeWidthPx = 2.dp.toPx()
             val radius = size.minDimension / 2 - strokeWidthPx / 2
-            drawCircle(color = visual.bgColor, radius = radius + strokeWidthPx)
+            drawCircle(color = visual.textColor, radius = radius + strokeWidthPx)
             drawCircle(
                 color = visual.ringColor,
                 radius = radius,
@@ -255,8 +278,15 @@ private fun PlugCircle(visual: TileVisual) {
     }
 }
 
+/**
+ * `internal` (pas `private`) : réutilisé par [kapoue.hestia.ui.components.StatusBadge] sur
+ * l'écran Détail, pour que la classification état/couleur ne vive qu'à un seul endroit
+ * (2026-08-22 — le badge avait sa propre logique plus pauvre, désynchronisée : ne distinguait ni
+ * Présence ni Planifié, et le minuteur en cours y restait « Minuterie » orange après que le
+ * Tableau soit passé à « Actif » vert).
+ */
 @Composable
-private fun TileStatus.toVisual(
+internal fun TileStatus.toVisual(
     colors: StateColorSet,
     elapsedNow: Long,
     presence: PresenceInfo?,
@@ -281,19 +311,23 @@ private fun TileStatus.toVisual(
         val physicalBg = if (output) colors.activeBg else colors.idleBg
         val remaining = timerEndsAtElapsed?.let { ((it - elapsedNow) / 1000).coerceAtLeast(0) }
         when {
+            // Minuteur natif en cours (bouton avec durée, ou Perso/Manuel) : reclassé « Actif »
+            // depuis « Planifié » (retour David, 2026-08-22) — un minuteur lancé maintenant n'est
+            // pas de la planification (début/fin décidés à l'avance), juste un allumage manuel
+            // avec un décompte. Couleur verte au passage (n'empruntait plus l'orange à tort).
             remaining != null && remaining > 0 -> TileVisual(
-                bgColor = physicalBg, ringColor = ringColor, textColor = colors.timedText,
-                label = stringResource(R.string.state_planned),
-                // Le seuil réutilise le libellé déjà utilisé pour ce même réglage dans l'écran
-                // Détail (timer_preset_cutoff_detail) — pas de « · 10 W » nu, ambigu avec la
-                // vraie consommation instantanée affichée juste en dessous sur la tuile
-                // (retour David, 2026-08-22).
-                countdown = formatCountdown(remaining) +
-                    (pendingThresholdW?.let { " · " + stringResource(R.string.timer_preset_cutoff_detail, it) } ?: ""),
+                bgColor = physicalBg, ringColor = ringColor, textColor = colors.activeText,
+                label = stringResource(R.string.state_active),
+                countdown = formatCountdown(remaining),
                 dashed = false,
+                // Le seuil réutilise le libellé déjà utilisé pour ce même réglage dans l'écran
+                // Détail (timer_preset_cutoff_detail) — pas de « 10 W » nu, ambigu avec la vraie
+                // consommation instantanée affichée juste en dessous sur la tuile (retour David,
+                // 2026-08-22).
+                thresholdText = pendingThresholdW?.let { stringResource(R.string.timer_preset_cutoff_detail, it) },
             )
             presence != null -> TileVisual(
-                bgColor = physicalBg, ringColor = ringColor, textColor = colors.timedText,
+                bgColor = physicalBg, ringColor = ringColor, textColor = colors.presenceText,
                 label = stringResource(R.string.state_presence),
                 countdown = formatTimeRange(
                     presence.startHour, presence.startMinute,
@@ -302,18 +336,22 @@ private fun TileStatus.toVisual(
                 dashed = false,
             )
             activePlanning != null -> TileVisual(
-                bgColor = physicalBg, ringColor = ringColor, textColor = colors.timedText,
+                bgColor = physicalBg, ringColor = ringColor, textColor = colors.plannedText,
                 label = stringResource(R.string.state_planned),
                 countdown = "%02d:%02d – %02d:%02d".format(
                     activePlanning.startHour, activePlanning.startMinute,
                     activePlanning.endHour, activePlanning.endMinute,
                 ),
                 dashed = false,
+                // Déjà relu par DeviceRepository.getPlannings (Script.GetCode du script de
+                // coupure dédié à ce planning, fiable — jamais modifié par Eval après son premier
+                // déploiement) : juste jamais affiché jusqu'ici (bonus repéré le 2026-08-22).
+                thresholdText = activePlanning.cutoffThresholdW?.let { stringResource(R.string.timer_preset_cutoff_detail, it) },
             )
             output -> TileVisual(
                 bgColor = colors.activeBg, ringColor = ringColor, textColor = colors.activeText,
                 label = stringResource(R.string.state_active),
-                // Durée du ON en cours (voir DashboardViewModel.onSinceElapsed) : null tant
+                // Durée du ON en cours (voir DashboardViewModel.onSinceElapsed) : absente tant
                 // qu'aucune référence fiable n'a encore été observée pour ce canal. Préfixée
                 // (« depuis »/« for ») pour ne pas se lire comme un décompte qui descend, alors
                 // que celui-ci grimpe (retour David, 2026-08-22).
@@ -321,6 +359,10 @@ private fun TileStatus.toVisual(
                     stringResource(R.string.tile_on_since, formatCountdown(((elapsedNow - it) / 1000).coerceAtLeast(0)))
                 },
                 dashed = false,
+                // Seuil d'un minuteur « sans limite de durée » surveillé par hestia_charge (voir
+                // DashboardViewModel.activeChargeThresholds) — sinon invisible faute de décompte
+                // natif à côté duquel l'afficher (retour David, 2026-08-22).
+                thresholdText = pendingThresholdW?.let { stringResource(R.string.timer_preset_cutoff_detail, it) },
             )
             else -> TileVisual(
                 bgColor = colors.idleBg, ringColor = ringColor, textColor = colors.idleText,
@@ -412,7 +454,7 @@ private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> U
         Canvas(modifier = Modifier.size(44.dp)) {
             val strokeWidthPx = 1.5.dp.toPx()
             val radius = size.minDimension / 2 - strokeWidthPx / 2
-            drawCircle(color = visual.bgColor, radius = radius + strokeWidthPx)
+            drawCircle(color = visual.textColor, radius = radius + strokeWidthPx)
             drawCircle(
                 color = visual.ringColor,
                 radius = radius,
@@ -487,6 +529,9 @@ fun ChannelQuickSheet(
                                 style = MaterialTheme.typography.bodyLarge,
                             )
                         }
+                    }
+                    visual.thresholdText?.let {
+                        Text(text = it, color = visual.textColor, style = MaterialTheme.typography.bodyMedium)
                     }
                     if (powerWatts != null) {
                         Text(

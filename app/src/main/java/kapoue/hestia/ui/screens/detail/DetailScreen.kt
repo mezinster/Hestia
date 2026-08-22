@@ -75,6 +75,7 @@ import kapoue.hestia.ui.components.StatusBadge
 import kapoue.hestia.ui.components.TimeWheelPicker
 import kapoue.hestia.ui.components.ValueWheelPicker
 import kapoue.hestia.ui.permission.LocalNetworkPermission
+import kapoue.hestia.ui.screens.dashboard.PresenceInfo
 import kapoue.hestia.ui.screens.dashboard.TileStatus
 import kapoue.hestia.ui.theme.stateColors
 import kotlinx.coroutines.delay
@@ -186,7 +187,17 @@ fun DetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             DeviceHeader(dev, activeIp ?: dev.ipAddress)
-            StatusBadge(status = status, elapsedNow = elapsedNow)
+            // Même classification que le Tableau (voir StatusBadge) : présence et planning
+            // reconstruits depuis la même liste unifiée que le reste de l'écran, jamais une
+            // requête de plus.
+            val activePresence = plannings.firstOrNull { it.isPresence && it.isActiveNow() }
+            val activePlanning = plannings.firstOrNull { !it.isPresence && it.isActiveNow() }
+            StatusBadge(
+                status = status,
+                elapsedNow = elapsedNow,
+                presence = activePresence?.let { PresenceInfo(it.startHour, it.startMinute, it.endHour, it.endMinute) },
+                activePlanning = activePlanning,
+            )
 
             if (dev.supportsSwitch) {
                 HorizontalDivider()
@@ -691,9 +702,11 @@ private fun PlanningSection(
 @Composable
 private fun PlanningRow(planning: Planning, isActive: Boolean, onEdit: () -> Unit, onDelete: () -> Unit, onPause: () -> Unit) {
     // Mise en avant du planning qui pilote réellement la prise en ce moment (2026-08-17) — même
-    // couleur que « Planifié » sur le Tableau, cohérence du vocabulaire visuel. Jamais de couleur
-    // seule : le petit texte « En cours » accompagne toujours la couleur.
-    val activeColor = MaterialTheme.stateColors.timedText
+    // couleur que sur le Tableau, cohérence du vocabulaire visuel (Présence et Planifié ont
+    // chacun la leur depuis le 2026-08-22). Jamais de couleur seule : le petit texte « En cours »
+    // accompagne toujours la couleur.
+    val colors = MaterialTheme.stateColors
+    val activeColor = if (planning.isPresence) colors.presenceText else colors.plannedText
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         // Un tap sur les horaires ouvre l'édition (sauf si le planning est en cours).
         Column(

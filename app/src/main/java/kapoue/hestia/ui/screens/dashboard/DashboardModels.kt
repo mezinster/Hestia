@@ -55,7 +55,13 @@ data class TileUiState(
     val presence: PresenceInfo? = null,
     /** Plannings présents sur l'appareil ; la tuile affiche celui **en cours** s'il y en a un. */
     val plannings: List<Planning> = emptyList(),
-    /** Seuil du minuteur en attente (mémo local), affiché à côté du décompte si actif. */
+    /**
+     * Seuil surveillant actuellement ce canal, affiché à côté du décompte s'il y en a un, ou de
+     * la durée du ON sinon. Deux sources fusionnées par
+     * [kapoue.hestia.ui.screens.dashboard.DashboardViewModel] : un minuteur natif avec durée
+     * (souvenir local confirmé par l'appareil) ou un minuteur « sans limite de durée » relu en
+     * direct sur le script `hestia_charge` (voir `DeviceRepository.getActiveChargeThreshold`).
+     */
     val pendingThresholdW: Int? = null,
     /**
      * Instant d'allumage du canal, dans le référentiel SystemClock.elapsedRealtime (ms) — même
