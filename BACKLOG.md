@@ -2,7 +2,8 @@
 
 Points relevés en cours de route, à traiter dans un lot ultérieur (pas des bugs bloquants).
 Dernière mise à jour : 2026-08-22 (correctif d'application immédiate des plannings, durée du
-ON, seuils et refonte des couleurs d'état publiés en 2.5.0).
+ON, seuils et refonte des couleurs d'état publiés en 2.5.0 — republiés en 2.5.1 après un correctif
+de compilation, apostrophe non échappée dans une chaîne anglaise).
 
 ## Fait — en cours (à surveiller)
 
