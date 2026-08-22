@@ -1,0 +1,1 @@
+Version 2.5.1. Correctif de compilation uniquement (apostrophe mal échappée dans un texte anglais empêchait la 2.5.0 de compiler) — mêmes nouveautés que la 2.5.0 : application immédiate des plannings, durée du courant affichée, seuils sur « Actif », nouvelles couleurs Présence/Planning.

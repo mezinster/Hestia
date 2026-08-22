@@ -1,0 +1,1 @@
+Version 2.5.1. Build fix only (an unescaped apostrophe in an English string broke 2.5.0's build) — same new features as 2.5.0: schedules apply immediately, on-time display, thresholds shown on "On", new Presence/Schedule colors.
