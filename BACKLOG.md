@@ -410,6 +410,78 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
 ## Fonctionnalités futures
 
+- **Conflit minuteur bouton / présence sur un même canal — évaluation détaillée demandée par
+  David le 2026-08-22 avant tout « go », pas codé.** Vécu en direct sur la prise 4 (Strip4,
+  switchId 3), qui a les deux configurés en même temps.
+
+  **Le problème, précisément.** `hestia_button_timer` et `hestia_presence` tournent en toute
+  indépendance, sans jamais se parler. Un appui bouton qui allume un canal — y compris un appui
+  qui se voulait « couper la présence » mais qui, la prise étant déjà éteinte à ce moment-là, ne
+  peut physiquement que la rallumer — est vu par `hestia_button_timer` comme un appui bouton
+  normal : il arme son propre minuteur natif (`toggle_after` + seuil éventuel), sans savoir
+  qu'une présence gouverne déjà ce canal. Deux conséquences : (1) affichage — `DeviceTile.
+  toVisual` vérifie la branche « minuteur en cours » **avant** la branche « présence », donc la
+  tuile affiche « Actif · décompte » et masque totalement la présence ; (2) fonctionnel, plus
+  grave — le minuteur natif du bouton coupera la prise à **sa** propre échéance (33 min sur la
+  prise 4, sans rapport avec les horaires de présence), et son seuil (50 W ici) surveille la
+  conso indépendamment — la présence continue de tourner en arrière-plan sans qu'on la voie, et
+  peut se faire couper l'herbe sous le pied par ces deux mécanismes.
+
+  **Idée retenue (proposée par David, simplifiée à l'usage) : donner à `hestia_button_timer` une
+  liste de plages où ne **pas** s'armer, par canal — les plages de présence de ce canal,
+  telles quelles.** Pas besoin de calculer un « négatif » (17h-9h) comme David l'envisageait au
+  départ : lui donner directement les plages de présence (9h-17h) comme plages **interdites à
+  l'armement** produit exactement le même résultat (armé partout sauf sur ces plages), sans les
+  calculs de passage minuit qu'un vrai négatif demanderait. Le script de présence a déjà toute la
+  logique de comparaison horaire nécessaire (passage minuit compris) — à reprendre telle quelle
+  plutôt qu'à réinventer, sur le même principe qu'`evalStopToday` a réutilisé le calcul de
+  fenêtre existant.
+
+  **Ce que ça demande, concrètement :**
+  - `ButtonTimerScriptGenerator.ChannelConfig` gagne une liste de plages interdites (même forme
+    que les plages de présence).
+  - La logique d'armement (`if (st.output && !s.wasOn && isButtonSource(st.source))`) vérifie
+    d'abord si `now` tombe dans une de ces plages ; si oui, l'appui reste un simple relais —
+    `wasOn` se met à jour, mais pas d'armement, pas de minuteur natif posé.
+  - Chaque étape du cycle de vie d'une présence sur un canal (création, modification,
+    suppression) doit pousser la liste à jour vers le minuteur bouton du **même** canal — sans
+    quoi la liste devient périmée en silence, exactement le genre de bug de synchronisation qu'on
+    vient de corriger ce soir pour le mémo « désactivé aujourd'hui » (`clearPresenceDisabledToday`
+    oublié à un endroit → bug revenu). Autant de points de synchronisation à ne manquer nulle
+    part : `createPlanning`, `updatePlanning`, `deletePlanning`, `stopPresence` — quatre chemins
+    minimum, potentiellement plus si on compte les migrations d'anciens scripts.
+
+  **Dommage collatéral non trivial, à trancher avant de coder — pas de réponse évidente.**
+  La coupure « pour aujourd'hui seulement » d'une présence (`stopPresenceForToday`) ne vit que
+  dans `STATE` (mémoire vive), volontairement — c'est ce qui lui permet de s'effacer toute seule
+  le lendemain sans toucher à `CFG`. Mais la liste de plages interdites du minuteur bouton, elle,
+  vivrait forcément dans `CFG` (pas de sens d'avoir un « aujourd'hui seulement » sur une config
+  qui doit rester stable jour après jour). Conséquence : si tu coupes la présence pour
+  aujourd'hui via le bouton, le minuteur bouton continuerait de croire la plage interdite pour le
+  reste de la journée — **le bouton physique resterait bloqué (simple bascule, jamais de
+  minuteur) même après que tu aies explicitement dit « pas aujourd'hui » à la présence.** Pour
+  que le bouton retrouve son comportement normal le même jour, il faudrait que
+  `hestia_button_timer` lise aussi l'état vivant de `hestia_presence` (pas juste sa config figée)
+  — un vrai couplage entre les deux scripts à l'exécution, plus complexe que la simple poussée de
+  config décrite ci-dessus. **Question pour David** : est-ce acceptable que le bouton reste
+  « en sourdine » (bascule simple, sans minuteur) jusqu'au lendemain une fois la présence coupée
+  pour le jour, ou faut-il vraiment qu'il retrouve son comportement normal dans l'heure qui suit ?
+  La réponse change significativement la taille du chantier.
+
+  **Autre angle mort identifié** : un minuteur bouton déjà armé **avant** le début d'une fenêtre
+  de présence (ex. appui à 8h55, présence qui commence à 9h) continuerait sa course jusqu'à son
+  échéance propre, sans que ce correctif n'y change rien — le blocage n'empêche qu'un **nouvel**
+  armement, pas un minuteur déjà en cours qui chevauche le début d'une fenêtre. Cas rare, mais à
+  documenter pour ne pas être surpris si ça se reproduit après le correctif.
+
+  **Plan de validation proposé, pour éviter la galère de tests d'une fonctionnalité mal comprise** :
+  Lot 1 (curl uniquement, comme le chantier persistance) — pousser à la main une version modifiée
+  de `hestia_button_timer` avec une plage interdite figée sur un canal de test, vérifier par appui
+  bouton réel qu'il n'arme pas dedans et arme normalement en dehors, avant d'écrire une seule
+  ligne de Kotlin. Lot 2 seulement ensuite : plomberie complète (génération de script, points de
+  synchronisation). Lot 3 : test réel complet, y compris la coupure « aujourd'hui » en cours de
+  route pour vérifier le comportement retenu à la question ci-dessus.
+
 - **Retour visuel pendant l'enregistrement d'un planning — proposé par David le 2026-08-22,
   pas codé.** Le bouton « Enregistrer » (dialogue d'ajout/édition de planning) met environ 1 s à
   fermer la modale (aller-retour réseau) — assez pour qu'un double-clic passe inaperçu et crée
