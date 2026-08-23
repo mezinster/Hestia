@@ -100,6 +100,18 @@ fun DetailScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // Lecture locale pure (pas de RPC), réévaluée à chaque recomposition — donc à jour après
+    // chaque relevé, comme les autres États collectés ci-dessus. Une présence désactivée pour
+    // aujourd'hui (bouton ON/OFF du Tableau) ne doit jamais se dire « en cours » ici (retour
+    // David, 2026-08-22 : le badge et la liste des plannings l'ignoraient tous les deux).
+    val presenceDisabledToday = viewModel.isPresenceDisabledToday()
+    // Même principe côté planning récurrent (bouton ON/OFF app ou physique) — jamais pour un
+    // planning Unique, qui n'a pas de « lendemain » à distinguer.
+    val planningDisabledToday = viewModel.isPlanningDisabledToday()
+    fun Planning.isReallyActive(): Boolean = isActiveNow() &&
+        !(isPresence && presenceDisabledToday) &&
+        !(!isPresence && !once && planningDisabledToday)
+
     var showSheet by remember { mutableStateOf(false) }
     // Emplacement (1 ou 2) du réglage Perso en cours d'ajout/édition/suppression ; null = fermé.
     var editingPresetSlot by remember { mutableStateOf<Int?>(null) }
@@ -133,7 +145,7 @@ fun DetailScreen(
     var planningWarning by remember { mutableStateOf<Pair<PendingTimer, Planning>?>(null) }
 
     fun requestStartTimer(seconds: Int?, label: String, thresholdW: Int? = null) {
-        val activePlanning = plannings.firstOrNull { it.isActiveNow() }
+        val activePlanning = plannings.firstOrNull { it.isReallyActive() }
         when {
             // Une simulation de présence en cours est un vrai conflit (elle pilote la prise en
             // continu) : on la traite d'abord. Un planning précis n'est qu'un avertissement.
@@ -190,8 +202,8 @@ fun DetailScreen(
             // Même classification que le Tableau (voir StatusBadge) : présence et planning
             // reconstruits depuis la même liste unifiée que le reste de l'écran, jamais une
             // requête de plus.
-            val activePresence = plannings.firstOrNull { it.isPresence && it.isActiveNow() }
-            val activePlanning = plannings.firstOrNull { !it.isPresence && it.isActiveNow() }
+            val activePresence = plannings.firstOrNull { it.isPresence && it.isReallyActive() }
+            val activePlanning = plannings.firstOrNull { !it.isPresence && it.isReallyActive() }
             StatusBadge(
                 status = status,
                 elapsedNow = elapsedNow,
@@ -234,18 +246,20 @@ fun DetailScreen(
                 HorizontalDivider()
                 PlanningSection(
                     plannings = plannings,
+                    presenceDisabledToday = presenceDisabledToday,
+                    planningDisabledToday = planningDisabledToday,
                     onEdit = { p ->
                         viewModel.clearAddPlanningResult()
                         // Un planning en cours ne peut pas être édité (supprimerait l'extinction
                         // active) : on l'explique au lieu d'ouvrir le dialogue.
-                        if (p.isActiveNow()) blockedEditPlanning = p else editingPlanning = p
+                        if (p.isReallyActive()) blockedEditPlanning = p else editingPlanning = p
                     },
                     onAdd = {
                         viewModel.clearAddPlanningResult()
                         showAddPlanning = true
                     },
                     onDelete = { planningToDelete = it },
-                    onPause = { p -> if (p.isActiveNow()) planningToPause = p else viewModel.pausePlanning(p) },
+                    onPause = { p -> if (p.isReallyActive()) planningToPause = p else viewModel.pausePlanning(p) },
                     pausedPlannings = pausedPlannings,
                     onResume = { viewModel.resumePlanning(it) },
                     onDeletePaused = { pausedPlanningToDelete = it },
@@ -385,7 +399,7 @@ fun DetailScreen(
                         ),
                     )
                     // La suppression d'un planning en cours retire l'extinction : on prévient.
-                    if (p.isActiveNow()) {
+                    if (p.isReallyActive()) {
                         Text(
                             text = stringResource(R.string.planning_delete_active_warning),
                             style = MaterialTheme.typography.bodySmall,
@@ -640,6 +654,8 @@ private const val DEFAULT_PLANNING_THRESHOLD_W = 10
 @Composable
 private fun PlanningSection(
     plannings: List<Planning>,
+    presenceDisabledToday: Boolean,
+    planningDisabledToday: Boolean,
     onEdit: (Planning) -> Unit,
     onAdd: () -> Unit,
     onDelete: (Planning) -> Unit,
@@ -664,7 +680,9 @@ private fun PlanningSection(
             plannings.forEach { p ->
                 PlanningRow(
                     p,
-                    isActive = p.isActiveNow(),
+                    isActive = p.isActiveNow() &&
+                        !(p.isPresence && presenceDisabledToday) &&
+                        !(!p.isPresence && !p.once && planningDisabledToday),
                     onEdit = { onEdit(p) },
                     onDelete = { onDelete(p) },
                     onPause = { onPause(p) },

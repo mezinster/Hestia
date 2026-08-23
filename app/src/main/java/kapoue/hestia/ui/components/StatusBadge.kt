@@ -41,7 +41,11 @@ fun StatusBadge(
     modifier: Modifier = Modifier,
 ) {
     val colors = MaterialTheme.stateColors
-    val visual = status.toVisual(colors, elapsedNow, presence, activePlanning, pendingThresholdW = null, onSinceElapsed = null)
+    val visual = status.toVisual(
+        colors, elapsedNow, presence, activePlanning,
+        pendingThresholdW = null, onSinceElapsed = null,
+        presenceDisabledToday = false, planningDisabledToday = false,
+    )
 
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         if (visual.loading) {

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.time.LocalDate
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -189,6 +190,66 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         runCatching { json.decodeFromString<Map<String, Long>>(prefs.getString(KEY_ON_SINCE_EPOCH, null) ?: "{}") }
             .getOrDefault(emptyMap())
 
+    // --- Présence désactivée pour aujourd'hui (mémo local, bouton ON/OFF pendant une présence) ---
+
+    /**
+     * Vrai si ce canal a été désactivé pour aujourd'hui via le bouton ON/OFF, app **ou** bouton
+     * physique détecté (voir `DeviceRepository.stopPresenceForToday` et la détection par `source`
+     * dans `DashboardViewModel`) — s'efface tout seul le lendemain (comparé à la date du jour,
+     * jamais nettoyé explicitement).
+     */
+    fun isPresenceDisabledToday(deviceId: Long): Boolean =
+        presenceDisabledTodayMap()[deviceId.toString()] == LocalDate.now().toString()
+
+    fun markPresenceDisabledToday(deviceId: Long) {
+        val updated = presenceDisabledTodayMap() + (deviceId.toString() to LocalDate.now().toString())
+        prefs.edit().putString(KEY_PRESENCE_DISABLED_TODAY, json.encodeToString(updated)).apply()
+    }
+
+    /**
+     * À appeler à chaque création/modification d'une présence sur ce canal — sans ça, une
+     * présence supprimée puis recréée restait « désactivée aujourd'hui » indéfiniment, le mémo
+     * n'étant lié qu'au canal et à la date, pas à une présence précise (bug vécu en direct par
+     * David le 2026-08-22 : nouvelle présence créée, toujours marquée désactivée).
+     */
+    fun clearPresenceDisabledToday(deviceId: Long) {
+        val updated = presenceDisabledTodayMap() - deviceId.toString()
+        prefs.edit().putString(KEY_PRESENCE_DISABLED_TODAY, json.encodeToString(updated)).apply()
+    }
+
+    private fun presenceDisabledTodayMap(): Map<String, String> =
+        runCatching { json.decodeFromString<Map<String, String>>(prefs.getString(KEY_PRESENCE_DISABLED_TODAY, null) ?: "{}") }
+            .getOrDefault(emptyMap())
+
+    // --- Planning récurrent désactivé pour aujourd'hui (bouton ON/OFF, app ou bouton physique) ---
+
+    /**
+     * Vrai si un planning **récurrent** de ce canal a été désactivé pour aujourd'hui — même
+     * principe que [isPresenceDisabledToday], s'efface tout seul le lendemain. Contrairement à la
+     * présence, couvre aussi le bouton physique : un planning ne dépend d'aucun script Hestia
+     * (juste des programmes cron natifs), un appui bouton pendant sa fenêtre est donc détectable
+     * sans rien changer côté appareil — voir `DashboardViewModel` (`source` de `Switch.GetStatus`).
+     * Jamais posé pour un planning Unique (pas de « lendemain » à distinguer).
+     */
+    fun isPlanningDisabledToday(deviceId: Long): Boolean =
+        planningDisabledTodayMap()[deviceId.toString()] == LocalDate.now().toString()
+
+    fun markPlanningDisabledToday(deviceId: Long) {
+        val updated = planningDisabledTodayMap() + (deviceId.toString() to LocalDate.now().toString())
+        prefs.edit().putString(KEY_PLANNING_DISABLED_TODAY, json.encodeToString(updated)).apply()
+    }
+
+    /** Même raison que [clearPresenceDisabledToday], côté planning récurrent : à appeler à
+     * chaque création/modification d'un planning précis sur ce canal. */
+    fun clearPlanningDisabledToday(deviceId: Long) {
+        val updated = planningDisabledTodayMap() - deviceId.toString()
+        prefs.edit().putString(KEY_PLANNING_DISABLED_TODAY, json.encodeToString(updated)).apply()
+    }
+
+    private fun planningDisabledTodayMap(): Map<String, String> =
+        runCatching { json.decodeFromString<Map<String, String>>(prefs.getString(KEY_PLANNING_DISABLED_TODAY, null) ?: "{}") }
+            .getOrDefault(emptyMap())
+
     private companion object {
         const val KEY_THEME = "theme_mode"
         const val KEY_NOTIFS = "notifications_enabled"
@@ -200,6 +261,8 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_PENDING_TIMERS = "pending_timers"
         const val KEY_ON_TIME_BASELINE = "on_time_baseline"
         const val KEY_ON_SINCE_EPOCH = "on_since_epoch"
+        const val KEY_PRESENCE_DISABLED_TODAY = "presence_disabled_today"
+        const val KEY_PLANNING_DISABLED_TODAY = "planning_disabled_today"
         const val KEY_CLOUD_AUTH_KEY = "cloud_auth_key"
         const val KEY_CLOUD_SERVER = "cloud_server"
         val json = Json { ignoreUnknownKeys = true }

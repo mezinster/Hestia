@@ -217,6 +217,8 @@
          présence ou un planning précis en cours prêtait à confusion). -->
     <string name="state_planned">Planifié</string>
     <string name="state_presence">Présence</string>
+    <string name="tile_presence_disabled_today">Présence désactivée aujourd\'hui</string>
+    <string name="tile_planning_disabled_today">Planning désactivé aujourd\'hui</string>
     <string name="state_offline">Indisponible</string>
     <string name="state_loading">Lecture…</string>
 
@@ -347,8 +349,8 @@
 
     <!-- Bascule manuelle pendant une simulation de présence (Tableau) -->
     <string name="presence_toggle_title">Simulation de présence active</string>
-    <string name="presence_toggle_message">L\'interrupteur coupe la simulation en cours — pas seulement pour aujourd\'hui, tous les jours programmés.</string>
-    <string name="presence_toggle_stop">Arrêter la simulation</string>
+    <string name="presence_toggle_message">L\'interrupteur coupe la simulation pour aujourd\'hui — elle reprendra normalement demain, aux mêmes horaires.</string>
+    <string name="presence_toggle_stop">Couper pour aujourd\'hui</string>
 
     <!-- Conflit minuteur / présence -->
     <string name="conflict_title">Simulation de présence active</string>

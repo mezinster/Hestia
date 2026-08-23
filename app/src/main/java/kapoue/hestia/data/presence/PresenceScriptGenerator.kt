@@ -189,6 +189,36 @@ object PresenceScriptGenerator {
         })();
     """.trimIndent()
 
+    /**
+     * Code `Script.Eval` pour couper le canal [switchId] **pour aujourd'hui seulement**, sans
+     * toucher à la configuration permanente ([CFG], jamais modifiée ici) — demande de David,
+     * 2026-08-22 : l'arrêt complet ([evalRemoveChannel]) retirait le canal pour tous les jours
+     * programmés, trop radical pour « je rentre chez moi, j'éteins pour aujourd'hui ».
+     * Ramène l'heure de fin déjà tirée au sort pour la fenêtre en cours (`STATE[i].off[j]`) à
+     * l'instant présent, puis éteint la prise. `planDay` (voir [generateSupervisor]) retire un
+     * nouveau jour vierge dès le lendemain à partir de [CFG], jamais touché ici — la présence
+     * reprend donc normalement le jour suivant. Ne fait rien si aucune fenêtre n'est en cours
+     * (rien à raccourcir).
+     */
+    fun evalStopToday(switchId: Int): String = """
+        (function () {
+          for (let i = 0; i < CFG.length; i++) {
+            if (CFG[i].switchId !== $switchId) continue;
+            let s = STATE[i];
+            let sys = Shelly.getComponentStatus("sys");
+            if (!sys || !sys.unixtime) return "false";
+            let now = new Date(sys.unixtime * 1000);
+            let nowMin = now.getHours() * 60 + now.getMinutes();
+            for (let j = 0; j < s.off.length; j++) {
+              if (s.on[j] <= nowMin && nowMin < s.off[j]) s.off[j] = nowMin;
+            }
+            Shelly.call("Switch.Set", { id: $switchId, on: false });
+            return "true";
+          }
+          return "false";
+        })();
+    """.trimIndent()
+
     /** Code `Script.Eval` pour lire les plages actuellement suivies de tous les canaux. */
     fun evalReadConfig(): String = """
         (function () {

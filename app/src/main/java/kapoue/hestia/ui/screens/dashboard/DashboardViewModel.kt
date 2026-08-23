@@ -117,6 +117,10 @@ class DashboardViewModel @Inject constructor(
                         plannings = extras.plannings[device.id].orEmpty(),
                         pendingThresholdW = extras.pendingThresholds[device.id],
                         onSinceElapsed = extras.onSinceElapsed[device.id],
+                        // Lecture locale pure (SharedPreferences), pas de RPC : recalculée à
+                        // chaque recomposition de ce combine, pas besoin d'un flux dédié.
+                        presenceDisabledToday = appPreferences.isPresenceDisabledToday(device.id),
+                        planningDisabledToday = appPreferences.isPlanningDisabledToday(device.id),
                         groupLabel = groupDisplayName(members),
                         isFirstInGroup = isFirstInGroup,
                         isMultiChannel = isMultiChannel,
@@ -193,6 +197,38 @@ class DashboardViewModel @Inject constructor(
                     .mapNotNull { (id, info) -> info?.let { id to it } }
                     .toMap()
                 plannings.value = planningResults.await().toMap()
+                // Planning récurrent désactivé pour aujourd'hui : un appui bouton physique pendant
+                // sa fenêtre est détectable sans rien changer côté appareil (pas de script à
+                // modifier, contrairement à la présence) — juste mémoriser localement, la coupure
+                // elle-même est déjà faite par l'appui. Lecture locale pure (source déjà dans le
+                // relevé de statut de ce cycle), jamais de RPC en plus.
+                devices.filter { it.supportsSwitch }.forEach { device ->
+                    val status = statuses.value[device.id] as? TileStatus.Online ?: return@forEach
+                    if (status.output || !isButtonSource(status.source)) return@forEach
+                    val activePlanning = plannings.value[device.id]
+                        ?.firstOrNull { !it.isPresence && !it.once && it.isActiveNow() }
+                    if (activePlanning != null) appPreferences.markPlanningDisabledToday(device.id)
+                }
+                // Même détection pour un appui bouton pendant une présence — mais contrairement à
+                // Planning, le script tourne en continu et réimposerait l'état voulu au tick
+                // suivant si on se contentait de mémoriser localement. Il faut donc réellement
+                // déclencher la coupure du jour (même appel que le bouton de l'app), pas juste
+                // l'enregistrer — coûte un vrai aller-retour RPC, mais seulement dans ce cas rare
+                // précis (canal éteint, source bouton, présence active, pas déjà marqué) : jamais
+                // pour tous les canaux à chaque cycle.
+                devices.filter { it.hasScripting }.forEach { device ->
+                    val status = statuses.value[device.id] as? TileStatus.Online ?: return@forEach
+                    if (status.output || !isButtonSource(status.source)) return@forEach
+                    if (appPreferences.isPresenceDisabledToday(device.id)) return@forEach
+                    if (presences.value[device.id] == null) return@forEach
+                    if (repository.stopPresenceForToday(device) is RpcResult.Success) {
+                        appPreferences.markPresenceDisabledToday(device.id)
+                        logger.info(
+                            DiagnosticLogger.RPC,
+                            "Présence coupée pour aujourd'hui (appui bouton physique détecté, ${device.ipAddress})",
+                        )
+                    }
+                }
                 // Seuil d'un minuteur « sans limite de durée » surveillé par hestia_charge (lancé
                 // depuis l'app) ou hestia_button_timer (armé par un vrai appui bouton — deux
                 // scripts distincts, jamais les deux à la fois pour un même canal), pour les
@@ -281,26 +317,41 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    /** Bascule un canal, puis relit son état réel (jamais supposé). */
+    /**
+     * Bascule un canal, puis relit son état réel (jamais supposé). Couper alors qu'un planning
+     * **récurrent** (jamais Unique, pas de « lendemain » à distinguer) est en cours désactive ce
+     * planning pour aujourd'hui (mémo local, voir `AppPreferences.markPlanningDisabledToday`) —
+     * pas de dialogue, contrairement à la présence : un planning ne dépend d'aucun script Hestia,
+     * l'action est déjà sans risque (retour David, 2026-08-22).
+     */
     fun toggle(device: Device, turnOn: Boolean) {
         if (!_permissionUsable.value) return
-        viewModelScope.launch { applyToggle(device, turnOn) }
+        viewModelScope.launch {
+            if (!turnOn) {
+                val activePlanning = plannings.value[device.id]?.firstOrNull { !it.isPresence && !it.once && it.isActiveNow() }
+                if (activePlanning != null) appPreferences.markPlanningDisabledToday(device.id)
+            }
+            applyToggle(device, turnOn)
+        }
     }
 
     /**
-     * Arrête la simulation de présence — seule action du bouton ON/OFF pendant qu'une présence
-     * est active, jamais suivie d'une bascule (retour David, 2026-08-22 : visuellement un
-     * interrupteur ON/OFF, l'utilisateur s'attend à couper le programme en cours, pas à en
-     * relancer un autre à la place). Retire le canal du script pour de bon (tous les jours),
-     * pas juste pour aujourd'hui — la boîte de dialogue de confirmation le dit avant d'agir.
+     * Coupe la présence **pour aujourd'hui seulement** — seule action du bouton ON/OFF pendant
+     * qu'une présence est active, jamais suivie d'une bascule (visuellement un interrupteur
+     * ON/OFF, l'utilisateur s'attend à couper le programme en cours, pas à en relancer un autre
+     * à la place). Ne touche pas la configuration permanente (jours, horaires, marge) : la
+     * présence reprend normalement le lendemain — arrêt définitif réservé à une suppression
+     * explicite depuis l'écran Détail (retour David, 2026-08-22 : un simple bouton ON/OFF ne
+     * doit pas supprimer une config récurrente, trop radical pour « je rentre, j'éteins pour
+     * aujourd'hui »).
      */
-    fun stopPresence(device: Device) {
+    fun stopPresenceToday(device: Device) {
         if (!_permissionUsable.value) return
         viewModelScope.launch {
-            when (repository.stopPresence(device)) {
+            when (repository.stopPresenceForToday(device)) {
                 is RpcResult.Success -> {
-                    logger.info(DiagnosticLogger.RPC, "Simulation de présence arrêtée depuis le Tableau (${device.ipAddress})")
-                    presences.value = presences.value - device.id
+                    logger.info(DiagnosticLogger.RPC, "Présence coupée pour aujourd'hui depuis le Tableau (${device.ipAddress})")
+                    appPreferences.markPresenceDisabledToday(device.id)
                     fetchOne(device)
                 }
                 else -> setStatus(device.id, TileStatus.Offline)
@@ -384,6 +435,12 @@ class DashboardViewModel @Inject constructor(
         /** Tolérance pour considérer qu'un souvenir local de minuteur correspond bien au minuteur
          * natif actuellement en cours sur l'appareil (voir le calcul dans [fetch]). */
         const val STALE_PENDING_TIMER_TOLERANCE_SEC = 5
+
+        /** Même liste que `isButtonSource` côté script (voir `ButtonTimerScriptGenerator`) — la
+         * valeur exacte varie selon le modèle (`button` sur Plug M, `short_push` sur Strip 4). */
+        fun isButtonSource(source: String?): Boolean =
+            source == "button" || source == "short_push" || source == "long_push" ||
+                source == "double_push" || source == "triple_push"
     }
 }
 

@@ -545,6 +545,30 @@ class DeviceRepository @Inject constructor(
     suspend fun stopPresence(device: Device): RpcResult<Unit> = applyPresenceChannel(device, null)
 
     /**
+     * Coupe la présence de **ce canal pour aujourd'hui seulement** — la configuration permanente
+     * (jours, horaires, marge) n'est pas touchée, la présence reprend normalement le lendemain.
+     * Contrairement à [stopPresence] (retrait définitif, tous les jours), c'est l'action du
+     * bouton ON/OFF pendant une présence en cours (demande de David, 2026-08-22) : « couper
+     * Présence » se comprend comme « pas aujourd'hui », pas comme « supprimer la config ».
+     * Mutation `Script.Eval` sur `STATE` uniquement (voir [PresenceScriptGenerator.evalStopToday]),
+     * jamais sur `CFG` — même famille de mutation que le reste des lots de ce soir. Réaligne la
+     * flash tout de suite après (voir [realignPresenceFlash]) : sans ça, la coupure du jour
+     * n'existe qu'en mémoire vive et disparaît si le script redémarre pour une raison quelconque
+     * (pas forcément une coupure secteur complète) — bug vécu en direct le 2026-08-22, la présence
+     * repartait d'elle-même après une coupure censée tenir jusqu'au lendemain.
+     */
+    suspend fun stopPresenceForToday(device: Device): RpcResult<Unit> {
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        listResult.errorOrNull()?.let { return it }
+        val running = listResult.getOrNull()?.scripts?.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME && it.running }
+            ?: return RpcResult.Success(Unit) // rien en cours, rien à couper
+        val eval = rpcClient.scriptEval(ip, running.id, PresenceScriptGenerator.evalStopToday(device.switchId))
+        eval.errorOrNull()?.let { return it }
+        realignPresenceFlash(ip, running.id)
+        return RpcResult.Success(Unit)
+    }
+
+    /**
      * Ajoute/remplace [config] pour son canal dans le script de présence partagé, ou retire ce
      * canal si [config] est nul — sans jamais toucher aux autres canaux déjà suivis. Si le script
      * tourne déjà, la mutation passe par `Script.Eval` (mémoire des autres canaux inchangée) ; sinon
@@ -1093,7 +1117,13 @@ class DeviceRepository @Inject constructor(
             val windows = existing.filter { it.isPresence }.map { it.toPresenceWindow() }
             val newWindow = PresenceWindow(startHour, startMinute, endHour, endMinute, marginMinutes, days)
             return when (setPresenceWindows(device, windows + newWindow)) {
-                is RpcResult.Success -> CreatePlanningResult.Success
+                is RpcResult.Success -> {
+                    // Une présence tout juste (re)créée n'a jamais été désactivée pour aujourd'hui
+                    // — sans ça, une présence supprimée puis recréée restait marquée « désactivée »
+                    // indéfiniment (bug vécu en direct par David le 2026-08-22).
+                    appPreferences.clearPresenceDisabledToday(device.id)
+                    CreatePlanningResult.Success
+                }
                 else -> CreatePlanningResult.Error
             }
         }
@@ -1134,6 +1164,9 @@ class DeviceRepository @Inject constructor(
             return CreatePlanningResult.Error
         }
         applyIfAlreadyActive(ip, device, startHour, startMinute, endHour, endMinute, days, date)
+        // Même raison que côté présence ci-dessus : un planning tout juste créé/modifié n'a
+        // jamais été désactivé pour aujourd'hui. Sans effet pour un Unique (jamais marqué désactivé).
+        appPreferences.clearPlanningDisabledToday(device.id)
         return CreatePlanningResult.Success
     }
 
@@ -1265,6 +1298,7 @@ class DeviceRepository @Inject constructor(
                 old.offJobId?.let { rpcClient.scheduleDelete(ip, it) }
                 old.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
             }
+            appPreferences.clearPresenceDisabledToday(device.id)
             return CreatePlanningResult.Success
         }
 
@@ -1313,6 +1347,9 @@ class DeviceRepository @Inject constructor(
             old.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
         }
         applyIfAlreadyActive(ip, device, startHour, startMinute, endHour, endMinute, days, date)
+        // Même raison que côté présence ci-dessus : un planning tout juste créé/modifié n'a
+        // jamais été désactivé pour aujourd'hui. Sans effet pour un Unique (jamais marqué désactivé).
+        appPreferences.clearPlanningDisabledToday(device.id)
         return CreatePlanningResult.Success
     }
 

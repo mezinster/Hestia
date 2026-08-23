@@ -28,6 +28,11 @@ sealed interface TileStatus {
          * la durée du ON en cours (voir [kapoue.hestia.data.rpc.model.SwitchCounts]) — jamais
          * affiché tel quel. Null si l'appareil ne le fournit pas. */
         val onTimeSec: Double? = null,
+        /** Origine de la dernière bascule (`button`/`short_push`, `HTTP_in`, `loopback`…) — voir
+         * `SwitchStatusResult.source`. Sert à détecter un appui bouton physique pendant qu'un
+         * planning récurrent est en cours, pour le désactiver pour la journée (voir
+         * `DashboardViewModel`) — jamais affiché tel quel. Null via le repli cloud (non exposé). */
+        val source: String? = null,
     ) : TileStatus
 
     /** Appareil injoignable (timeout, réseau, erreur RPC) — inclut aussi le cas où la permission
@@ -73,6 +78,23 @@ data class TileUiState(
      */
     val onSinceElapsed: Long? = null,
     /**
+     * Vrai si ce canal a été désactivé pour aujourd'hui via le bouton ON/OFF pendant une
+     * présence (voir `AppPreferences.isPresenceDisabledToday`) — mémo local, s'efface tout seul
+     * le lendemain. Change le libellé affiché quand [presence] est non nul, pour ne pas laisser
+     * croire que la présence continue alors qu'elle a été explicitement coupée pour le jour.
+     */
+    val presenceDisabledToday: Boolean = false,
+    /**
+     * Vrai si un planning **récurrent** de ce canal a été désactivé pour aujourd'hui, via le
+     * bouton ON/OFF app ou un vrai appui bouton physique (voir
+     * `AppPreferences.isPlanningDisabledToday`) — mémo local, s'efface tout seul le lendemain.
+     * Jamais posé pour un planning Unique. Quand vrai, la tuile ne doit plus montrer la couleur
+     * de régime « Planifié » (retour David, 2026-08-22 : contrairement à la présence, il ne
+     * s'agit pas d'un état à nuancer mais d'un simple retour à « Éteint », avec juste un texte
+     * explicatif en plus).
+     */
+    val planningDisabledToday: Boolean = false,
+    /**
      * Nom de l'appareil physique (celui de Réglages, pas le modèle technique), affiché dans
      * l'en-tête au-dessus du canal — pour tous les appareils, mono ou multi-canaux.
      */
@@ -97,6 +119,7 @@ internal fun DeviceStatusResult.toTileStatus(): TileStatus = when (val r = resul
         powerWatts = r.value.apower,
         viaCloud = viaCloud,
         onTimeSec = r.value.counts?.onTime,
+        source = r.value.source,
     )
     // Un appareil injoignable (ou en erreur) n'empêche pas d'utiliser les autres.
     is RpcResult.RpcError -> TileStatus.Offline

@@ -81,7 +81,7 @@ fun DeviceTile(
     // elapsedNow (rafraîchi à la seconde par le parent) force le recalcul du planning en cours
     // au fil du temps, sans attendre le prochain relevé réseau.
     val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
-    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed)
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed, tile.presenceDisabledToday, tile.planningDisabledToday)
 
     // Fin de créneau : dès que le planning en cours cesse de l'être, on force un relevé pour
     // confirmer l'extinction tout de suite (sinon la tuile afficherait le dernier état connu —
@@ -232,6 +232,10 @@ internal data class TileVisual(
      * longue (retour David, 2026-08-22).
      */
     val thresholdText: String? = null,
+    /** Vrai quand l'anneau est vert (courant réel) — épaissi dans ce cas précis pour rééquilibrer
+     * le disque désormais plus présent (retour David, 2026-08-22 : test d'un disque à 70 %
+     * d'opacité + anneau doublé uniquement quand vert). */
+    val ringEmphasis: Boolean = false,
 )
 
 /**
@@ -248,9 +252,12 @@ private fun PlugCircle(visual: TileVisual) {
     val holeColor = MaterialTheme.colorScheme.surface
     Box(modifier = Modifier.size(76.dp), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(76.dp)) {
-            val strokeWidthPx = 2.dp.toPx()
+            // Anneau doublé quand vert (courant réel) pour rééquilibrer le disque, lui-même
+            // atténué à 70 % d'opacité — sans ça le disque plein paraissait trop présent/appuyé
+            // (retour David, 2026-08-22).
+            val strokeWidthPx = (if (visual.ringEmphasis) 4.dp else 2.dp).toPx()
             val radius = size.minDimension / 2 - strokeWidthPx / 2
-            drawCircle(color = visual.textColor, radius = radius + strokeWidthPx)
+            drawCircle(color = visual.textColor.copy(alpha = 0.7f), radius = radius + strokeWidthPx)
             drawCircle(
                 color = visual.ringColor,
                 radius = radius,
@@ -293,6 +300,8 @@ internal fun TileStatus.toVisual(
     activePlanning: Planning?,
     pendingThresholdW: Int?,
     onSinceElapsed: Long?,
+    presenceDisabledToday: Boolean,
+    planningDisabledToday: Boolean,
 ): TileVisual = when (this) {
     TileStatus.Loading -> TileVisual(
         bgColor = colors.idleBg,
@@ -311,6 +320,35 @@ internal fun TileStatus.toVisual(
         val physicalBg = if (output) colors.activeBg else colors.idleBg
         val remaining = timerEndsAtElapsed?.let { ((it - elapsedNow) / 1000).coerceAtLeast(0) }
         when {
+            // Planning récurrent désactivé pour aujourd'hui (bouton ON/OFF, app ou physique) :
+            // priorité sur tout le reste — plus jamais la couleur « Planifié », juste Actif/Éteint
+            // selon l'état réel du moment, avec un texte fixe qui reste tant que le jour n'est pas
+            // passé (retour David, 2026-08-22 : contrairement à la présence, un simple retour à
+            // l'état physique suffit, pas besoin de nuancer la couleur).
+            activePlanning != null && planningDisabledToday && !activePlanning.once -> TileVisual(
+                bgColor = physicalBg, ringColor = ringColor,
+                textColor = if (output) colors.activeText else colors.idleText,
+                label = stringResource(if (output) R.string.state_active else R.string.state_idle),
+                countdown = null,
+                dashed = false,
+                // Sur sa propre ligne, jamais concaténé au libellé (« Éteint planning désactivé
+                // aujourd'hui » ne voulait rien dire collé, et poussait l'interrupteur en dessous
+                // — retour David, 2026-08-22).
+                thresholdText = stringResource(R.string.tile_planning_disabled_today),
+                ringEmphasis = output,
+            )
+            // Présence désactivée pour aujourd'hui : même traitement que Planning ci-dessus
+            // (retour David, 2026-08-22) — priorité sur la branche « presence != null » normale
+            // juste en dessous, donc plus jamais la couleur indigo une fois désactivée.
+            presence != null && presenceDisabledToday -> TileVisual(
+                bgColor = physicalBg, ringColor = ringColor,
+                textColor = if (output) colors.activeText else colors.idleText,
+                label = stringResource(if (output) R.string.state_active else R.string.state_idle),
+                countdown = null,
+                dashed = false,
+                thresholdText = stringResource(R.string.tile_presence_disabled_today),
+                ringEmphasis = output,
+            )
             // Minuteur natif en cours (bouton avec durée, ou Perso/Manuel) : reclassé « Actif »
             // depuis « Planifié » (retour David, 2026-08-22) — un minuteur lancé maintenant n'est
             // pas de la planification (début/fin décidés à l'avance), juste un allumage manuel
@@ -325,15 +363,14 @@ internal fun TileStatus.toVisual(
                 // consommation instantanée affichée juste en dessous sur la tuile (retour David,
                 // 2026-08-22).
                 thresholdText = pendingThresholdW?.let { stringResource(R.string.timer_preset_cutoff_detail, it) },
+                ringEmphasis = output,
             )
             presence != null -> TileVisual(
                 bgColor = physicalBg, ringColor = ringColor, textColor = colors.presenceText,
                 label = stringResource(R.string.state_presence),
-                countdown = formatTimeRange(
-                    presence.startHour, presence.startMinute,
-                    presence.endHour, presence.endMinute,
-                ),
+                countdown = formatTimeRange(presence.startHour, presence.startMinute, presence.endHour, presence.endMinute),
                 dashed = false,
+                ringEmphasis = output,
             )
             activePlanning != null -> TileVisual(
                 bgColor = physicalBg, ringColor = ringColor, textColor = colors.plannedText,
@@ -347,10 +384,12 @@ internal fun TileStatus.toVisual(
                 // coupure dédié à ce planning, fiable — jamais modifié par Eval après son premier
                 // déploiement) : juste jamais affiché jusqu'ici (bonus repéré le 2026-08-22).
                 thresholdText = activePlanning.cutoffThresholdW?.let { stringResource(R.string.timer_preset_cutoff_detail, it) },
+                ringEmphasis = output,
             )
             output -> TileVisual(
                 bgColor = colors.activeBg, ringColor = ringColor, textColor = colors.activeText,
                 label = stringResource(R.string.state_active),
+                ringEmphasis = true,
                 // Durée du ON en cours (voir DashboardViewModel.onSinceElapsed) : absente tant
                 // qu'aucune référence fiable n'a encore été observée pour ce canal. Préfixée
                 // (« depuis »/« for ») pour ne pas se lire comme un décompte qui descend, alors
@@ -440,7 +479,7 @@ private const val STRIP_NAME_MAX_LENGTH = 12
 private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> Unit) {
     val colors = MaterialTheme.stateColors
     val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
-    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed)
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed, tile.presenceDisabledToday, tile.planningDisabledToday)
     // Même logique que PlugCircle : disque = teinte d'état du canal, trous = blanc/surface.
     val holeColor = MaterialTheme.colorScheme.surface
 
@@ -452,9 +491,10 @@ private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> U
             .padding(6.dp),
     ) {
         Canvas(modifier = Modifier.size(44.dp)) {
-            val strokeWidthPx = 1.5.dp.toPx()
+            // Même équilibrage que PlugCircle : anneau doublé quand vert, disque à 70 % d'opacité.
+            val strokeWidthPx = (if (visual.ringEmphasis) 3.dp else 1.5.dp).toPx()
             val radius = size.minDimension / 2 - strokeWidthPx / 2
-            drawCircle(color = visual.textColor, radius = radius + strokeWidthPx)
+            drawCircle(color = visual.textColor.copy(alpha = 0.7f), radius = radius + strokeWidthPx)
             drawCircle(
                 color = visual.ringColor,
                 radius = radius,
@@ -502,7 +542,7 @@ fun ChannelQuickSheet(
 ) {
     val colors = MaterialTheme.stateColors
     val activePlanning = remember(tile.plannings, elapsedNow) { tile.plannings.firstOrNull { it.isActiveNow() } }
-    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed)
+    val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed, tile.presenceDisabledToday, tile.planningDisabledToday)
     val online = tile.status as? TileStatus.Online
     val powerWatts = online?.powerWatts?.takeIf { tile.device.hasPowerMetering }
 

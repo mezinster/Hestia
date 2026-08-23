@@ -196,9 +196,9 @@ fun DashboardScreen(
                                         elapsedNow = elapsedNow,
                                         onToggle = { turnOn ->
                                             // Présence active : le bouton ON/OFF ne fait que
-                                            // couper la simulation, jamais relancer autre chose à
-                                            // la place (retour David, 2026-08-22) — confirmation
-                                            // d'abord, la portée (tous les jours) le mérite.
+                                            // couper la simulation pour aujourd'hui, jamais
+                                            // relancer autre chose à la place (retour David,
+                                            // 2026-08-22) — confirmation d'abord.
                                             val running = tile.presence
                                             if (running != null) {
                                                 pendingToggle = PendingToggle(tile.device, running)
@@ -222,7 +222,7 @@ fun DashboardScreen(
         PresenceToggleDialog(
             presence = pending.presence,
             onStopSimulation = {
-                viewModel.stopPresence(pending.device)
+                viewModel.stopPresenceToday(pending.device)
                 pendingToggle = null
             },
             onDismiss = { pendingToggle = null },
@@ -235,7 +235,7 @@ fun DashboardScreen(
             elapsedNow = elapsedNow,
             onToggle = { turnOn ->
                 // Même règle que la tuile solo : présence active = le bouton coupe la
-                // simulation, point, jamais un toggle à la place.
+                // simulation pour aujourd'hui, jamais un toggle à la place.
                 val running = tile.presence
                 quickSheetTile = null
                 if (running != null) {
@@ -299,11 +299,13 @@ private fun PermissionBanner() {
 }
 
 /**
- * Confirme avant de couper une simulation de présence depuis l'interrupteur ON/OFF — visuellement
- * un bouton ON/OFF, l'utilisateur s'attend à couper le programme en cours, pas à en relancer un
- * autre à la place (retour David, 2026-08-22). Deux issues seulement : arrêter la simulation, ou
- * renoncer — jamais de bascule après coup, et jamais de « basculer quand même » (son effet ne
- * durerait que jusqu'à la prochaine action du script).
+ * Confirme avant de couper une simulation de présence **pour aujourd'hui** depuis l'interrupteur
+ * ON/OFF — visuellement un bouton ON/OFF, l'utilisateur s'attend à couper le programme en cours,
+ * pas à en relancer un autre à la place (retour David, 2026-08-22). Ne touche jamais la
+ * configuration récurrente (jours/horaires/marge) : la présence reprend normalement le lendemain
+ * — un arrêt définitif se fait depuis l'écran Détail, pas ce bouton. Deux issues seulement :
+ * couper pour aujourd'hui, ou renoncer — jamais de bascule après coup, et jamais de « basculer
+ * quand même » (son effet ne durerait que jusqu'à la prochaine action du script).
  */
 @Composable
 private fun PresenceToggleDialog(

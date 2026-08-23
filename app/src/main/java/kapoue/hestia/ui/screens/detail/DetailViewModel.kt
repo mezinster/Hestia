@@ -152,6 +152,18 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Vrai si ce canal a été désactivé pour aujourd'hui via le bouton ON/OFF du Tableau (voir
+     * `AppPreferences.isPresenceDisabledToday`) — lecture locale pure, pas de RPC. Sert à ne pas
+     * afficher « En cours » sur une présence sciemment coupée pour la journée (retour David,
+     * 2026-08-22 : l'écran Détail ne connaissait pas ce mémo, contrairement au Tableau).
+     */
+    fun isPresenceDisabledToday(): Boolean = appPreferences.isPresenceDisabledToday(deviceId)
+
+    /** Même chose que [isPresenceDisabledToday], côté planning récurrent (voir
+     * `AppPreferences.isPlanningDisabledToday`). */
+    fun isPlanningDisabledToday(): Boolean = appPreferences.isPlanningDisabledToday(deviceId)
+
     /** Résolution du conflit : arrête la simulation de présence puis lance le minuteur. */
     fun stopPresenceThenStartTimer(seconds: Int?, detail: String, thresholdW: Int? = null) {
         viewModelScope.launch {

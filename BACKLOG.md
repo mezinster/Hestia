@@ -7,6 +7,19 @@ de compilation, apostrophe non échappée dans une chaîne anglaise).
 
 ## Fait — en cours (à surveiller)
 
+- **Régression trouvée et corrigée le 2026-08-22 : le mémo « désactivé aujourd'hui » restait
+  collé après suppression/recréation de la présence ou du planning.** Vécu en direct par David
+  sur les deux prises testées : supprimer une présence désactivée puis en recréer une nouvelle
+  affichait quand même « Présence désactivée aujourd'hui » (couleur y compris, plus aucun indigo/
+  violet visible nulle part) — le mémo (`AppPreferences.isPresenceDisabledToday`/
+  `isPlanningDisabledToday`) n'est lié qu'au canal et à la date, pas à une présence/planning
+  précis, donc rien ne le réinitialisait à la création d'une config totalement nouvelle. Corrigé
+  en ajoutant `clearPresenceDisabledToday`/`clearPlanningDisabledToday`, appelés à chaque création
+  **et** modification réussie (`DeviceRepository.createPlanning`/`updatePlanning`, les deux
+  branches présence et précis) — une présence ou un planning tout juste (re)créé repart toujours
+  neuf. Suppression seule non traitée (pas nécessaire : sans présence/planning, la branche
+  « désactivé » de `DeviceTile.toVisual` ne peut de toute façon plus s'activer).
+
 - **Bug de fond trouvé et corrigé le 2026-08-22 : un planning créé (ou modifié) alors que son
   créneau couvre déjà l'instant présent ne s'applique jamais tout seul.** Découvert en creusant
   un faux-négatif apparent (un canal noté « Planifié » mais réellement éteint, repéré grâce au
@@ -397,31 +410,120 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
 ## Fonctionnalités futures
 
-- **Couper une présence « pour aujourd'hui seulement », sans toucher aux jours suivants — idée
-  de David, 2026-08-22, mécanisme vérifié faisable mais pas codé.** Depuis que le bouton ON/OFF
-  arrête la présence en cas d'appui pendant qu'elle tourne (voir « Fait — pour mémoire »), l'arrêt
-  est définitif (retire le canal du script, tous les jours programmés) — David voudrait plutôt un
-  arrêt local au jour, le programme reprenant normalement le lendemain. Exemple donné : présence
-  10h–19h, retour à la maison à 15h, on coupe pour aujourd'hui seulement, demain ça repart de 10h.
-  - **Bouton de l'app — faisable, mécanisme déjà vérifié dans le script.** `hestia_presence`
-    garde en mémoire vive, par canal, l'heure d'extinction **du jour** déjà tirée au sort
-    (`STATE[i].off[j]`, recalculée chaque nouveau jour par `planDay()` à partir de la config
-    permanente `CFG[i].windows`, jamais touchée). Il suffirait d'un `Script.Eval` qui met à jour
-    `STATE[i].off[j]` à l'heure actuelle pour la ou les fenêtres en cours, puis éteint la prise —
-    aucune mutation de `CFG`, donc rien à réappliquer le lendemain, `planDay` repart d'elle-même
-    de la config permanente au jour suivant. Même famille de mutation `Eval` déjà pratiquée ce
-    soir pour d'autres besoins — pas un nouveau mécanisme, une nouvelle fonction du même genre
-    (`evalShrinkToday(switchId)` ou proche) sur `PresenceScriptGenerator`, branchée dans
-    `DeviceRepository`/`DashboardViewModel` à la place de l'arrêt définitif actuel du bouton
-    (qui resterait disponible ailleurs, ex. suppression explicite depuis l'écran Détail).
-  - **Bouton physique — plus dur, chantier à part si voulu.** Le script ne regarde jamais la
-    provenance d'un changement (`source`) — contrairement au minuteur bouton, il compare juste
-    « censé être dans une fenêtre » à « la prise est allumée » et **réimpose** l'état voulu à
-    chaque tick en cas d'écart, sans distinguer un appui bouton d'une coupure de courant à
-    corriger. Il faudrait apprendre au script à reconnaître un appui bouton pendant la fenêtre et
-    le traiter comme une intention plutôt qu'un écart — une vraie réécriture de sa logique
-    interne. Limite structurelle en prime : le script ne tique qu'une fois par minute
-    (`Timer.set(60000,...)`), donc jusqu'à 60 s avant de réagir à un appui.
+- **Retour visuel pendant l'enregistrement d'un planning — proposé par David le 2026-08-22,
+  pas codé.** Le bouton « Enregistrer » (dialogue d'ajout/édition de planning) met environ 1 s à
+  fermer la modale (aller-retour réseau) — assez pour qu'un double-clic passe inaperçu et crée
+  deux plannings identiques (vécu en vrai par David). Proposition : remplacer l'icône disquette
+  par une coche une fois le clic pris en compte, et désactiver le bouton (grisé) pendant l'appel
+  réseau pour empêcher un second clic d'aboutir. Petit chantier UI (état de chargement sur le
+  bouton du dialogue `AddPlanningDialog`), pas encore commencé.
+
+- **Build reproductible — Niveau 1 vérifié le 2026-08-22, suite à une issue Codeberg (#2, ouverte
+  par un tiers).** Relecture de la config au regard du guide F-Droid : versions de dépendances
+  toutes figées (`libs.versions.toml`, aucune plage), Gradle/AGP/Kotlin/KSP en versions exactes,
+  aucun asset PNG/raster (tout en vecteur, pas de souci de compression non-déterministe),
+  `versionCode`/`versionName` déjà en littéraux durs — rien à modifier côté code. Confirmé par un
+  vrai test : deux `./gradlew clean assembleDebug` consécutifs, contenu de l'APK comparé
+  (`diff -rq`, hors `META-INF`) — **identique**. Nuance : test sur la même machine, cache Gradle
+  partiellement réutilisé (le second build n'a réexécuté que 16 tâches sur 42) — pas un « à froid »
+  sur deux machines différentes, mais le résultat (contenu identique) reste la preuve qui compte.
+  **Niveau 2 (upload d'un APK auto-signé par David pour publication F-Droid plus rapide) écarté
+  délibérément** : demanderait de gérer une clé de signature (secret à haute valeur, jamais côté
+  Claude) et une étape manuelle à chaque publication — David ne le souhaite pas vu le rythme de
+  publication actuel. Le vrai goulot ressenti (délai de publication F-Droid) ne serait de toute
+  façon résolu que par le Niveau 2, jamais par le Niveau 1 seul — clarifié explicitement avant de
+  trancher, pour ne pas laisser croire à un gain de rapidité qui n'existe pas.
+
+- **Couper une présence « pour aujourd'hui seulement », sans toucher aux jours suivants — bouton
+  de l'app codé et fait le 2026-08-22 ; bouton physique reste au backlog.** Idée de David : le
+  précédent correctif (le bouton ON/OFF arrête la présence en cas d'appui pendant qu'elle tourne)
+  la coupait pour de bon (retire le canal du script, tous les jours programmés) — trop radical
+  pour « je rentre à la maison, j'éteins pour aujourd'hui ». Exemple donné : présence 10h–19h,
+  retour à la maison à 15h, on coupe pour aujourd'hui seulement, demain ça repart de 10h.
+  - **Bouton de l'app — fait.** `hestia_presence` garde en mémoire vive, par canal, l'heure
+    d'extinction **du jour** déjà tirée au sort (`STATE[i].off[j]`, recalculée chaque nouveau jour
+    par `planDay()` à partir de la config permanente `CFG[i].windows`, jamais touchée). Nouvelle
+    fonction `PresenceScriptGenerator.evalStopToday(switchId)` : ramène `STATE[i].off[j]` à
+    l'instant présent pour la fenêtre en cours puis éteint la prise, via un seul `Script.Eval` —
+    aucune mutation de `CFG`, `planDay` repart de lui-même de la config permanente le lendemain.
+    `DeviceRepository.stopPresenceForToday` / `DashboardViewModel.stopPresenceToday` remplacent
+    l'arrêt définitif comme action du bouton ON/OFF ; l'arrêt définitif
+    (`DeviceRepository.stopPresence`) reste disponible ailleurs (suppression explicite depuis
+    l'écran Détail, `DetailViewModel`, non touchée). Boîte de dialogue et libellés mis à jour en
+    conséquence (« Couper pour aujourd'hui », plus « tous les jours programmés »).
+  - **Rendu tuile clarifié — fait le 2026-08-22, révisé deux fois dans la soirée.** D'abord fait
+    en gardant la couleur indigo (juste le texte changeait, « Présence · désactivée
+    aujourd'hui ») ; David a ensuite demandé l'alignement complet sur Planning (voir ci-dessous) :
+    plus aucune couleur de régime une fois désactivée, juste Actif/Éteint selon l'état réel, avec
+    « Présence désactivée aujourd'hui » en texte fixe sur sa propre ligne
+    (`tile_presence_disabled_today`, `thresholdText`, même mécanique que le seuil) — branche
+    dédiée dans `DeviceTile.toVisual`, prioritaire sur la branche « présence » normale. Mémo local
+    `AppPreferences.isPresenceDisabledToday`/`markPresenceDisabledToday` (clé = date du jour,
+    s'efface tout seul le lendemain — ne couvre que le bouton de l'app, pas encore le bouton
+    physique ci-dessous).
+  - **Bug de fiabilité trouvé et corrigé le 2026-08-22 : la coupure du jour ne survivait pas à
+    un redémarrage du script.** `stopPresenceForToday` mutait `STATE` (via `evalStopToday`) sans
+    jamais réaligner la flash (`Script.PutCode`) — exactement le bug de fond corrigé la veille
+    pour les autres mutations de présence (voir plus haut, « chantier persistance des scripts
+    superviseurs »). Vécu en direct par David : la prise se rallumait d'elle-même après une
+    coupure censée tenir jusqu'au lendemain (confirmé par `counts.switch_on` qui avait bien
+    incrémenté entre deux vérifications). Corrigé en appelant `realignPresenceFlash` juste après
+    la mutation, comme les autres chemins de mutation de présence.
+  - **Écran Détail aligné — fait le 2026-08-22, en repassant derrière.** Le badge du haut et le
+    tag « En cours » de la liste des plannings ignoraient ce mémo (calcul purement horaire,
+    `isActiveNow()` seul) — une présence désactivée pour aujourd'hui s'y affichait quand même
+    comme active. Nouveau `DetailViewModel.isPresenceDisabledToday()` (lecture locale, pas de
+    RPC), branché sur **tous** les usages de `isActiveNow()` de l'écran (badge, tag « En cours »,
+    blocage d'édition, blocage de mise en pause, avertissement de suppression) via un helper local
+    `Planning.isReallyActive()`.
+  - **Bouton physique — fait le 2026-08-22, plus léger que le plan initial.** Le script ne
+    regarde jamais la provenance d'un changement (`source`) — contrairement au minuteur bouton,
+    il compare juste « censé être dans une fenêtre » à « la prise est allumée » et **réimpose**
+    l'état voulu à chaque tick, sans distinguer un appui bouton d'une coupure de courant à
+    corriger. Plan initial (réécrire la logique interne du script partagé, `isButtonSource` +
+    `matchedWindowIdx`) écarté après diagnostic en direct sur la Strip4 (appui physique constaté :
+    coupe le courant, mais rien ne bouge côté app et la prise se rallume au tick suivant, comme
+    prévu) — **abandonné pour une solution plus légère**, repérée en discutant avec David : la
+    différence avec Planning n'est pas la détection (identique, `source` du relevé de 5 s) mais
+    l'action. Détecter suffisait pour Planning (rien ne rallume la prise de son côté) ; pour
+    Présence il faut aussi **déclencher réellement** la coupure, pas juste la mémoriser — mais pas
+    besoin de toucher le script pour ça : `DashboardViewModel` appelle directement
+    `DeviceRepository.stopPresenceForToday` (déjà écrit et validé pour le bouton de l'app) dès
+    qu'il détecte un appui bouton pendant une présence active, avec une garde sur le mémo déjà
+    posé pour ne pas rappeler à chaque cycle. Coûte un vrai aller-retour RPC, mais seulement dans
+    ce cas précis et rare, jamais pour tous les canaux. Détection en ≤5 s (cycle du Tableau) au
+    lieu de ≤60 s si on était passé par le script.
+
+- **Même principe étendu à Planning — bouton app **et** bouton physique faits le 2026-08-22, dans
+  la foulée de Présence.** Contrairement à la présence, un planning ne dépend d'aucun script
+  Hestia (juste des programmes cron natifs) : couper manuellement pendant sa plage est déjà sans
+  risque (le programme d'extinction, redondant, ne fait rien de plus). Demande de David : ne plus
+  montrer la couleur « Planifié » (violet) une fois coupé pour aujourd'hui — juste Actif/Éteint
+  selon l'état réel, avec un texte fixe l'indiquant — et couvrir aussi le bouton physique, pas
+  seulement l'app (contrairement à Présence, dont le bouton physique reste un chantier à part
+  ci-dessus). Jamais posé pour un planning **Unique** (pas de « lendemain » à distinguer).
+  - **Détection, sans rien changer côté appareil.** Nouveau champ `TileStatus.Online.source`
+    (déjà dans chaque relevé `Switch.GetStatus`, jamais exposé jusqu'ici) — un appui bouton
+    physique se reconnaît directement dans le cycle de 5 s existant : canal éteint, `source`
+    du genre bouton (`button`/`short_push`/…), et un planning récurrent nominalement actif à cet
+    instant → mémorisé (`AppPreferences.isPlanningDisabledToday`/`markPlanningDisabledToday`,
+    même mécanique date-du-jour que côté présence). Pas de dialogue, pas d'action de l'app : la
+    coupure elle-même est déjà faite par l'appui, on ne fait qu'enregistrer.
+  - **Bouton de l'app** : `DashboardViewModel.toggle` pose le même mémo quand on éteint alors
+    qu'un planning récurrent est en cours — pas de boîte de dialogue de confirmation
+    (contrairement à Présence) puisque l'action est déjà sans risque.
+  - **Rendu** : nouvelle branche prioritaire dans `DeviceTile.toVisual` (avant même le minuteur/
+    présence/planning normal) — tant que le mémo est actif pour aujourd'hui, la tuile bascule sur
+    le libellé/couleur Actif ou Éteint (jamais plus « Planifié » violet), avec « Planning désactivé
+    aujourd'hui » en texte fixe, qu'il soit actuellement allumé ou pas — pour que le texte reste
+    stable même si la prise est rallumée manuellement ensuite.
+    **Retouché après premier essai** : le texte était d'abord concaténé au libellé sur une seule
+    ligne (« Éteint · planning désactivé aujourd'hui », lu comme un charabia par David, et assez
+    long pour pousser l'interrupteur en dessous sur la tuile prise seule) — déplacé sur sa propre
+    ligne via `thresholdText` (même mécanique que le seuil), libellé capitalisé
+    (`tile_planning_disabled_today` = « Planning désactivé aujourd'hui »).
+  - **Écran Détail** : même branchement que pour Présence
+    (`DetailViewModel.isPlanningDisabledToday()`, `Planning.isReallyActive()` étendu).
 
 - **Le seuil configuré n'apparaît pas sur la tuile quand il n'y a pas de décompte — repéré le
   2026-08-22 en listant tous les états textuels de la tuile pour la refonte graphique envisagée
