@@ -451,22 +451,42 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
     part : `createPlanning`, `updatePlanning`, `deletePlanning`, `stopPresence` — quatre chemins
     minimum, potentiellement plus si on compte les migrations d'anciens scripts.
 
-  **Dommage collatéral non trivial, à trancher avant de coder — pas de réponse évidente.**
-  La coupure « pour aujourd'hui seulement » d'une présence (`stopPresenceForToday`) ne vit que
-  dans `STATE` (mémoire vive), volontairement — c'est ce qui lui permet de s'effacer toute seule
-  le lendemain sans toucher à `CFG`. Mais la liste de plages interdites du minuteur bouton, elle,
-  vivrait forcément dans `CFG` (pas de sens d'avoir un « aujourd'hui seulement » sur une config
-  qui doit rester stable jour après jour). Conséquence : si tu coupes la présence pour
-  aujourd'hui via le bouton, le minuteur bouton continuerait de croire la plage interdite pour le
-  reste de la journée — **le bouton physique resterait bloqué (simple bascule, jamais de
-  minuteur) même après que tu aies explicitement dit « pas aujourd'hui » à la présence.** Pour
-  que le bouton retrouve son comportement normal le même jour, il faudrait que
-  `hestia_button_timer` lise aussi l'état vivant de `hestia_presence` (pas juste sa config figée)
-  — un vrai couplage entre les deux scripts à l'exécution, plus complexe que la simple poussée de
-  config décrite ci-dessus. **Question pour David** : est-ce acceptable que le bouton reste
-  « en sourdine » (bascule simple, sans minuteur) jusqu'au lendemain une fois la présence coupée
-  pour le jour, ou faut-il vraiment qu'il retrouve son comportement normal dans l'heure qui suit ?
-  La réponse change significativement la taille du chantier.
+  **Décision de David (2026-08-22) : couplage complet nécessaire.** La coupure « pour
+  aujourd'hui seulement » d'une présence (`stopPresenceForToday`) ne vit que dans `STATE`
+  (mémoire vive) — une simple liste de plages interdites poussée en `CFG` chez le minuteur bouton
+  resterait donc périmée jusqu'au lendemain après une coupure du jour : le bouton physique
+  resterait « en sourdine » sans savoir que la présence a cédé la place. Tranché : pas acceptable,
+  il faut un vrai couplage à l'exécution — `hestia_button_timer` doit connaître l'état **vivant**
+  de `hestia_presence`, pas juste sa config figée.
+
+  **Mécanisme envisagé : appel `Script.Eval` script-à-script, pas seulement app-vers-script.**
+  `hestia_presence`, à chaque transition qui compte (début de fenêtre, fin de fenêtre, coupure
+  « aujourd'hui »), appellerait `Shelly.call("Script.Eval", {id: <id de hestia_button_timer>,
+  code: ...})` pour mettre à jour une variable en mémoire côté minuteur bouton — même famille
+  d'appel que ce que fait déjà l'app toute la soirée, mais cette fois émis par un script vers un
+  autre, jamais testé jusqu'ici. Évite la lecture asynchrone (KVS) : le minuteur bouton garde une
+  simple variable à consulter, aussi rapide qu'aujourd'hui à l'armement.
+  Complications propres à ce mécanisme : `hestia_presence` doit retrouver l'identifiant de
+  `hestia_button_timer` de façon fiable (recherche par nom, pas un id codé en dur — un script
+  redéployé change d'id) ; beaucoup plus de points de déclenchement côté script que de simples
+  points de synchronisation Kotlin ; et une vraie inconnue technique — le comportement du moteur
+  mJS de Shelly quand un script appelle `Script.Eval` sur un autre pendant qu'il est en plein
+  tick n'a jamais été vérifié ce soir (tous les appels `Script.Eval` de la soirée sont partis de
+  l'app, jamais d'un script vers un autre).
+
+  **Lot 0 (curl) — fait et concluant le 2026-08-22.** Mécanisme de base validé en direct sur la
+  Strip4 : deux scripts de test temporaires (jamais les scripts `hestia_*` réels — présence mise
+  en pause quelques secondes le temps du test, faute de créneau libre à 3 scripts actifs
+  simultanément, remise en route ensuite, `STATE` vérifié intact après coup). Script A avec un
+  `Timer.set` actif (compteur qui s'incrémente) ; script B appelle
+  `Shelly.call("Script.Eval", {id: <A>, code: "..."})` pour modifier une variable de A. Résultat :
+  `error_code: 0`, la mutation s'applique bien, et A continue de tiquer normalement ensuite
+  (aucune corruption, aucun tick manqué ou dupliqué observé). **Le mécanisme fonctionne** — un
+  script peut bien piloter un autre script du même appareil via `Script.Eval`, exactement comme
+  l'app le fait déjà. Un premier essai avait semblé échouer (variable inchangée) mais c'était un
+  artefact du test (callback vide, aucune capture d'erreur) — corrigé en capturant explicitement
+  `error_code`/`result` dans une variable relisable, qui a confirmé le succès sans ambiguïté.
+  Prêt pour le Lot 1 (plage interdite figée, appui bouton réel).
 
   **Autre angle mort identifié** : un minuteur bouton déjà armé **avant** le début d'une fenêtre
   de présence (ex. appui à 8h55, présence qui commence à 9h) continuerait sa course jusqu'à son
@@ -474,13 +494,12 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   armement, pas un minuteur déjà en cours qui chevauche le début d'une fenêtre. Cas rare, mais à
   documenter pour ne pas être surpris si ça se reproduit après le correctif.
 
-  **Plan de validation proposé, pour éviter la galère de tests d'une fonctionnalité mal comprise** :
-  Lot 1 (curl uniquement, comme le chantier persistance) — pousser à la main une version modifiée
-  de `hestia_button_timer` avec une plage interdite figée sur un canal de test, vérifier par appui
-  bouton réel qu'il n'arme pas dedans et arme normalement en dehors, avant d'écrire une seule
-  ligne de Kotlin. Lot 2 seulement ensuite : plomberie complète (génération de script, points de
-  synchronisation). Lot 3 : test réel complet, y compris la coupure « aujourd'hui » en cours de
-  route pour vérifier le comportement retenu à la question ci-dessus.
+  **Plan de validation, pour éviter la galère de tests d'une fonctionnalité mal comprise** :
+  Lot 0 ci-dessus (curl, mécanisme de base script-à-script) → Lot 1 (curl, plage interdite figée
+  sur un canal de test, vérifiée par appui bouton réel) → Lot 2 (plomberie Kotlin complète :
+  génération de script des deux côtés, points de déclenchement) → Lot 3 (test réel complet, y
+  compris la coupure « aujourd'hui » en cours de route pour vérifier que le bouton redevient
+  normal dans la foulée).
 
 - **Retour visuel pendant l'enregistrement d'un planning — proposé par David le 2026-08-22,
   pas codé.** Le bouton « Enregistrer » (dialogue d'ajout/édition de planning) met environ 1 s à
