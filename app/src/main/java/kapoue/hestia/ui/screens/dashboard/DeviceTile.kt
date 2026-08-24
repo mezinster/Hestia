@@ -325,7 +325,14 @@ internal fun TileStatus.toVisual(
             // selon l'état réel du moment, avec un texte fixe qui reste tant que le jour n'est pas
             // passé (retour David, 2026-08-22 : contrairement à la présence, un simple retour à
             // l'état physique suffit, pas besoin de nuancer la couleur).
-            activePlanning != null && planningDisabledToday && !activePlanning.once -> TileVisual(
+            //
+            // [!activePlanning.isPresence] : bug trouvé en direct le 2026-08-24 — sans ce garde,
+            // un vieux mémo `planningDisabledToday` laissé par un planning précis testé plus tôt
+            // sur ce canal masquait complètement une présence par ailleurs active et non désactivée
+            // (la branche suivante, qui vérifie `presenceDisabledToday`, n'était alors jamais
+            // atteinte). Les deux mémos sont indépendants (voir AppPreferences) : celui d'un
+            // planning précis ne doit jamais influencer l'affichage d'une présence, et inversement.
+            activePlanning != null && planningDisabledToday && !activePlanning.once && !activePlanning.isPresence -> TileVisual(
                 bgColor = physicalBg, ringColor = ringColor,
                 textColor = if (output) colors.activeText else colors.idleText,
                 label = stringResource(if (output) R.string.state_active else R.string.state_idle),
