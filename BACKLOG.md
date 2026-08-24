@@ -607,9 +607,40 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   parse`, qui ne capture que durée/seuil, pas les plages interdites) — scénario rare (script
   bouton arrêté/planté puis un réglage bouton modifié avant tout passage par la présence), dégrade
   simplement en bouton non bloqué jusqu'au prochain create/update/delete de présence sur ce canal.
-  **Reste à faire avant tout usage réel : Lot 3, test complet sur le Strip4** (présence + bouton
-  sur un même canal de test, y compris la coupure « aujourd'hui » en cours de route pour vérifier
-  que le bouton se débloque bien dans la foulée).
+  **Lot 3 (test réel, app→app cette fois, plus de curl bricolé) — fait sur la prise 2 (Strip4,
+  switchId 1) le 2026-08-24, deux bugs trouvés et corrigés en route, mécanisme final validé.**
+  Présence créée depuis l'app (12h05-12h20, marge 20 min) : la plage interdite s'est poussée
+  automatiquement au minuteur bouton, sans aucune manip curl — premier signe que le plumbing du
+  Lot 2 fonctionne réellement. Appui bouton pendant la fenêtre bloquée (prise éteinte au préalable
+  par RPC, pour ne pas déclencher la coupure « aujourd'hui » avant l'heure) : confirmé non armé
+  (`armed:false`, aucun `timer_started_at`), comme au Lot 1 mais cette fois via le vrai flux
+  applicatif. Puis coupure « aujourd'hui » (appui bouton pour éteindre, détecté par l'app) :
+  `blockedOffToday` bien poussé côté bouton ; appui suivant pour rallumer → minuteur armé
+  normalement (22 min) malgré la fenêtre bloquée, déblocage confirmé.
+
+  **Bug 1, trouvé avant le test lui-même : la détection d'appui bouton se redéclenchait en boucle
+  sur une source périmée**, coupant toute présence/planning fraîchement créé avant son premier
+  allumage (`DashboardViewModel.fetch()` ne vérifiait pas la fraîcheur de la transition). Corrigé
+  en exigeant que le cycle de sondage précédent ait vu le canal allumé, pas juste « actuellement
+  éteint avec source bouton ». Voir l'entrée dédiée en tête de ce document (§ Fait — en cours).
+
+  **Bug 2, trouvé pendant le test : `DeviceTile.toVisual` pouvait afficher « Planning désactivé
+  aujourd'hui » sur une présence**, si un vieux mémo `planningDisabledToday` (laissé par un
+  planning précis testé plus tôt sur ce canal) traînait encore — la condition ne vérifiait pas
+  `!activePlanning.isPresence`. Corrigé, voir l'entrée dédiée.
+
+  **Bug 3, trouvé en toute fin de test : le minuteur bouton, une fois débloqué par la coupure
+  « aujourd'hui », s'armait bien — mais la présence le recoupait dans la minute, son tick
+  continuant d'éteindre le canal dès qu'il repassait à ON.** `evalStopToday` se contentait de
+  raccourcir la fenêtre du jour (`STATE[i].off[j]` ramené à maintenant) ; le tick de
+  `hestia_presence`, lui, reste inconditionnel (`!inWin && output → off`), donc rallumer le canal
+  par n'importe quel autre moyen plus tard dans la journée se faisait aussitôt recouper. Corrigé
+  en ajoutant `STATE[i].stoodDownDay` (jour courant) : le tick devient totalement passif sur ce
+  canal pour le reste de la journée dès que ce champ correspond au jour en cours (ni allumage, ni
+  extinction), plutôt que de compter sur une fenêtre raccourcie que le tick continuait par ailleurs
+  d'appliquer littéralement. Auto-cicatrisant le lendemain (`planDay` reprend un jour vierge).
+  **Pas encore re-testé après ce troisième correctif** — à revalider avant de considérer le Lot 3
+  complet.
 
 - **Retour visuel pendant l'enregistrement d'un planning — proposé par David le 2026-08-22,
   pas codé.** Le bouton « Enregistrer » (dialogue d'ajout/édition de planning) met environ 1 s à

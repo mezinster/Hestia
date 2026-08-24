@@ -66,8 +66,12 @@ object PresenceScriptGenerator {
     private fun channelLiteral(c: ChannelConfig): String =
         "{ switchId: ${c.switchId}, name: \"${NtfyScriptSupport.jsString(c.name)}\", windows: ${windowsLiteral(c.windows)} }"
 
-    /** Littéral JS d'un état de suivi vierge, partagé entre [generateSupervisor] et [evalUpsertChannel]. */
-    private const val FRESH_STATE = "{ day: null, on: [], off: [] }"
+    /**
+     * Littéral JS d'un état de suivi vierge, partagé entre [generateSupervisor] et
+     * [evalUpsertChannel]. `stoodDownDay` : jour (`Math.floor(unixtime/86400)`) où ce canal doit
+     * rester passif toute la journée malgré ses plages — voir [evalStopToday].
+     */
+    private const val FRESH_STATE = "{ day: null, on: [], off: [], stoodDownDay: null }"
 
     /**
      * Premier déploiement du script partagé (aucun script existant, ou existant mais arrêté) —
@@ -134,6 +138,12 @@ object PresenceScriptGenerator {
             let cfg = CFG[i];
             let s = STATE[i];
             if (s.day !== day) planDay(s, cfg.windows, day);
+            // Coupé « pour aujourd'hui » (voir evalStopToday) : totalement passif sur ce canal
+            // jusqu'à demain, ni allumage ni extinction — sans ce garde, le prochain passage
+            // continuait d'éteindre le canal dès qu'il repassait à ON par un autre moyen (bug
+            // trouvé en direct le 2026-08-24 : un minuteur bouton débloqué par la coupure du jour
+            // s'allumait, puis se faisait immédiatement recouper par ce tick).
+            if (s.stoodDownDay === day) continue;
             let st = Shelly.getComponentStatus("switch", cfg.switchId);
             if (!st) continue;
             let inWin = false;
@@ -194,24 +204,25 @@ object PresenceScriptGenerator {
      * toucher à la configuration permanente ([CFG], jamais modifiée ici) — demande de David,
      * 2026-08-22 : l'arrêt complet ([evalRemoveChannel]) retirait le canal pour tous les jours
      * programmés, trop radical pour « je rentre chez moi, j'éteins pour aujourd'hui ».
-     * Ramène l'heure de fin déjà tirée au sort pour la fenêtre en cours (`STATE[i].off[j]`) à
-     * l'instant présent, puis éteint la prise. `planDay` (voir [generateSupervisor]) retire un
-     * nouveau jour vierge dès le lendemain à partir de [CFG], jamais touché ici — la présence
-     * reprend donc normalement le jour suivant. Ne fait rien si aucune fenêtre n'est en cours
-     * (rien à raccourcir).
+     *
+     * Marque `STATE[i].stoodDownDay` au jour courant : le tick de [generateSupervisor] devient
+     * alors totalement passif sur ce canal jusqu'à demain (ni allumage, ni extinction), plutôt que
+     * de simplement raccourcir la fenêtre en cours comme avant le 2026-08-24. Nécessaire depuis le
+     * couplage bouton/présence (voir `ButtonTimerScriptGenerator.evalSetBlockedOffToday`) : un
+     * minuteur bouton débloqué par cette coupure peut désormais rallumer le canal plus tard dans
+     * la journée — sans passivité totale, ce tick l'aurait aussitôt recoupé (fenêtre déjà
+     * considérée terminée), avant même que le minuteur bouton n'ait eu la moindre chance de tenir
+     * sa durée. `planDay` (voir [generateSupervisor]) efface `stoodDownDay` en repartant sur un
+     * jour vierge dès le lendemain — rien à nettoyer explicitement.
      */
     fun evalStopToday(switchId: Int): String = """
         (function () {
           for (let i = 0; i < CFG.length; i++) {
             if (CFG[i].switchId !== $switchId) continue;
-            let s = STATE[i];
             let sys = Shelly.getComponentStatus("sys");
             if (!sys || !sys.unixtime) return "false";
-            let now = new Date(sys.unixtime * 1000);
-            let nowMin = now.getHours() * 60 + now.getMinutes();
-            for (let j = 0; j < s.off.length; j++) {
-              if (s.on[j] <= nowMin && nowMin < s.off[j]) s.off[j] = nowMin;
-            }
+            let day = Math.floor(sys.unixtime / 86400);
+            STATE[i].stoodDownDay = day;
             Shelly.call("Switch.Set", { id: $switchId, on: false });
             return "true";
           }
