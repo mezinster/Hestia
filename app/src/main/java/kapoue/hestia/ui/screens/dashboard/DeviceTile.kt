@@ -135,7 +135,7 @@ fun DeviceTile(
                 visual.thresholdText?.let {
                     Text(
                         text = it,
-                        color = visual.textColor,
+                        color = visual.thresholdTextColor ?: visual.textColor,
                         fontWeight = FontWeight.Medium,
                         style = MaterialTheme.typography.labelSmall,
                         textAlign = TextAlign.Center,
@@ -232,6 +232,10 @@ internal data class TileVisual(
      * longue (retour David, 2026-08-22).
      */
     val thresholdText: String? = null,
+    /** Couleur du [thresholdText], si différente de [textColor] — cas de « désactivé aujourd'hui »
+     * (retour David, 2026-08-24 : le vert de « Actif » ne doit pas déteindre sur une note qui
+     * n'indique pas elle-même un état actif, juste une explication). Null = reprend [textColor]. */
+    val thresholdTextColor: Color? = null,
     /** Vrai quand l'anneau est vert (courant réel) — épaissi dans ce cas précis pour rééquilibrer
      * le disque désormais plus présent (retour David, 2026-08-22 : test d'un disque à 70 %
      * d'opacité + anneau doublé uniquement quand vert). */
@@ -342,6 +346,10 @@ internal fun TileStatus.toVisual(
                 // aujourd'hui » ne voulait rien dire collé, et poussait l'interrupteur en dessous
                 // — retour David, 2026-08-22).
                 thresholdText = stringResource(R.string.tile_planning_disabled_today),
+                // Neutre, jamais vert : ce texte n'indique pas lui-même un état actif, juste une
+                // explication — le vert d'« Actif » juste au-dessus n'a pas à déteindre dessus
+                // (retour David, 2026-08-24).
+                thresholdTextColor = colors.idleText,
                 ringEmphasis = output,
             )
             // Présence désactivée pour aujourd'hui : même traitement que Planning ci-dessus
@@ -354,6 +362,7 @@ internal fun TileStatus.toVisual(
                 countdown = null,
                 dashed = false,
                 thresholdText = stringResource(R.string.tile_presence_disabled_today),
+                thresholdTextColor = colors.idleText,
                 ringEmphasis = output,
             )
             // Minuteur natif en cours (bouton avec durée, ou Perso/Manuel) : reclassé « Actif »
@@ -578,7 +587,7 @@ fun ChannelQuickSheet(
                         }
                     }
                     visual.thresholdText?.let {
-                        Text(text = it, color = visual.textColor, style = MaterialTheme.typography.bodyMedium)
+                        Text(text = it, color = visual.thresholdTextColor ?: visual.textColor, style = MaterialTheme.typography.bodyMedium)
                     }
                     if (powerWatts != null) {
                         Text(
