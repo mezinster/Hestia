@@ -501,6 +501,40 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   compris la coupure « aujourd'hui » en cours de route pour vérifier que le bouton redevient
   normal dans la foulée).
 
+  **Lot 1 (curl) — fait et concluant le 2026-08-24, sur deux canaux distincts pour ne pas
+  perturber un canal utile (David a dédié les prises 2 et 4 du Strip4 aux tests, avec des
+  réglages de minuteur bouton volontairement fictifs : 22 min sans seuil / 24 min sans seuil,
+  pendant que les prises 1 et 3 gardent leurs vrais réglages).** Injection directe, dans une
+  copie de test du script réel `hestia_button_timer` (redéploiement complet, pas juste
+  `Script.Eval`, pour intégrer la fonction elle-même, pas seulement la donnée), d'une fonction
+  `isBlockedNow(cfg)` reprenant telle quelle la logique de fenêtre horaire de `hestia_presence`
+  (`over`/`appliesToday`/`appliesYesterday`), et d'une plage figée `blocked` sur le canal de test
+  (prise 2, switchId 1). Vérifié par appui physique réel, croisé par `curl` à chaque étape :
+  - **Pendant la plage bloquée** : appui bouton → prise allumée (`source:"short_push"` confirmé
+    via `Switch.GetStatus`), mais `STATE.armed` reste `false` et aucun `timer_started_at` posé —
+    l'appui reste un simple relais, sans armement.
+  - **Après la fin de la plage** : appui bouton (éteindre puis rallumer, la prise étant restée
+    allumée) → armement normal confirmé (`STATE.armed:true`, `timer_started_at`/
+    `timer_duration:1320` présents côté `Switch.GetStatus`).
+  Les deux volets confirment le mécanisme correct de bout en bout. Nettoyage fait proprement
+  ensuite (retour au script réel généré par l'app, sans le champ de test ni la fonction, `STATE`
+  du canal de test préservé dans la restauration pour ne pas perdre le suivi du minuteur natif en
+  cours).
+
+  **Découverte importante en cours de route, à retenir pour le Lot 2 : une erreur d'exécution
+  dans un appel `Script.Eval` — pas seulement une erreur de syntaxe — arrête net le script
+  visé.** Repéré deux fois ce soir : une première fois avec un `return` hors fonction (erreur de
+  syntaxe, `-2 "syntax_error"`), une seconde fois avec `Array.prototype.find()` — **non supporté
+  par le moteur JS embarqué de Shelly (mJS)**, qui a échoué avec un `-9 "error"` générique et fait
+  passer le script en `running:false`. Dans les deux cas, le script visé s'arrête complètement
+  (pas juste l'appel `Eval` qui échoue) ; au redémarrage (`Script.Start`), il repart du texte
+  enregistré en flash (donc sain, aucune corruption durable), mais perd tout l'état vivant en
+  mémoire depuis le dernier `PutCode`. Conséquence pour le Lot 2 : tout code généré pour
+  `evalUpsertChannel()`/`evalRemoveChannel()`/les futurs appels script-à-script de couplage
+  présence↔bouton doit s'en tenir strictement aux constructions JS déjà éprouvées en production
+  (boucle `for` classique, pas de méthodes de tableau ES6 comme `.find()`/`.map()`/`.filter()`),
+  et idéalement être testé par un appel `Eval` en lecture seule d'abord avant toute mutation.
+
 - **Retour visuel pendant l'enregistrement d'un planning — proposé par David le 2026-08-22,
   pas codé.** Le bouton « Enregistrer » (dialogue d'ajout/édition de planning) met environ 1 s à
   fermer la modale (aller-retour réseau) — assez pour qu'un double-clic passe inaperçu et crée
