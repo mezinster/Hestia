@@ -565,7 +565,26 @@ class DeviceRepository @Inject constructor(
         val eval = rpcClient.scriptEval(ip, running.id, PresenceScriptGenerator.evalStopToday(device.switchId))
         eval.errorOrNull()?.let { return it }
         realignPresenceFlash(ip, running.id)
+        pushBlockedOffTodayToButtonTimer(ip, device)
         return RpcResult.Success(Unit)
+    }
+
+    /**
+     * Suspend, pour aujourd'hui seulement, le blocage du minuteur bouton sur ce canal (voir
+     * [ButtonTimerScriptGenerator.evalSetBlockedOffToday]) — pendant de [stopPresenceForToday]
+     * côté bouton. Best-effort et silencieux : si le canal n'a pas de minuteur bouton configuré,
+     * ou si son script n'est pas en cours d'exécution, il n'y a simplement rien à débloquer.
+     */
+    private suspend fun pushBlockedOffTodayToButtonTimer(ip: String, device: Device) = withContext(NonCancellable) {
+        val listResult = rpcClient.scriptList(ip)
+        val running = listResult.getOrNull()?.scripts?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME && it.running }
+            ?: return@withContext
+        val eval = rpcClient.scriptEval(ip, running.id, ButtonTimerScriptGenerator.evalSetBlockedOffToday(device.switchId))
+        if (eval.errorOrNull() != null) {
+            logger.warn(DiagnosticLogger.RPC, "Déblocage bouton (aujourd'hui) @ $ip : Eval refusé")
+            return@withContext
+        }
+        realignButtonTimerFlash(ip, running.id)
     }
 
     /**
@@ -593,14 +612,40 @@ class DeviceRepository @Inject constructor(
             // suite, sinon le prochain redémarrage de l'appareil la ferait disparaître (bug de
             // fond vécu en direct le 2026-08-21, un planning supprimé ressuscité au rebranchement).
             realignPresenceFlash(ip, running.id)
+            pushBlockedToButtonTimer(ip, device, config?.windows.orEmpty())
             return RpcResult.Success(Unit)
         }
 
         val (_, existing) = loadOrMigratePresenceScript(device)
         val others = existing.filterNot { it.switchId == device.switchId }
         val updated = if (config != null) others + config else others
-        return deployPresenceScript(ip, updated)
+        val result = deployPresenceScript(ip, updated)
+        if (result is RpcResult.Success) pushBlockedToButtonTimer(ip, device, config?.windows.orEmpty())
+        return result
     }
+
+    /**
+     * Pousse les plages interdites d'armement du minuteur bouton sur ce canal (voir
+     * [ButtonTimerScriptGenerator.evalSetBlocked]) — pendant de [applyPresenceChannel] côté
+     * bouton, seul point de synchronisation nécessaire puisque `createPlanning`/`updatePlanning`/
+     * `deletePlanning`/`stopPresence` passent tous par lui. [windows] vide = plus aucune présence
+     * sur ce canal, débloque totalement. Best-effort et silencieux : si le canal n'a pas de
+     * minuteur bouton configuré, ou si son script n'est pas en cours d'exécution, il n'y a
+     * simplement rien à bloquer pour l'instant — se corrigera au prochain passage par ici.
+     */
+    private suspend fun pushBlockedToButtonTimer(ip: String, device: Device, windows: List<PresenceWindow>) =
+        withContext(NonCancellable) {
+            val listResult = rpcClient.scriptList(ip)
+            val running = listResult.getOrNull()?.scripts
+                ?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME && it.running }
+                ?: return@withContext
+            val eval = rpcClient.scriptEval(ip, running.id, ButtonTimerScriptGenerator.evalSetBlocked(device.switchId, windows))
+            if (eval.errorOrNull() != null) {
+                logger.warn(DiagnosticLogger.RPC, "Synchro blocage bouton @ $ip : Eval refusé")
+                return@withContext
+            }
+            realignButtonTimerFlash(ip, running.id)
+        }
 
     /**
      * Réécrit le texte enregistré (flash) du script de présence pour qu'il corresponde exactement

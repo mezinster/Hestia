@@ -535,6 +535,61 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   (boucle `for` classique, pas de méthodes de tableau ES6 comme `.find()`/`.map()`/`.filter()`),
   et idéalement être testé par un appel `Eval` en lecture seule d'abord avant toute mutation.
 
+  **Point 2 (comment `hestia_presence` retrouverait `hestia_button_timer`) discuté et écarté le
+  2026-08-24 : pas besoin de script-à-script du tout.** En reprenant le fil, `stopPresenceForToday`
+  n'est jamais déclenché par `hestia_presence` lui-même (le script n'agit qu'en autonomie sur ses
+  propres horaires) — c'est toujours l'app qui l'appelle, que ce soit un tap utilisateur ou la
+  détection du bouton physique dans `DashboardViewModel.fetch()`. L'app est donc déjà au bon
+  endroit pour prévenir le bouton dans la foulée, en réutilisant l'appel `Script.Eval` app→script
+  déjà éprouvé partout ailleurs ce soir — jamais besoin que `hestia_presence` retrouve l'id de
+  `hestia_button_timer` ni ne lui parle directement. Les débuts/fins de fenêtre normaux (9h/17h)
+  n'ont pas non plus besoin de push en direct : une fois les plages statiques poussées dans `CFG`
+  du bouton (au moment de créer/modifier/supprimer une présence), `isBlockedNow(cfg)` calcule
+  lui-même à chaque tick s'il est dans une plage, exactement comme le fait déjà `hestia_presence`
+  pour ses propres fenêtres. Seul l'aspect éphémère (coupure « aujourd'hui ») a besoin d'un push
+  ciblé, et l'app le fait déjà au bon moment. Mécanisme script-à-script du Lot 0 gardé en tête si
+  un vrai besoin apparaît un jour, mais pas utilisé ici — moins de risque, moins de code.
+
+  **Lot 2 (plomberie Kotlin + génération de script) — codé le 2026-08-24, pas encore testé.**
+  `ButtonTimerScriptGenerator.ChannelConfig` gagne `blocked: List<PresenceWindow>` (plages
+  interdites, élargies de la marge de présence de part et d'autre, repassées modulo 1440 si
+  l'élargissement traverse minuit — jamais juste l'horaire nominal) et `blockedOffToday: Int?`
+  (jour où ignorer le blocage malgré tout). `isBlockedNow(cfg)` intégrée au script généré,
+  reprend telle quelle la logique de fenêtre de `hestia_presence` (`over`/`appliesToday`/
+  `appliesYesterday`), validée en direct au Lot 1 — vérifiée avant l'armement
+  (`!isBlockedNow(cfg)` ajouté à la condition existante). Nouvelles fonctions `Script.Eval` :
+  `evalSetBlocked(switchId, windows)` (met à jour uniquement les plages d'un canal déjà connu du
+  bouton, sans y toucher s'il n'a pas de minuteur bouton configuré — rien à bloquer dans ce cas ;
+  efface au passage `blockedOffToday`, cohérent avec le fait que `PresenceScriptGenerator.
+  evalUpsertChannel` réinitialise déjà `STATE` du canal côté présence à chaque modification, donc
+  annule implicitement une coupure « aujourd'hui » précédente) et `evalSetBlockedOffToday(switchId)`
+  (calcule le jour **lui-même**, côté script, plutôt que de le recevoir de Kotlin — reste cohérent
+  avec la comparaison faite dans `isBlockedNow` quelle que soit l'horloge du téléphone).
+  `evalUpsertChannel` (appelée quand l'utilisateur modifie les réglages du bouton lui-même, durée/
+  seuil) reprend `blocked`/`blockedOffToday` de l'ancienne entrée avant remplacement — sans ça, un
+  simple changement de durée écraserait silencieusement un blocage en cours, pièges de
+  synchronisation déjà rencontrés ce soir sur le mémo « désactivé aujourd'hui ». `parseLiveSnapshot`
+  relit aussi ces deux champs, pour qu'ils survivent à *tout* réalignement de flash, pas seulement
+  ceux déclenchés par la présence.
+  Côté `DeviceRepository` : un seul point de synchronisation pour le cas statique,
+  `applyPresenceChannel` (déjà le funnel unique de `createPlanning`/`updatePlanning`/
+  `deletePlanning`/`stopPresence`, avant même ce lot) — pousse `evalSetBlocked` juste après avoir
+  appliqué le changement côté présence, dans les deux branches (script déjà en cours, ou premier
+  déploiement). `stopPresenceForToday` pousse `evalSetBlockedOffToday` juste après son propre
+  réalignement. Les deux poussées sont best-effort et silencieuses (`NonCancellable`, simple
+  avertissement journalisé en cas d'échec) : si le canal n'a pas de minuteur bouton configuré ou
+  si son script n'est pas en cours d'exécution, il n'y a rien à bloquer pour l'instant — se
+  corrige tout seul au prochain passage.
+  Limite acceptée, à documenter si elle se confirme gênante : un canal dont le blocage n'a jamais
+  survécu qu'en mémoire vive (script bouton jamais réaligné depuis) perd son `blocked` si le
+  script doit être totalement redéployé depuis le texte enregistré (`ButtonTimerScriptGenerator.
+  parse`, qui ne capture que durée/seuil, pas les plages interdites) — scénario rare (script
+  bouton arrêté/planté puis un réglage bouton modifié avant tout passage par la présence), dégrade
+  simplement en bouton non bloqué jusqu'au prochain create/update/delete de présence sur ce canal.
+  **Reste à faire avant tout usage réel : Lot 3, test complet sur le Strip4** (présence + bouton
+  sur un même canal de test, y compris la coupure « aujourd'hui » en cours de route pour vérifier
+  que le bouton se débloque bien dans la foulée).
+
 - **Retour visuel pendant l'enregistrement d'un planning — proposé par David le 2026-08-22,
   pas codé.** Le bouton « Enregistrer » (dialogue d'ajout/édition de planning) met environ 1 s à
   fermer la modale (aller-retour réseau) — assez pour qu'un double-clic passe inaperçu et crée

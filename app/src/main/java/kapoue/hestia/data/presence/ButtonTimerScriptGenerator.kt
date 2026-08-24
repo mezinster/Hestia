@@ -1,8 +1,10 @@
 package kapoue.hestia.data.presence
 
 import kapoue.hestia.data.notifications.NtfyScriptSupport
+import kapoue.hestia.domain.model.PresenceWindow
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -49,21 +51,48 @@ object ButtonTimerScriptGenerator {
      * Config d'un canal surveillé par le script. [durationSec] null = sans limite de durée (la
      * prise reste allumée jusqu'à la coupure sur seuil, [thresholdW] alors obligatoire — imposé
      * côté appelant). [name] sert uniquement au titre des notifications ntfy de ce canal.
+     *
+     * [blocked] : plages où un appui bouton ne doit **pas** armer de minuteur (conflit bouton /
+     * présence, voir BACKLOG.md § Conflit minuteur bouton / présence, 2026-08-24) — poussées par
+     * `DeviceRepository.applyPresenceChannel` à chaque création/modification/suppression d'une
+     * présence sur ce canal, vide si aucune présence ne le gouverne. [blockedOffToday] : jour
+     * (`Math.floor(unixtime/86400)`, calculé côté script pour rester cohérent avec sa propre
+     * horloge) où le blocage ci-dessus doit être ignoré malgré tout — poussé par
+     * `DeviceRepository.stopPresenceForToday`, s'auto-annule le lendemain sans action requise
+     * (le jour ne correspond plus), sur le même principe que `STATE[i].day` côté présence.
      */
     data class ChannelConfig(
         val switchId: Int,
         val durationSec: Int?,
         val thresholdW: Int?,
         val name: String,
+        val blocked: List<PresenceWindow> = emptyList(),
+        val blockedOffToday: Int? = null,
     )
+
+    /**
+     * Littéral JS des plages interdites d'un canal : `[[début,fin,0,[jours]],…]` — même forme que
+     * les plages de présence, mais élargie de part et d'autre de la marge aléatoire de présence
+     * (`marginMinutes`) pour couvrir toute bascule possible, jamais juste l'horaire nominal ; la
+     * marge n'est donc plus utile une fois exportée, le troisième élément reste `0`. Repasse par
+     * un modulo pour rester dans `[0,1440)` si l'élargissement traverse minuit.
+     */
+    private fun blockedLiteral(windows: List<PresenceWindow>): String =
+        windows.joinToString(",", "[", "]") {
+            val start = Math.floorMod(it.startMinutes - it.marginMinutes, 1440)
+            val end = Math.floorMod(it.endMinutes + it.marginMinutes, 1440)
+            "[$start,$end,0,[${it.days.sorted().joinToString(",")}]]"
+        }
 
     /** Littéral JS d'un canal, partagé entre [generate] et [evalUpsertChannel]. */
     private fun channelLiteral(c: ChannelConfig): String {
         val graceSec = if (c.durationSec == null) UNLIMITED_GRACE_SEC else 0
         val durationLiteral = c.durationSec?.toString() ?: "null"
         val thresholdLiteral = c.thresholdW?.toString() ?: "null"
+        val blockedOffTodayLiteral = if (c.blockedOffToday != null) ", blockedOffToday: ${c.blockedOffToday}" else ""
         return "{ switchId: ${c.switchId}, durationSec: $durationLiteral, thresholdW: $thresholdLiteral, " +
-            "belowSec: $BELOW_SEC, graceSec: $graceSec, name: \"${NtfyScriptSupport.jsString(c.name)}\" }"
+            "belowSec: $BELOW_SEC, graceSec: $graceSec, name: \"${NtfyScriptSupport.jsString(c.name)}\", " +
+            "blocked: ${blockedLiteral(c.blocked)}$blockedOffTodayLiteral }"
     }
 
     /** Littéral JS d'un état de suivi vierge, partagé entre [generate] et [evalUpsertChannel]. */
@@ -119,6 +148,35 @@ object ButtonTimerScriptGenerator {
           return src === "button" || src === "short_push" || src === "long_push" || src === "double_push" || src === "triple_push";
         }
 
+        // Conflit bouton / présence (BACKLOG.md, 2026-08-24) : un canal gouverné par une présence
+        // ne doit pas armer son propre minuteur pendant la fenêtre de présence, sinon les deux se
+        // marchent dessus. Validé en direct sur la Strip4 le 2026-08-24 (Lot 1).
+        function isBlockedNow(cfg) {
+          let sys = Shelly.getComponentStatus("sys");
+          if (!sys || !sys.unixtime) return false;
+          if (cfg.blockedOffToday !== undefined && cfg.blockedOffToday !== null) {
+            let day = Math.floor(sys.unixtime / 86400);
+            if (cfg.blockedOffToday === day) return false;
+          }
+          if (!cfg.blocked || cfg.blocked.length === 0) return false;
+          let d = new Date(sys.unixtime * 1000);
+          let now = d.getHours() * 60 + d.getMinutes();
+          let today = d.getDay();
+          let yesterday = (today + 6) % 7;
+          for (let j = 0; j < cfg.blocked.length; j++) {
+            let w = cfg.blocked[j];
+            let over = w[0] > w[1];
+            let days = w[3];
+            let appliesToday = days.indexOf(today) >= 0;
+            let appliesYesterday = days.indexOf(yesterday) >= 0;
+            let match = over
+              ? ((appliesToday && now >= w[0]) || (appliesYesterday && now < w[1]))
+              : (appliesToday && now >= w[0] && now < w[1]);
+            if (match) return true;
+          }
+          return false;
+        }
+
         function notifyEnd(name) { $notifyEnd }
         function notifyCutoff(name) { $notifyCutoff }
 
@@ -132,7 +190,7 @@ object ButtonTimerScriptGenerator {
             if (!s.armed) {
               // En veille : un appui qui vient d'allumer arme le minuteur par-dessus (ou, sans
               // durée, laisse simplement l'allumage natif du bouton tel quel).
-              if (st.output && !s.wasOn && isButtonSource(st.source)) {
+              if (st.output && !s.wasOn && isButtonSource(st.source) && !isBlockedNow(cfg)) {
                 s.armed = true;
                 s.belowSince = null;
                 s.onSince = null;
@@ -205,18 +263,82 @@ object ButtonTimerScriptGenerator {
      * cours d'exécution**, sans jamais toucher aux autres canaux (même technique que
      * [kapoue.hestia.data.presence.ChargeScriptGenerator.evalUpsertChannel], validée en direct le
      * 2026-08-18). Reconstruit via un tableau tampon (`for`+`push`), jamais `.splice()`.
+     *
+     * [config] vient toujours de l'écran réglages du bouton, qui ne connaît rien des plages
+     * interdites poussées séparément par la présence ([evalSetBlocked]/[evalSetBlockedOffToday]) —
+     * sans reprise explicite, un simple changement de durée/seuil écraserait silencieusement le
+     * blocage en cours. `blocked`/`blockedOffToday` de l'ancienne entrée sont donc repris tels
+     * quels sur la nouvelle avant remplacement.
      */
     fun evalUpsertChannel(config: ChannelConfig): String = """
         (function () {
           let kept = [];
           let keptState = [];
+          let oldBlocked = null;
+          let oldBlockedOffToday = null;
           for (let i = 0; i < CFG.length; i++) {
-            if (CFG[i].switchId !== ${config.switchId}) { kept.push(CFG[i]); keptState.push(STATE[i]); }
+            if (CFG[i].switchId !== ${config.switchId}) {
+              kept.push(CFG[i]);
+              keptState.push(STATE[i]);
+            } else {
+              if (CFG[i].blocked !== undefined) oldBlocked = CFG[i].blocked;
+              if (CFG[i].blockedOffToday !== undefined) oldBlockedOffToday = CFG[i].blockedOffToday;
+            }
           }
-          kept.push(${channelLiteral(config)});
+          let fresh = ${channelLiteral(config)};
+          if (oldBlocked !== null) fresh.blocked = oldBlocked;
+          if (oldBlockedOffToday !== null) fresh.blockedOffToday = oldBlockedOffToday;
+          kept.push(fresh);
           keptState.push($FRESH_STATE);
           CFG = kept;
           STATE = keptState;
+        })();
+    """.trimIndent()
+
+    /**
+     * Code `Script.Eval` pour mettre à jour uniquement les plages interdites du canal [switchId],
+     * sans toucher au reste de sa config ni à son état — poussé par `DeviceRepository.
+     * applyPresenceChannel` à chaque création/modification/suppression d'une présence sur ce
+     * canal. Ne fait rien si ce canal n'a pas de minuteur bouton configuré (rien à bloquer).
+     *
+     * Efface au passage un éventuel `blockedOffToday` : côté présence, créer/modifier une plage
+     * réinitialise déjà `STATE` du canal (voir `PresenceScriptGenerator.evalUpsertChannel`), ce
+     * qui annule implicitement une coupure « aujourd'hui » précédente — le bouton doit suivre le
+     * même raisonnement, sans quoi il resterait débloqué pour le reste de la journée après une
+     * modification qui, du point de vue de l'utilisateur, réactive la présence.
+     */
+    fun evalSetBlocked(switchId: Int, windows: List<PresenceWindow>): String = """
+        (function () {
+          for (let i = 0; i < CFG.length; i++) {
+            if (CFG[i].switchId === $switchId) {
+              CFG[i].blocked = ${blockedLiteral(windows)};
+              delete CFG[i].blockedOffToday;
+              return "ok";
+            }
+          }
+          return "no_channel";
+        })();
+    """.trimIndent()
+
+    /**
+     * Code `Script.Eval` pour suspendre le blocage du canal [switchId] pour la journée en cours
+     * uniquement — poussé par `DeviceRepository.stopPresenceForToday`. Calcule le jour lui-même
+     * (`Math.floor(sys.unixtime/86400)`, horloge du script) plutôt que de le recevoir de Kotlin :
+     * reste cohérent avec la comparaison faite dans `isBlockedNow`, quelle que soit l'horloge du
+     * téléphone. S'auto-annule le lendemain (le jour ne correspond plus), rien à nettoyer.
+     */
+    fun evalSetBlockedOffToday(switchId: Int): String = """
+        (function () {
+          let sys = Shelly.getComponentStatus("sys");
+          if (!sys || !sys.unixtime) return "no_time";
+          let day = Math.floor(sys.unixtime / 86400);
+          for (let i = 0; i < CFG.length; i++) {
+            if (CFG[i].switchId === $switchId) {
+              CFG[i].blockedOffToday = day;
+              return "ok";
+            }
+          }
+          return "no_channel";
         })();
     """.trimIndent()
 
@@ -282,11 +404,25 @@ object ButtonTimerScriptGenerator {
     /** Code `Script.Eval` pour lire le snapshot vivant complet (config **et** état) — réalignement flash. */
     fun evalReadFull(): String = "JSON.stringify({cfg:CFG,state:STATE})"
 
+    /** Décode une plage `[début,fin,marge,[jours]]` telle qu'écrite par [blockedLiteral] (marge toujours 0, déjà consommée à l'export). */
+    private fun parseBlockedWindow(el: JsonElement): PresenceWindow? {
+        val arr = el as? JsonArray ?: return null
+        if (arr.size < 4) return null
+        val start = arr[0].jsonPrimitive.intOrNull ?: return null
+        val end = arr[1].jsonPrimitive.intOrNull ?: return null
+        val days = (arr[3] as? JsonArray)?.mapNotNull { it.jsonPrimitive.intOrNull }?.toSet() ?: return null
+        return PresenceWindow(start / 60, start % 60, end / 60, end % 60, marginMinutes = 0, days = days)
+    }
+
     /**
      * Décode le snapshot de [evalReadFull] : la config typée (pour régénérer le script, marqueur
      * compris) et l'état brut (JSON de `STATE`, réinjecté tel quel via `initialStateJson` de
      * [generate] — jamais interprété par Hestia, seule sa position par canal compte). Null si
      * illisible, ou si config et état ne sont plus alignés (jamais vu, pur garde-fou).
+     *
+     * `blocked`/`blockedOffToday` sont relus ici comme le reste : sans ça, tout réalignement de
+     * flash (déclenché par n'importe quelle mutation, pas seulement celles de la présence)
+     * effacerait silencieusement le blocage en cours sur ce canal.
      */
     fun parseLiveSnapshot(json: String): Pair<List<ChannelConfig>, String>? = runCatching {
         val root = Json.parseToJsonElement(json) as? JsonObject ?: return null
@@ -299,7 +435,9 @@ object ButtonTimerScriptGenerator {
             val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return null
             val durationSec = obj["durationSec"]?.jsonPrimitive?.intOrNull
             val thresholdW = obj["thresholdW"]?.jsonPrimitive?.intOrNull
-            ChannelConfig(switchId, durationSec, thresholdW, name)
+            val blocked = (obj["blocked"] as? JsonArray)?.mapNotNull { parseBlockedWindow(it) }.orEmpty()
+            val blockedOffToday = obj["blockedOffToday"]?.jsonPrimitive?.intOrNull
+            ChannelConfig(switchId, durationSec, thresholdW, name, blocked, blockedOffToday)
         }
         configs to stateArr.toString()
     }.getOrNull()
