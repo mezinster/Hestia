@@ -192,6 +192,9 @@ class DashboardViewModel @Inject constructor(
                         async { device.id to repository.getPlannings(device).getOrNull().orEmpty() }
                     }.awaitAll()
                 }
+                // Relevé précédent conservé avant écrasement — sert de référence ci-dessous pour
+                // exiger une vraie transition allumé→éteint, pas juste « actuellement éteint ».
+                val previousStatuses = statuses.value
                 statuses.value = statusResults.await().toMap()
                 presences.value = presenceResults.await()
                     .mapNotNull { (id, info) -> info?.let { id to it } }
@@ -202,9 +205,22 @@ class DashboardViewModel @Inject constructor(
                 // modifier, contrairement à la présence) — juste mémoriser localement, la coupure
                 // elle-même est déjà faite par l'appui. Lecture locale pure (source déjà dans le
                 // relevé de statut de ce cycle), jamais de RPC en plus.
+                //
+                // [wasOn] : bug trouvé en direct le 2026-08-24 — sans cette exigence, une source
+                // bouton qui traîne depuis des heures (dernier appui réel bien plus tôt, prise
+                // restée éteinte depuis) redéclenchait la détection à **chaque** cycle de 5 s,
+                // indéfiniment, empêchant toute présence/planning nouvellement créé sur ce canal de
+                // s'allumer un jour. Exiger que le cycle **précédent** ait vu la prise allumée
+                // restreint la détection à une vraie transition allumé→éteint survenue entre deux
+                // cycles — un vrai appui, pas un souvenir. Contrepartie acceptée : un appui survenu
+                // pendant que l'app était fermée (rien à comparer au premier relevé) ne sera pas
+                // rattrapé rétroactivement — la présence elle-même continue de tourner en autonomie
+                // sur l'appareil (voir CLAUDE.md), l'utilisateur peut toujours couper à la main.
                 devices.filter { it.supportsSwitch }.forEach { device ->
                     val status = statuses.value[device.id] as? TileStatus.Online ?: return@forEach
                     if (status.output || !isButtonSource(status.source)) return@forEach
+                    val wasOn = (previousStatuses[device.id] as? TileStatus.Online)?.output == true
+                    if (!wasOn) return@forEach
                     val activePlanning = plannings.value[device.id]
                         ?.firstOrNull { !it.isPresence && !it.once && it.isActiveNow() }
                     if (activePlanning != null) appPreferences.markPlanningDisabledToday(device.id)
@@ -215,10 +231,14 @@ class DashboardViewModel @Inject constructor(
                 // déclencher la coupure du jour (même appel que le bouton de l'app), pas juste
                 // l'enregistrer — coûte un vrai aller-retour RPC, mais seulement dans ce cas rare
                 // précis (canal éteint, source bouton, présence active, pas déjà marqué) : jamais
-                // pour tous les canaux à chaque cycle.
+                // pour tous les canaux à chaque cycle. Même garde [wasOn] que ci-dessus, pour la
+                // même raison (sans elle, `stopPresenceForToday` était rappelé en boucle dès qu'une
+                // présence fraîchement créée croisait une vieille source bouton).
                 devices.filter { it.hasScripting }.forEach { device ->
                     val status = statuses.value[device.id] as? TileStatus.Online ?: return@forEach
                     if (status.output || !isButtonSource(status.source)) return@forEach
+                    val wasOn = (previousStatuses[device.id] as? TileStatus.Online)?.output == true
+                    if (!wasOn) return@forEach
                     if (appPreferences.isPresenceDisabledToday(device.id)) return@forEach
                     if (presences.value[device.id] == null) return@forEach
                     if (repository.stopPresenceForToday(device) is RpcResult.Success) {

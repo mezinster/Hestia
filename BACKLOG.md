@@ -7,6 +7,27 @@ de compilation, apostrophe non échappée dans une chaîne anglaise).
 
 ## Fait — en cours (à surveiller)
 
+- **Bug trouvé et corrigé le 2026-08-24, en testant le Lot 3 du conflit bouton/présence (voir plus
+  bas) : la détection d'appui bouton se redéclenchait en boucle sur une source périmée, coupant
+  toute présence/planning fraîchement créé avant même son premier allumage.** `DashboardViewModel.
+  fetch()` détecte un appui bouton physique (pour couper présence/planning « aujourd'hui ») en
+  regardant si le canal est **actuellement** éteint avec `source` de type bouton — sans vérifier
+  que c'est un appui **récent**. Or `Switch.GetStatus.source` reste figé sur la dernière
+  transition connue tant qu'aucune autre n'a lieu, potentiellement des heures. Vécu en direct :
+  prise 2 et 4 avaient toutes deux une vieille source bouton (tests curl du Lot 1) alors qu'elles
+  étaient éteintes depuis longtemps — en créant une présence dessus, la détection l'a coupée
+  « pour aujourd'hui » au cycle de sondage suivant (5 s plus tard), *avant même qu'elle ait pu
+  s'allumer une seule fois* ce jour-là, et continuait de la recouper à chaque cycle malgré une
+  recréation complète du planning (`STATE` du script présence confirmé côté appareil :
+  `off` figé avant `on`, incohérent avec un vrai cycle). Corrigé en exigeant une vraie transition
+  allumé→éteint entre deux cycles de sondage (comparaison avec `statuses.value` du cycle
+  **précédent**, capturé avant écrasement) plutôt qu'un simple « actuellement éteint avec source
+  bouton ». Contrepartie acceptée : un appui survenu pendant que l'app était fermée n'est plus
+  rattrapé au premier relevé suivant (rien à comparer) — la présence continue de tourner en
+  autonomie sur l'appareil quoi qu'il arrive, l'utilisateur peut toujours couper à la main.
+  Après ce correctif, les présences de test cassées sur prise 2 et 4 doivent être réenregistrées
+  une dernière fois (`STATE` du script présence remis à neuf au passage) pour repartir propre.
+
 - **Régression trouvée et corrigée le 2026-08-22 : le mémo « désactivé aujourd'hui » restait
   collé après suppression/recréation de la présence ou du planning.** Vécu en direct par David
   sur les deux prises testées : supprimer une présence désactivée puis en recréer une nouvelle
