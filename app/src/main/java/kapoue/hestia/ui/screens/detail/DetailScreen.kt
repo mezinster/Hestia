@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Pause
@@ -946,6 +947,12 @@ private fun AddPlanningDialog(
     // Début == fin interdit (créneau nul ou de 24 h, ambigu) ; fin < début = créneau de nuit, OK.
     val valid = (once || everyDay || days.isNotEmpty()) && startMin != endMin
 
+    // Empêche un double-clic pendant l'aller-retour réseau (~1 s) de créer un doublon — vécu en
+    // vrai par David, 2026-08-22. Repasse à false dès qu'un résultat arrive : en erreur, pour
+    // permettre de réessayer ; en succès, sans effet visible puisque le dialogue se ferme.
+    var submitting by remember { mutableStateOf(false) }
+    LaunchedEffect(result) { if (result != null) submitting = false }
+
     val resultMessage = result?.let { createPlanningResultMessage(it) }
     val errorText: String? = when {
         resultMessage != null -> resultMessage
@@ -1115,8 +1122,9 @@ private fun AddPlanningDialog(
             }
 
             Button(
-                enabled = valid,
+                enabled = valid && !submitting,
                 onClick = {
+                    submitting = true
                     onValidate(
                         startHour, startMinute, endHour, endMinute, effectiveDays,
                         if (once) onceDate else null,
@@ -1126,7 +1134,13 @@ private fun AddPlanningDialog(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                // Coche pendant l'appel réseau (retour David, 2026-08-24) : confirme que le clic a
+                // bien été pris en compte, pendant que le bouton reste désactivé.
+                Icon(
+                    if (submitting) Icons.Filled.Check else Icons.Filled.Save,
+                    contentDescription = null,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
                 Text(stringResource(R.string.planning_validate))
             }
         }

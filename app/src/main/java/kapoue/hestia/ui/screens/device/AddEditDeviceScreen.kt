@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -279,6 +280,12 @@ fun AddEditDeviceScreen(
                     )
                     Text(stringResource(R.string.add_device_testing))
                 } else {
+                    // Picto disquette uniquement pour une vraie modification (retour David,
+                    // 2026-08-24) — pas pour « tester et ajouter » ni « ajouter la sélection »,
+                    // qui ne sont pas des enregistrements au même sens.
+                    if (state.isEditMode && state.channelSelection == null) {
+                        Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                    }
                     Text(primaryButtonLabel(state))
                 }
             }
