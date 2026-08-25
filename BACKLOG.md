@@ -431,6 +431,18 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
 ## Fonctionnalités futures
 
+- **Couleur de « Coupure à X W » (seuil affiché pendant un minuteur en cours) — question de
+  David le 2026-08-24, à trancher.** Actuellement en vert (couleur d'état, comme « Actif »),
+  identique au comportement d'avant le correctif du même jour sur « désactivé aujourd'hui »
+  (`TileVisual.thresholdTextColor`, ajouté précisément pour ce cas-là). David se demande si le
+  même traitement (gris neutre) devrait s'appliquer ici aussi — pas de trace d'un accord antérieur
+  généralisant la règle à tout texte secondaire, seulement au cas « désactivé aujourd'hui »
+  (ce texte contredit l'état actif, contrairement au seuil qui décrit un attribut de l'état actif
+  en cours). Deux lectures possibles : (a) garder le vert, cohérent avec l'état affiché ;
+  (b) gris partout en texte secondaire, par cohérence visuelle systématique. À trancher avec
+  David, puis appliquer via `thresholdTextColor` (déjà en place, juste à renseigner pour cette
+  branche aussi si le gris est retenu).
+
 - **Détecteur de fumée/incendie Shelly — question de David le 2026-08-24, à revoir quand il aura
   le matériel.** Un capteur, pas un actionneur : pas de `Switch.*`, un composant dédié en lecture
   seule (état alarme, batterie). Intérêt principal identifié : notification ntfy immédiate en cas
