@@ -431,6 +431,14 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
 ## Fonctionnalités futures
 
+- **Détecteur de fumée/incendie Shelly — question de David le 2026-08-24, à revoir quand il aura
+  le matériel.** Un capteur, pas un actionneur : pas de `Switch.*`, un composant dédié en lecture
+  seule (état alarme, batterie). Intérêt principal identifié : notification ntfy immédiate en cas
+  de détection, utile même hors du domicile — cohérent avec l'esprit local-first du projet
+  (lecture RPC locale, alerte sortante opt-in comme le reste). Demanderait un nouveau type
+  d'appareil dans Hestia (capteur, sans bouton marche/arrêt, tuile dédiée) — pas un ajout minime.
+  Rien à faire tant que David n'a pas le matériel pour tester en réel.
+
 - **Conflit minuteur bouton / présence sur un même canal — évaluation détaillée demandée par
   David le 2026-08-22 avant tout « go », pas codé.** Vécu en direct sur la prise 4 (Strip4,
   switchId 3), qui a les deux configurés en même temps.
@@ -642,51 +650,32 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   **Re-testé le 2026-08-24 : 20 min tenues sans coupure par la présence, confirmé.** Lot 3 complet,
   chantier « conflit minuteur bouton / présence » considéré terminé et validé de bout en bout.
 
-- **Enregistrer sans picto disquette (Réglages, Modifier l'appareil) + retour visuel pendant
-  l'enregistrement d'un planning — demandes de David, 2026-08-24 et 2026-08-22, pas codées,
-  à traiter ensemble.** Deux constats liés : (1) les boutons « Enregistrer » des écrans Réglages
-  et Modifier l'appareil n'ont pas le picto disquette, contrairement à d'autres endroits de
-  l'app — à harmoniser. (2) Le bouton « Enregistrer » du dialogue d'ajout/édition de planning met
-  environ 1 s à fermer la modale (aller-retour réseau) — assez pour qu'un double-clic passe
-  inaperçu et crée deux plannings identiques (vécu en vrai par David). Proposition retenue :
-  remplacer l'icône disquette par une coche une fois le clic pris en compte, et désactiver le
-  bouton (grisé) pendant l'appel réseau pour empêcher un second clic d'aboutir — à appliquer
-  partout où un bouton Enregistrer déclenche un appel réseau (dialogue planning, Réglages,
-  Modifier l'appareil), pas seulement le dialogue planning comme prévu initialement.
+- **Enregistrer sans picto disquette + retour visuel pendant l'enregistrement — demandes de
+  David, 2026-08-24 et 2026-08-22, codées et poussées le 2026-08-24, pas encore testées.**
+  Picto disquette ajouté sur le bouton Enregistrer de Modifier l'appareil (mode édition
+  uniquement, pas « tester et ajouter »/« ajouter la sélection »). Dialogue planning : le bouton
+  se désactive et affiche une coche (au lieu de la disquette) pendant l'appel réseau, pour
+  empêcher un double-clic de créer un doublon (vécu en vrai par David). Réglages n'avait
+  finalement aucun bouton « Enregistrer » littéral à corriger (ntfy s'enregistre à la perte de
+  focus, Cloud a « Tester »/« Effacer ») — le bouton visé était bien celui de Modifier l'appareil.
 
-- **Export/import : la présence n'est plus sauvegardée du tout depuis la fusion Planning/Présence
-  du 2026-08-18 — trouvé en relisant le code le 2026-08-24, suite à une question de David.**
-  `BackupManager` lit encore `PresenceConfigDao`/l'entité Room `PresenceConfig` pour construire
-  `presenceConfigs` dans le fichier exporté — mais plus rien n'écrit dans cette table depuis la
-  fusion (la présence vit désormais exclusivement dans le script `hestia_presence` de l'appareil,
-  comme un planning). Conséquence concrète : `presenceConfigDao.getForDevice(device.id)` renvoie
-  toujours vide, `presenceConfigs` est toujours `[]` dans tout export produit aujourd'hui, quelle
-  que soit la présence réellement configurée sur les appareils — **silencieusement**, aucune erreur,
-  aucun avertissement. `getPresenceConfig` (le seul appelant restant de ce DAO côté
-  `DeviceRepository`) n'a lui-même plus aucun appelant nulle part dans l'app — code mort.
-  Plannings précis et réglages du minuteur bouton n'ont, eux, **jamais** été couverts par l'export
-  (ils vivent sur l'appareil depuis toujours, pas dans Room) — pas une régression, cohérent avec
-  le principe « Hestia ne stocke aucune configuration d'appareil ». La présence, avant la fusion,
-  faisait exception (stockée dans Room) ; elle ne devrait plus l'être depuis, mais le code de
-  sauvegarde n'a jamais été mis à jour en conséquence.
-  Deux directions possibles, à trancher avec David : (a) supprimer purement `PresenceConfig`/
-  `PresenceConfigDao`/`getPresenceConfig`/le champ `presenceConfigs` de `BackupFile` — cohérent
-  avec le principe du projet, mais un appareil déplacé sur un autre téléphone perdrait sa présence
-  (déjà le cas aujourd'hui pour un planning précis ou un minuteur bouton, donc pas une régression
-  supplémentaire, juste un alignement) ; (b) réécrire l'export pour lire la présence en direct sur
-  chaque appareil (RPC, comme `getPlannings`) plutôt que dans Room — cohérent avec l'intention
-  d'origine du format d'export, mais rendrait l'export dépendant du réseau (actuellement instantané,
-  hors-ligne) et plus lent avec beaucoup d'appareils.
+- **Export/import : la présence n'était plus sauvegardée du tout depuis la fusion Planning/
+  Présence du 2026-08-18 — trouvé le 2026-08-24, corrigé le même jour.** `BackupManager` lisait
+  encore `PresenceConfigDao`/l'entité Room `PresenceConfig`, mais plus rien n'écrivait dans cette
+  table depuis la fusion (la présence vit exclusivement dans le script de l'appareil, comme un
+  planning) — tout export produit depuis le 18/08 avait donc une présence vide, silencieusement.
+  Tranché avec David : suppression complète (`PresenceConfig`/`PresenceConfigDao`/
+  `getPresenceConfig`/`presenceConfigs` dans `BackupFile`, migration Room v15→v16 `DROP TABLE`)
+  plutôt qu'une réécriture en lecture RPC — aligne la présence sur le même principe que planning
+  précis et minuteur bouton (jamais sauvegardés non plus, ils vivent sur l'appareil). Un ancien
+  export portant encore ce champ reste lisible (`ignoreUnknownKeys`), simplement ignoré.
 
-- **Bande vide au-dessus de la barre de navigation basse (Tableau) — signalée par David le
-  2026-08-24, capture à l'appui, cause pas identifiée avec certitude.** Relu `HestiaApp.kt`
-  (Scaffold externe, `NavigationBar` en bottomBar, padding bas appliqué une seule fois au
-  `NavHost`) et `DashboardScreen.kt` (Scaffold interne sans bottomBar propre, donc pas de double
-  padding bas visible en lisant le code ; grille avec `contentPadding = PaddingValues(12.dp)`,
-  rien d'anormal). Rien d'évident trouvé par lecture de code seule — pourrait être le rendu propre
-  du `NavigationBar` Material3 (hauteur/teinte tonale standard) plutôt qu'un vrai bug de mise en
-  page. À revoir avec une capture zoomée précise si ça persiste visuellement, ou en pointant plus
-  précisément l'endroit concerné.
+- **Bande vide au-dessus de la barre de navigation basse — signalée par David le 2026-08-24,
+  corrigée le même jour.** Cause trouvée après une seconde capture plus précise : Tableau/
+  Réglages/À propos reprenaient tout `innerPadding` de leur propre `Scaffold` (haut ET bas) alors
+  que le bas est déjà réservé une seule fois par `HestiaApp` pour la barre de navigation
+  partagée — `Scaffold` réserve par défaut un espace bas pour les barres système même sans
+  `bottomBar` propre, doublant l'espacement. Les trois écrans ne reprennent plus que le haut.
 
 - **Captures d'écran F-Droid à mettre à jour — demandé par David le 2026-08-24.** L'app a
   visiblement évolué depuis les dernières captures (`fastlane/metadata/`) — refonte des tuiles,
