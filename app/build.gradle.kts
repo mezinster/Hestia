@@ -24,8 +24,8 @@ android {
         // Repartir au-dessus évite de désinstaller (donc de perdre la base locale) à chaque test.
         // Le versionCode est arbitraire et n'a pas à suivre le versionName ; seul compte qu'il
         // croisse d'une publication à l'autre — et rien n'a encore été publié.
-        versionCode = 40
-        versionName = "2.5.1"
+        versionCode = 41
+        versionName = "2.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
