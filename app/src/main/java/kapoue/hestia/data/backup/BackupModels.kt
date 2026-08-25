@@ -41,9 +41,11 @@ data class DeviceBackup(
     val presetDurationSeconds: Int? = null,
     val presetThresholdW: Int? = null,
     val presetName: String? = null,
+    val presetUnlimited: Boolean = false,
     val preset2DurationSeconds: Int? = null,
     val preset2ThresholdW: Int? = null,
     val preset2Name: String? = null,
+    val preset2Unlimited: Boolean = false,
     /** Deuxième adresse IP optionnelle (ex. domicile / vacances). Absente = un seul emplacement. */
     val ip2Address: String? = null,
     val ipName: String? = null,
