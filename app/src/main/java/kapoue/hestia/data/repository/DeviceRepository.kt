@@ -8,10 +8,8 @@ import kapoue.hestia.core.util.formatClockTime
 import kapoue.hestia.data.cloud.ShellyCloudClient
 import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.dao.PausedPlanningDao
-import kapoue.hestia.data.local.dao.PresenceConfigDao
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
-import kapoue.hestia.data.local.entity.PresenceConfig
 import kapoue.hestia.data.notifications.PendingTimer
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.presence.ButtonTimerScriptGenerator
@@ -74,7 +72,6 @@ data class DeviceStatusResult(
 @Singleton
 class DeviceRepository @Inject constructor(
     private val deviceDao: DeviceDao,
-    private val presenceConfigDao: PresenceConfigDao,
     private val pausedPlanningDao: PausedPlanningDao,
     private val rpcClient: ShellyRpcClient,
     private val cloudClient: ShellyCloudClient,
@@ -480,11 +477,6 @@ class DeviceRepository @Inject constructor(
             is RpcResult.Failure -> set
         }
     }
-
-    // --- Simulation de présence ---
-
-    suspend fun getPresenceConfig(deviceId: Long): PresenceConfig? =
-        presenceConfigDao.getForDevice(deviceId)
 
     /** Horloge de l'appareil pour le contrôle de dérive (epoch + heure rapportée). */
     suspend fun getDeviceClock(device: Device): RpcResult<DeviceClock?> {

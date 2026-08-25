@@ -3,9 +3,17 @@ package kapoue.hestia.data.backup
 import kotlinx.serialization.Serializable
 
 /**
- * Format d'export/import (SPEC-V1 § 6). Couvre l'intégralité de la configuration Hestia :
- * appareils, configurations de présence, préférences. **Exclus** : journaux (activité,
- * diagnostic) et état transitoire — sans valeur de restauration.
+ * Format d'export/import (SPEC-V1 § 6). Couvre la liste des appareils et leurs réglages de
+ * confort propres à Hestia (préréglages, adresses IP). **Exclus** : tout ce qui vit sur
+ * l'appareil lui-même (plannings, présence, minuteur bouton, seuils — jamais stocké par Hestia,
+ * voir CLAUDE.md), ainsi que les journaux (activité, diagnostic) et l'état transitoire — sans
+ * valeur de restauration hors ligne.
+ *
+ * A porté un champ `presenceConfigs` jusqu'au 2026-08-24 : vestige d'avant la fusion Planning/
+ * Présence du 2026-08-18 (la présence vivait alors dans Room, comme un cas particulier), retiré
+ * une fois confirmé qu'il n'exportait plus jamais rien (voir BACKLOG.md). Un ancien fichier
+ * exporté avant cette date qui porterait encore ce champ reste lisible (`ignoreUnknownKeys`),
+ * simplement ignoré.
  */
 @Serializable
 data class BackupFile(
@@ -14,7 +22,6 @@ data class BackupFile(
     val appVersion: String,
     val exportedAt: String,
     val devices: List<DeviceBackup> = emptyList(),
-    val presenceConfigs: List<PresenceConfigBackup> = emptyList(),
     val preferences: PreferencesBackup = PreferencesBackup(),
 )
 
@@ -41,23 +48,6 @@ data class DeviceBackup(
     val ip2Address: String? = null,
     val ipName: String? = null,
     val ip2Name: String? = null,
-)
-
-/**
- * Config de présence, reliée à son appareil par (ipAddress, switchId) plutôt que par un id
- * technique — les ids sont régénérés au réimport.
- */
-@Serializable
-data class PresenceConfigBackup(
-    val deviceIp: String,
-    val deviceSwitchId: Int,
-    val startHour: Int,
-    val startMinute: Int,
-    val endHour: Int,
-    val endMinute: Int,
-    val randomMarginMinutes: Int = 20,
-    val shellyScriptId: Int? = null,
-    val enabled: Boolean = false,
 )
 
 /** Réservé — aucune préférence manuelle en V1 (le thème suit le système). */

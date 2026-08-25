@@ -4,9 +4,7 @@ import android.content.Context
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.data.local.dao.DeviceDao
-import kapoue.hestia.data.local.dao.PresenceConfigDao
 import kapoue.hestia.data.local.entity.Device
-import kapoue.hestia.data.local.entity.PresenceConfig
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
 import kotlinx.coroutines.Dispatchers
@@ -32,23 +30,18 @@ sealed interface ImportResult {
 class BackupManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val deviceDao: DeviceDao,
-    private val presenceConfigDao: PresenceConfigDao,
     private val json: Json,
 ) {
     suspend fun export(uri: Uri): Boolean = withContext(Dispatchers.IO) {
         runCatching {
             val devices = deviceDao.getAllOnce()
             val deviceBackups = devices.map { it.toBackup() }
-            val configBackups = devices.mapNotNull { device ->
-                presenceConfigDao.getForDevice(device.id)?.toBackup(device)
-            }
             val backup = BackupFile(
                 format = FORMAT,
                 formatVersion = FORMAT_VERSION,
                 appVersion = appVersion(),
                 exportedAt = DateTimeFormatter.ISO_INSTANT.format(Instant.now()),
                 devices = deviceBackups,
-                presenceConfigs = configBackups,
             )
             val text = json.encodeToString(BackupFile.serializer(), backup)
             context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) }
@@ -69,16 +62,10 @@ class BackupManager @Inject constructor(
         }
 
         runCatching {
-            // Remplacement intégral : CASCADE purge présence + journal d'activité.
+            // Remplacement intégral.
             deviceDao.deleteAll()
-            val idByChannel = HashMap<Pair<String, Int>, Long>()
             for (deviceBackup in backup.devices) {
-                val newId = deviceDao.insert(deviceBackup.toEntity())
-                idByChannel[deviceBackup.ipAddress to deviceBackup.switchId] = newId
-            }
-            for (configBackup in backup.presenceConfigs) {
-                val deviceId = idByChannel[configBackup.deviceIp to configBackup.deviceSwitchId] ?: continue
-                presenceConfigDao.upsert(configBackup.toEntity(deviceId))
+                deviceDao.insert(deviceBackup.toEntity())
             }
         }.fold(
             onSuccess = { ImportResult.Success },
@@ -139,27 +126,4 @@ private fun DeviceBackup.toEntity() = Device(
     ip2Address = ip2Address,
     ipName = ipName,
     ip2Name = ip2Name,
-)
-
-private fun PresenceConfig.toBackup(device: Device) = PresenceConfigBackup(
-    deviceIp = device.ipAddress,
-    deviceSwitchId = device.switchId,
-    startHour = startHour,
-    startMinute = startMinute,
-    endHour = endHour,
-    endMinute = endMinute,
-    randomMarginMinutes = randomMarginMinutes,
-    shellyScriptId = shellyScriptId,
-    enabled = enabled,
-)
-
-private fun PresenceConfigBackup.toEntity(deviceId: Long) = PresenceConfig(
-    deviceId = deviceId,
-    startHour = startHour,
-    startMinute = startMinute,
-    endHour = endHour,
-    endMinute = endMinute,
-    randomMarginMinutes = randomMarginMinutes,
-    shellyScriptId = shellyScriptId,
-    enabled = enabled,
 )

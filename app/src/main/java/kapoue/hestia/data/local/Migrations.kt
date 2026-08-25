@@ -173,3 +173,17 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
         db.execSQL("ALTER TABLE devices ADD COLUMN cloudId TEXT")
     }
 }
+
+/**
+ * v15 → v16 : suppression de `presence_configs` — table de confort prévue lors du lot 1 pour la
+ * présence, jamais réellement branchée après la fusion Planning/Présence du 2026-08-18, qui a
+ * fait de la présence une simple variante de [kapoue.hestia.domain.model.Planning] lue en direct
+ * depuis le script de l'appareil, comme un planning précis. Plus rien n'écrivait dans cette table
+ * depuis (code mort trouvé le 2026-08-24, voir BACKLOG.md) : aucune configuration perdue, il n'y
+ * avait plus rien de vivant dedans.
+ */
+val MIGRATION_15_16 = object : Migration(15, 16) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS presence_configs")
+    }
+}
