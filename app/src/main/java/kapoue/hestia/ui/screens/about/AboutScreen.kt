@@ -77,10 +77,12 @@ fun AboutScreen() {
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_about)) }) },
     ) { innerPadding ->
+    // Seul le haut vient d'ici, même raison qu'au Tableau (voir son commentaire) — le bas est
+    // déjà réservé une seule fois par HestiaApp pour la barre de navigation partagée.
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(innerPadding)
+            .padding(top = innerPadding.calculateTopPadding())
             .verticalScroll(rememberScrollState())
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

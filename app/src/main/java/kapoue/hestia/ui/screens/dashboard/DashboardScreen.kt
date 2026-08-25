@@ -139,7 +139,12 @@ fun DashboardScreen(
             )
         },
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding)) {
+        // Seul le haut vient d'ici (sous la TopAppBar) : le bas est déjà réservé une seule fois
+        // par HestiaApp pour la barre de navigation partagée (voir son commentaire) — reprendre
+        // innerPadding en entier ajoutait un second espace bas (celui, par défaut, que Scaffold
+        // réserve pour les barres système même sans bottomBar propre), visible comme une bande
+        // vide au-dessus des onglets (retour David, 2026-08-24).
+        Column(modifier = Modifier.padding(top = innerPadding.calculateTopPadding())) {
             // Barre omnibus décorative en tête de grille (SPEC-V1 § 5).
             Box(
                 modifier = Modifier

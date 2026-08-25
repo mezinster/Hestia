@@ -181,10 +181,12 @@ fun SettingsScreen(
     Scaffold(
         topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_settings)) }) },
     ) { innerPadding ->
+        // Seul le haut vient d'ici, même raison qu'au Tableau (voir son commentaire) — le bas est
+        // déjà réservé une seule fois par HestiaApp pour la barre de navigation partagée.
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
+                .padding(top = innerPadding.calculateTopPadding())
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
