@@ -639,16 +639,58 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   canal pour le reste de la journée dès que ce champ correspond au jour en cours (ni allumage, ni
   extinction), plutôt que de compter sur une fenêtre raccourcie que le tick continuait par ailleurs
   d'appliquer littéralement. Auto-cicatrisant le lendemain (`planDay` reprend un jour vierge).
-  **Pas encore re-testé après ce troisième correctif** — à revalider avant de considérer le Lot 3
-  complet.
+  **Re-testé le 2026-08-24 : 20 min tenues sans coupure par la présence, confirmé.** Lot 3 complet,
+  chantier « conflit minuteur bouton / présence » considéré terminé et validé de bout en bout.
 
-- **Retour visuel pendant l'enregistrement d'un planning — proposé par David le 2026-08-22,
-  pas codé.** Le bouton « Enregistrer » (dialogue d'ajout/édition de planning) met environ 1 s à
-  fermer la modale (aller-retour réseau) — assez pour qu'un double-clic passe inaperçu et crée
-  deux plannings identiques (vécu en vrai par David). Proposition : remplacer l'icône disquette
-  par une coche une fois le clic pris en compte, et désactiver le bouton (grisé) pendant l'appel
-  réseau pour empêcher un second clic d'aboutir. Petit chantier UI (état de chargement sur le
-  bouton du dialogue `AddPlanningDialog`), pas encore commencé.
+- **Enregistrer sans picto disquette (Réglages, Modifier l'appareil) + retour visuel pendant
+  l'enregistrement d'un planning — demandes de David, 2026-08-24 et 2026-08-22, pas codées,
+  à traiter ensemble.** Deux constats liés : (1) les boutons « Enregistrer » des écrans Réglages
+  et Modifier l'appareil n'ont pas le picto disquette, contrairement à d'autres endroits de
+  l'app — à harmoniser. (2) Le bouton « Enregistrer » du dialogue d'ajout/édition de planning met
+  environ 1 s à fermer la modale (aller-retour réseau) — assez pour qu'un double-clic passe
+  inaperçu et crée deux plannings identiques (vécu en vrai par David). Proposition retenue :
+  remplacer l'icône disquette par une coche une fois le clic pris en compte, et désactiver le
+  bouton (grisé) pendant l'appel réseau pour empêcher un second clic d'aboutir — à appliquer
+  partout où un bouton Enregistrer déclenche un appel réseau (dialogue planning, Réglages,
+  Modifier l'appareil), pas seulement le dialogue planning comme prévu initialement.
+
+- **Export/import : la présence n'est plus sauvegardée du tout depuis la fusion Planning/Présence
+  du 2026-08-18 — trouvé en relisant le code le 2026-08-24, suite à une question de David.**
+  `BackupManager` lit encore `PresenceConfigDao`/l'entité Room `PresenceConfig` pour construire
+  `presenceConfigs` dans le fichier exporté — mais plus rien n'écrit dans cette table depuis la
+  fusion (la présence vit désormais exclusivement dans le script `hestia_presence` de l'appareil,
+  comme un planning). Conséquence concrète : `presenceConfigDao.getForDevice(device.id)` renvoie
+  toujours vide, `presenceConfigs` est toujours `[]` dans tout export produit aujourd'hui, quelle
+  que soit la présence réellement configurée sur les appareils — **silencieusement**, aucune erreur,
+  aucun avertissement. `getPresenceConfig` (le seul appelant restant de ce DAO côté
+  `DeviceRepository`) n'a lui-même plus aucun appelant nulle part dans l'app — code mort.
+  Plannings précis et réglages du minuteur bouton n'ont, eux, **jamais** été couverts par l'export
+  (ils vivent sur l'appareil depuis toujours, pas dans Room) — pas une régression, cohérent avec
+  le principe « Hestia ne stocke aucune configuration d'appareil ». La présence, avant la fusion,
+  faisait exception (stockée dans Room) ; elle ne devrait plus l'être depuis, mais le code de
+  sauvegarde n'a jamais été mis à jour en conséquence.
+  Deux directions possibles, à trancher avec David : (a) supprimer purement `PresenceConfig`/
+  `PresenceConfigDao`/`getPresenceConfig`/le champ `presenceConfigs` de `BackupFile` — cohérent
+  avec le principe du projet, mais un appareil déplacé sur un autre téléphone perdrait sa présence
+  (déjà le cas aujourd'hui pour un planning précis ou un minuteur bouton, donc pas une régression
+  supplémentaire, juste un alignement) ; (b) réécrire l'export pour lire la présence en direct sur
+  chaque appareil (RPC, comme `getPlannings`) plutôt que dans Room — cohérent avec l'intention
+  d'origine du format d'export, mais rendrait l'export dépendant du réseau (actuellement instantané,
+  hors-ligne) et plus lent avec beaucoup d'appareils.
+
+- **Bande vide au-dessus de la barre de navigation basse (Tableau) — signalée par David le
+  2026-08-24, capture à l'appui, cause pas identifiée avec certitude.** Relu `HestiaApp.kt`
+  (Scaffold externe, `NavigationBar` en bottomBar, padding bas appliqué une seule fois au
+  `NavHost`) et `DashboardScreen.kt` (Scaffold interne sans bottomBar propre, donc pas de double
+  padding bas visible en lisant le code ; grille avec `contentPadding = PaddingValues(12.dp)`,
+  rien d'anormal). Rien d'évident trouvé par lecture de code seule — pourrait être le rendu propre
+  du `NavigationBar` Material3 (hauteur/teinte tonale standard) plutôt qu'un vrai bug de mise en
+  page. À revoir avec une capture zoomée précise si ça persiste visuellement, ou en pointant plus
+  précisément l'endroit concerné.
+
+- **Captures d'écran F-Droid à mettre à jour — demandé par David le 2026-08-24.** L'app a
+  visiblement évolué depuis les dernières captures (`fastlane/metadata/`) — refonte des tuiles,
+  nouveaux libellés d'état, etc. Pas commencé.
 
 - **Build reproductible — Niveau 1 vérifié le 2026-08-22, suite à une issue Codeberg (#2, ouverte
   par un tiers).** Relecture de la config au regard du guide F-Droid : versions de dépendances
