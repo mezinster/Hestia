@@ -443,13 +443,32 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   David, puis appliquer via `thresholdTextColor` (déjà en place, juste à renseigner pour cette
   branche aussi si le gris est retenu).
 
-- **Détecteur de fumée/incendie Shelly — question de David le 2026-08-24, à revoir quand il aura
-  le matériel.** Un capteur, pas un actionneur : pas de `Switch.*`, un composant dédié en lecture
-  seule (état alarme, batterie). Intérêt principal identifié : notification ntfy immédiate en cas
-  de détection, utile même hors du domicile — cohérent avec l'esprit local-first du projet
-  (lecture RPC locale, alerte sortante opt-in comme le reste). Demanderait un nouveau type
-  d'appareil dans Hestia (capteur, sans bouton marche/arrêt, tuile dédiée) — pas un ajout minime.
-  Rien à faire tant que David n'a pas le matériel pour tester en réel.
+- **Détecteur de fumée/incendie Shelly — David en a commandé deux le 2026-08-24. Recherché côté
+  doc officielle Shelly ce même jour, rien codé, en attente du matériel pour tester en réel.**
+
+  **Ce que l'appareil sait faire** (Shelly Plus/Gen3 Smoke, DIN EN 14604) : détection photoélectrique
+  + sirène locale ; pile CR123A (~5 ans annoncés), **veille profonde** la majeure partie du temps,
+  réveil immédiat sur alarme (alerte temps réel malgré la veille) et réveil périodique réglable
+  (`wakeup_period`) pour un point de statut de routine. Wi-Fi + Bluetooth 4.2, indépendants. RPC :
+  `Smoke.GetStatus` (alarme/muet), `Smoke.Mute` (**couper l'alarme à distance**),
+  `Smoke.GetConfig`/`SetConfig` ; composant `DevicePower` (batterie %, tension). **Webhooks
+  natifs** `smoke.alarm`/`smoke.alarm_off`/`smoke.alarm_test` — l'appareil peut appeler une URL
+  directement (ntfy, ou une autre prise Shelly) dès l'événement, sans script ni app.
+
+  **Pistes retenues, par ordre d'intérêt :**
+  1. Notification ntfy immédiate sur `smoke.alarm` (webhook natif, pas de script) — même
+     architecture que le reste (l'appareil notifie directement, jamais Hestia). Ajouter
+     `smoke.alarm_off` et `smoke.alarm_test` (confirme que tout fonctionne sans inquiéter).
+  2. Batterie faible → notification (lire `DevicePower`, seuil ex. 15 %).
+  3. Couper une prise en cas d'alarme (ex. fumée cuisine → coupe la plaque) — faisable
+     **nativement**, webhook du détecteur appelant directement `Switch.Set` sur l'IP d'une autre
+     prise Shelly du réseau local, sans app ni script custom, autonome même téléphone éteint.
+  4. Tuile dédiée « capteur » sur le Tableau (pas de bouton marche/arrêt), dernier état connu +
+     heure du dernier contact plutôt qu'un état temps réel.
+
+  **Limite structurelle à garder en tête** : appareil à pile qui dort le plus clair du temps — le
+  modèle de sondage permanent d'Hestia (5 s, toujours joignable) ne s'applique pas tel quel. Un
+  vrai chantier à part entière (nouveau type d'appareil), pas un ajout mineur.
 
 - **Conflit minuteur bouton / présence sur un même canal — évaluation détaillée demandée par
   David le 2026-08-22 avant tout « go », pas codé.** Vécu en direct sur la prise 4 (Strip4,
