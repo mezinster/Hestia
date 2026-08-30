@@ -448,12 +448,16 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
   **Ce que l'appareil sait faire** (Shelly Plus/Gen3 Smoke, DIN EN 14604) : détection photoélectrique
   + sirène locale ; pile CR123A (~5 ans annoncés), **veille profonde** la majeure partie du temps,
-  réveil immédiat sur alarme (alerte temps réel malgré la veille) et réveil périodique réglable
-  (`wakeup_period`) pour un point de statut de routine. Wi-Fi + Bluetooth 4.2, indépendants. RPC :
-  `Smoke.GetStatus` (alarme/muet), `Smoke.Mute` (**couper l'alarme à distance**),
-  `Smoke.GetConfig`/`SetConfig` ; composant `DevicePower` (batterie %, tension). **Webhooks
-  natifs** `smoke.alarm`/`smoke.alarm_off`/`smoke.alarm_test` — l'appareil peut appeler une URL
-  directement (ntfy, ou une autre prise Shelly) dès l'événement, sans script ni app.
+  réveil immédiat sur alarme (alerte temps réel malgré la veille) et réveil périodique pour un
+  point de statut de routine — **pas clairement réglable par un simple champ RPC** d'après la doc
+  (`wakeup_period` a été retiré de `Sys.SetConfig` côté appareils à pile, semble plutôt un schéma
+  fixé par le firmware ; ~2h chez le cousin H&T, à confirmer sur Smoke, jamais affirmer sans avoir
+  vérifié au curl). Wi-Fi + Bluetooth 4.2, indépendants. RPC : `Smoke.GetStatus` (alarme/muet),
+  `Smoke.Mute` (**couper l'alarme à distance**), `Smoke.GetConfig`/`SetConfig` ; composant
+  `DevicePower` (batterie %, tension) ; composant `Temperature` (température de la pièce, même
+  mécanique de réveil sur seuil que le H&T). **Webhooks natifs** `smoke.alarm`/`smoke.alarm_off`/
+  `smoke.alarm_test` — l'appareil peut appeler une URL directement (ntfy, ou une autre prise
+  Shelly) dès l'événement, sans script ni app.
 
   **Pistes retenues, par ordre d'intérêt :**
   1. Notification ntfy immédiate sur `smoke.alarm` (webhook natif, pas de script) — même
@@ -465,10 +469,31 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
      prise Shelly du réseau local, sans app ni script custom, autonome même téléphone éteint.
   4. Tuile dédiée « capteur » sur le Tableau (pas de bouton marche/arrêt), dernier état connu +
      heure du dernier contact plutôt qu'un état temps réel.
+  5. Température de la pièce affichée, alerte optionnelle (ex. risque de gel).
 
   **Limite structurelle à garder en tête** : appareil à pile qui dort le plus clair du temps — le
   modèle de sondage permanent d'Hestia (5 s, toujours joignable) ne s'applique pas tel quel. Un
-  vrai chantier à part entière (nouveau type d'appareil), pas un ajout mineur.
+  vrai chantier à part entière (nouveau type d'appareil), pas un ajout mineur. **Probable absence
+  de rattrapage rétroactif** : sans cloud ni MQTT (hors principe du projet) ni tâche de fond
+  permanente (interdite, voir CLAUDE.md), Hestia ne peut lire l'état que si elle sonde pendant une
+  fenêtre de réveil de l'appareil — app fermée pendant tous les réveils depuis le dernier contact
+  = rien à rattraper au retour, l'appareil ne semble pas garder d'historique interrogeable après
+  coup. À vérifier au curl, pas supposer. Conséquence probable : tuile batterie/temp affichée
+  comme mémo local (cache de confort, même principe que `onSinceElapsed`) avec heure du dernier
+  contact visible, plutôt qu'une valeur temps réel garantie.
+
+  **Réglages détaillés déjà décidés avec David (2026-08-24), à coder une fois le matériel en main
+  et les mécanismes RPC validés au curl — pas de lot avant ça, décision explicite de David :
+  « on attend les appareils, on fait des curl dans tous les sens et ensuite on dev » :**
+  - Écran Détail : coupure de l'alarme (`Smoke.Mute`) + bouton de test, **avec confirmation**
+    avant de lancer le test (éviter une fausse manip qui déclenche la sirène pour rien).
+  - Seuil de notif batterie **figé à 15 %**, non modifiable, non désactivable — juste indiqué
+    comme existant dans l'écran Détail (pas de réglage UI dessus).
+  - Coupure de prise en cas d'alarme : proposer la fonctionnalité, et si activée, lister les
+    appareils déjà connus d'Hestia à cocher (ceux à couper), **plus un champ de saisie libre**
+    pour une IP absente de la liste.
+  - Tuile Tableau : pourcentage de batterie affiché, **passe en orange sous 30 %** (rendu visuel
+    à soigner pour la zone <30 %, pas encore dessiné).
 
 - **Conflit minuteur bouton / présence sur un même canal — évaluation détaillée demandée par
   David le 2026-08-22 avant tout « go », pas codé.** Vécu en direct sur la prise 4 (Strip4,
