@@ -473,14 +473,28 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
   **Limite structurelle à garder en tête** : appareil à pile qui dort le plus clair du temps — le
   modèle de sondage permanent d'Hestia (5 s, toujours joignable) ne s'applique pas tel quel. Un
-  vrai chantier à part entière (nouveau type d'appareil), pas un ajout mineur. **Probable absence
-  de rattrapage rétroactif** : sans cloud ni MQTT (hors principe du projet) ni tâche de fond
-  permanente (interdite, voir CLAUDE.md), Hestia ne peut lire l'état que si elle sonde pendant une
-  fenêtre de réveil de l'appareil — app fermée pendant tous les réveils depuis le dernier contact
-  = rien à rattraper au retour, l'appareil ne semble pas garder d'historique interrogeable après
-  coup. À vérifier au curl, pas supposer. Conséquence probable : tuile batterie/temp affichée
-  comme mémo local (cache de confort, même principe que `onSinceElapsed`) avec heure du dernier
-  contact visible, plutôt qu'une valeur temps réel garantie.
+  vrai chantier à part entière (nouveau type d'appareil), pas un ajout mineur.
+
+  **Rebondissement important (2026-08-24, suite à une question de David) : le Cloud Shelly sauve
+  la tuile.** Web sans matériel en main, donc sans certitude totale, mais fortement indiqué par la
+  doc officielle : le Cloud Shelly conserve un vrai historique (jusqu'à 1 an gratuit, confirmé
+  côté doc H&T/Smoke — graphique température/batterie dans l'app Shelly). Et surprise utile : le
+  firmware calcule **déjà lui-même** un pourcentage de batterie — `DevicePower.GetStatus` renvoie
+  `battery.percent` directement (pas juste la tension brute) — Hestia n'a donc pas à définir de
+  « niveau bas = 0 % » lui-même, contrairement à la crainte initiale de David. Le point d'accès
+  Cloud `/v2/devices/api/get` — **le même déjà utilisé pour le repli Cloud des prises**, même
+  auth, même principe — peut lire `devicepower:0`/`temperature:0`/`smoke:0` d'un appareil, avec
+  un indicateur `online`. Pas de champ « horodatage de dernière remontée » documenté explicitement
+  (à vérifier au curl une fois le Cloud configuré, ne pas supposer). Si confirmé, ça remplace le
+  scénario pessimiste envisagé plus tôt (mémo local uniquement, aucun rattrapage) : le Cloud
+  devient le chemin réaliste pour une batterie/température à jour, la lecture locale directe
+  restant le complément quand l'appareil est joignable — RPC local en priorité (réactif, gratuit,
+  sans dépendance externe), Cloud Shelly en secours pour ce qui dort, exactement le même schéma
+  que le repli Cloud déjà en place pour les prises. **Extension à documenter explicitement dans
+  CLAUDE.md le moment venu** : le principe Cloud Shelly n'y couvre aujourd'hui que « état,
+  consommation, marche/arrêt » des prises — à étendre en toute transparence à « état des capteurs »
+  (batterie, température, alarme), toujours opt-in, jamais silencieux, jamais utilisé pour de la
+  config (même limite que pour les prises).
 
   **Réglages détaillés déjà décidés avec David (2026-08-24), à coder une fois le matériel en main
   et les mécanismes RPC validés au curl — pas de lot avant ça, décision explicite de David :
@@ -490,10 +504,15 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   - Seuil de notif batterie **figé à 15 %**, non modifiable, non désactivable — juste indiqué
     comme existant dans l'écran Détail (pas de réglage UI dessus).
   - Coupure de prise en cas d'alarme : proposer la fonctionnalité, et si activée, lister les
-    appareils déjà connus d'Hestia à cocher (ceux à couper), **plus un champ de saisie libre**
-    pour une IP absente de la liste.
-  - Tuile Tableau : pourcentage de batterie affiché, **passe en orange sous 30 %** (rendu visuel
-    à soigner pour la zone <30 %, pas encore dessiné).
+    appareils déjà connus d'Hestia à cocher (ceux à couper), affichés sous la forme
+    « Nom noté dans Hestia — IP », **plus un champ de saisie libre** pour une IP absente de la
+    liste. Inciter à fixer une IP statique sur les appareils concernés (le détecteur et les
+    prises visées par la coupure) — le webhook natif cible une IP figée, pas un nom résolu.
+  - Insister sur ntfy et l'activation du Cloud Shelly pour ces appareils précis, dans l'écran de
+    configuration du détecteur (voir aussi le rebondissement Cloud ci-dessus).
+  - Tuile Tableau : pourcentage de batterie affiché (déjà calculé par le firmware, voir
+    ci-dessus — rien à calibrer côté Hestia), **passe en orange sous 30 %** (rendu visuel à
+    soigner pour la zone <30 %, pas encore dessiné).
 
 - **Conflit minuteur bouton / présence sur un même canal — évaluation détaillée demandée par
   David le 2026-08-22 avant tout « go », pas codé.** Vécu en direct sur la prise 4 (Strip4,
