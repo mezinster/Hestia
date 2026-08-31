@@ -521,12 +521,20 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
   **Premier contact avec le matériel réel, le 2026-08-31 (David a reçu ses deux détecteurs) —
   aucun code touché, mais plusieurs points confirmés/corrigés en conditions réelles :**
-  - **Un des deux exemplaires est défectueux (matériel, pas logiciel)** : injoignable dès le
+  - **Un des deux exemplaires (94) est défectueux (matériel, pas logiciel)** : injoignable dès le
     départ (batterie lue <20%, MAJ firmware bloquée, AP Wi-Fi instable). Diagnostic confirmé par
     un test décisif — pile échangée avec l'autre détecteur (bonne, validée par une MAJ firmware
-    réussie sur ce dernier) : toujours injoignable, y compris triple-clic de réveil, y compris
-    après vidage de cache + fermeture forcée de l'app Shelly. Isolé au matériel, pas à la pile ni
-    à la config. À faire jouer en garantie/échange, rien à voir avec Hestia.
+    réussie sur ce dernier) : toujours injoignable localement, y compris triple-clic de réveil, y
+    compris après vidage de cache + fermeture forcée de l'app Shelly. **Confirmé avec une preuve
+    dure via le Cloud Control API** (même appel que ci-dessous) : l'appareil est en fait bien
+    connecté au Wi-Fi (`online:1`, `sta_ip:192.168.1.94`, a bien rejoint le réseau — ce n'était
+    donc pas un souci de provisioning) mais son capteur de batterie remonte une erreur de lecture
+    explicite : `"devicepower:0":{"battery":{"V":"Q","percent":null},"errors":["read"]}` — le
+    firmware lui-même signale ne pas réussir à lire la pile (`"V":"Q"`, pas un nombre valide).
+    Cause isolée au circuit de mesure de batterie, pas au Wi-Fi ni à la config. À faire jouer en
+    garantie/échange, rien à voir avec Hestia. **Nouveau champ à prévoir dans le design de la
+    tuile capteur** : `devicepower:0.errors` — un état « capteur défaillant » distinct d'une
+    simple batterie basse.
   - **Le pourcentage batterie bas au départ était bien un artefact de charge (« voltage sag »),
     pas une pile déficiente**, sur l'exemplaire fonctionnel : batterie retirée quelques minutes,
     remise → lecture à 100 % et MAJ firmware possible. Confirme l'hypothèse envisagée avant
