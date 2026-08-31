@@ -513,6 +513,11 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
   - Tuile Tableau : pourcentage de batterie affiché (déjà calculé par le firmware, voir
     ci-dessus — rien à calibrer côté Hestia), **passe en orange sous 30 %** (rendu visuel à
     soigner pour la zone <30 %, pas encore dessiné).
+  - Écran Nouvel appareil : type dédié **« Détecteur de fumée »**, distinct de « Capteur »
+    générique (gardé en réserve pour d'éventuels autres capteurs futurs — pas de type fourre-tout).
+    **Pas de test de connexion pour ce type** (confirmé inutile en pratique le 2026-08-24, un scan
+    réseau classique ne trouve pas l'appareil) — bouton direct « Ajouter » plutôt que « Tester et
+    ajouter », à ajuster spécifiquement pour ce type.
 
   **Premier contact avec le matériel réel, le 2026-08-24 (David a reçu ses deux détecteurs) —
   aucun code touché, mais plusieurs points confirmés/corrigés en conditions réelles :**
