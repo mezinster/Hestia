@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.Wifi
@@ -166,6 +168,160 @@ fun DeviceTile(
             }
         }
     }
+}
+
+/**
+ * Tuile d'un détecteur de fumée — voir SMOKE-DETECTOR.md. Volontairement distincte de
+ * [DeviceTile] : pas de fait physique marche/arrêt, pas de minuteur, pas d'interrupteur (pas de
+ * relais sur ce type d'appareil).
+ */
+@Composable
+fun SmokeDetectorTile(
+    tile: TileUiState,
+    onOpenDetail: () -> Unit,
+) {
+    val colors = MaterialTheme.stateColors
+    val sensor = tile.sensorStatus ?: SensorStatus.Loading
+
+    val bgColor: Color
+    val stateColor: Color
+    val stateLabel: String
+    when (sensor) {
+        SensorStatus.Loading -> {
+            bgColor = colors.idleBg
+            stateColor = colors.idleText
+            stateLabel = stringResource(R.string.state_loading)
+        }
+        SensorStatus.Offline -> {
+            bgColor = colors.idleBg
+            stateColor = colors.idleText
+            stateLabel = stringResource(R.string.sensor_state_unreachable)
+        }
+        is SensorStatus.Online -> when {
+            sensor.alarm -> {
+                bgColor = colors.offlineBg
+                stateColor = colors.offlineText
+                stateLabel = stringResource(R.string.sensor_state_alarm)
+            }
+            sensor.mute -> {
+                bgColor = colors.idleBg
+                stateColor = colors.idleText
+                stateLabel = stringResource(R.string.sensor_state_mute)
+            }
+            sensor.batteryError -> {
+                bgColor = colors.idleBg
+                stateColor = colors.idleText
+                stateLabel = stringResource(R.string.sensor_state_battery_error)
+            }
+            else -> {
+                bgColor = colors.activeBg
+                stateColor = colors.activeText
+                stateLabel = stringResource(R.string.sensor_state_normal)
+            }
+        }
+    }
+
+    val online = sensor as? SensorStatus.Online
+    val batteryPercent = online?.batteryPercent
+    // Premier passage de seuil (2026-08-31) : orange sous 30 %, à affiner visuellement plus tard
+    // (voir SMOKE-DETECTOR.md) — jamais affiché sans le texte de pourcentage à côté (SPEC : jamais
+    // la couleur seule).
+    val batteryColor = when {
+        batteryPercent == null -> colors.idleText
+        batteryPercent < 30 -> colors.warningText
+        else -> colors.idleText
+    }
+
+    Surface(
+        color = bgColor,
+        shape = RoundedCornerShape(12.dp),
+        onClick = onOpenDetail,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = tile.device.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                if (online?.viaCloud == true) {
+                    Icon(
+                        imageVector = Icons.Filled.SettingsInputAntenna,
+                        contentDescription = stringResource(R.string.tile_via_cloud),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp).padding(start = 4.dp),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = if (sensor is SensorStatus.Online && (sensor.alarm || sensor.batteryError)) {
+                        Icons.Filled.BatteryAlert
+                    } else {
+                        Icons.Filled.BatteryFull
+                    },
+                    contentDescription = null,
+                    tint = if (sensor is SensorStatus.Online && sensor.alarm) stateColor else batteryColor,
+                    modifier = Modifier.size(48.dp),
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = stateLabel,
+                color = stateColor,
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            if (batteryPercent != null) {
+                Text(
+                    text = "$batteryPercent %",
+                    color = batteryColor,
+                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = formatLastContact(online?.updatedAtEpochSec),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+/**
+ * « Il y a 3 min »/« hier » — délégué à `DateUtils` (Android), qui applique déjà la langue du
+ * système sans qu'Hestia ait à gérer les pluriels de chaque langue lui-même. Jamais garanti frais
+ * (voir SMOKE-DETECTOR.md) — l'affichage lui-même le porte, pas juste une valeur muette.
+ */
+@Composable
+private fun formatLastContact(epochSec: Long?): String {
+    if (epochSec == null) return stringResource(R.string.sensor_never_contacted)
+    val relative = android.text.format.DateUtils.getRelativeTimeSpanString(
+        epochSec * 1000,
+        System.currentTimeMillis(),
+        android.text.format.DateUtils.MINUTE_IN_MILLIS,
+    )
+    return stringResource(R.string.sensor_last_contact, relative)
 }
 
 // Plus de bouton « Réessayer » dédié : le rafraîchissement auto (5 s) + le tirage manuel

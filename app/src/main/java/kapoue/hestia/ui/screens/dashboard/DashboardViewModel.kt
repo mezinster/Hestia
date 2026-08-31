@@ -16,6 +16,7 @@ import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.repository.DeviceStatusResult
+import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.isActiveNow
 import kotlinx.coroutines.Job
@@ -90,14 +91,19 @@ class DashboardViewModel @Inject constructor(
     // natif counts.on_time — voir le calcul dans fetch() et la doc de TileUiState.onSinceElapsed.
     private val onSinceElapsed = MutableStateFlow<Map<Long, Long>>(emptyMap())
 
+    // État des détecteurs de fumée (voir SMOKE-DETECTOR.md) — jamais mélangé à [statuses], qui
+    // ne concerne que les canaux avec relais (Switch.GetStatus).
+    private val sensorStatuses = MutableStateFlow<Map<Long, SensorStatus>>(emptyMap())
+
     // Renseigné par la couche UI (qui seule connaît le Context) à chaque reprise d'écran.
     private val _permissionUsable = MutableStateFlow(true)
 
     /** Lu par l'écran pour afficher (ou non) le bandeau de permission manquante. */
     val permissionUsable: StateFlow<Boolean> = _permissionUsable.asStateFlow()
 
-    // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils + on_since en un seul.
-    private val extras = combine(presences, plannings, pendingThresholds, onSinceElapsed) { p, pl, th, os -> Extras(p, pl, th, os) }
+    // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils + on_since +
+    // capteurs en un seul.
+    private val extras = combine(presences, plannings, pendingThresholds, onSinceElapsed, sensorStatuses) { p, pl, th, os, ss -> Extras(p, pl, th, os, ss) }
 
     val uiState: StateFlow<DashboardUiState> =
         combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, extras ->
@@ -113,6 +119,11 @@ class DashboardViewModel @Inject constructor(
                     TileUiState(
                         device = device,
                         status = statusMap[device.id] ?: TileStatus.Loading,
+                        sensorStatus = if (device.type == DeviceType.SMOKE_DETECTOR) {
+                            extras.sensorStatuses[device.id] ?: SensorStatus.Loading
+                        } else {
+                            null
+                        },
                         presence = extras.presence[device.id],
                         plannings = extras.plannings[device.id].orEmpty(),
                         pendingThresholdW = extras.pendingThresholds[device.id],
@@ -168,8 +179,11 @@ class DashboardViewModel @Inject constructor(
                     // Local d'abord pour chacun, puis un seul appel cloud groupé pour ceux
                     // injoignables (voir DeviceRepository.getStatuses) — jamais un appel cloud par
                     // appareil, jamais de sondage cloud pour un appareil déjà joignable en local.
-                    val byDevice = repository.getStatuses(devices)
-                    devices.map { device ->
+                    // Détecteurs de fumée exclus (pas de relais, Switch.GetStatus n'a aucun sens
+                    // pour eux) — voir sensorResults ci-dessous.
+                    val switchDevices = devices.filter { it.supportsSwitch }
+                    val byDevice = repository.getStatuses(switchDevices)
+                    switchDevices.map { device ->
                         val statusResult = byDevice[device.id]
                             ?: DeviceStatusResult(RpcResult.Failure(RpcFailure.UNREACHABLE), viaCloud = false)
                         val tileStatus = statusResult.toTileStatus()
@@ -181,6 +195,13 @@ class DashboardViewModel @Inject constructor(
                         }
                         device.id to tileStatus
                     }
+                }
+                val sensorResults = async {
+                    // Détecteurs de fumée (voir SMOKE-DETECTOR.md) : chemin entièrement séparé du
+                    // relevé switch ci-dessus, jamais mélangé.
+                    devices.filter { it.type == DeviceType.SMOKE_DETECTOR }.map { device ->
+                        async { device.id to repository.getSensorStatus(device).toSensorStatus() }
+                    }.awaitAll()
                 }
                 val presenceResults = async {
                     devices.filter { it.hasScripting }.map { device ->
@@ -196,6 +217,7 @@ class DashboardViewModel @Inject constructor(
                 // exiger une vraie transition allumé→éteint, pas juste « actuellement éteint ».
                 val previousStatuses = statuses.value
                 statuses.value = statusResults.await().toMap()
+                sensorStatuses.value = sensorResults.await().toMap()
                 presences.value = presenceResults.await()
                     .mapNotNull { (id, info) -> info?.let { id to it } }
                     .toMap()
@@ -482,4 +504,5 @@ private data class Extras(
     val plannings: Map<Long, List<Planning>>,
     val pendingThresholds: Map<Long, Int>,
     val onSinceElapsed: Map<Long, Long>,
+    val sensorStatuses: Map<Long, SensorStatus>,
 )

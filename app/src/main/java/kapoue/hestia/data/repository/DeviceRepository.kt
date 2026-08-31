@@ -25,6 +25,7 @@ import kapoue.hestia.data.rpc.ShellyRpcClient
 import kapoue.hestia.data.rpc.errorOrNull
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.rpc.model.ScheduleJob
+import kapoue.hestia.data.rpc.model.SensorReadingResult
 import kapoue.hestia.data.rpc.model.SwitchSetResult
 import kapoue.hestia.data.rpc.model.SwitchStatusResult
 import kapoue.hestia.di.ApplicationScope
@@ -51,10 +52,13 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -65,6 +69,12 @@ import javax.inject.Singleton
  */
 data class DeviceStatusResult(
     val result: RpcResult<SwitchStatusResult>,
+    val viaCloud: Boolean,
+)
+
+/** Même principe que [DeviceStatusResult], pour un détecteur de fumée (voir SMOKE-DETECTOR.md). */
+data class SensorStatusResult(
+    val result: RpcResult<SensorReadingResult>,
     val viaCloud: Boolean,
 )
 
@@ -180,6 +190,102 @@ class DeviceRepository @Inject constructor(
             }
         }.mapKeys { it.key.id }
     }
+
+    /**
+     * Lit l'état d'un détecteur de fumée (alarme, batterie, température) — même principe que
+     * [getStatus]/[getStatuses] côté prises : RPC local en priorité, repli cloud groupé sinon
+     * (voir SMOKE-DETECTOR.md). [device.hasPowerMetering]/[device.supportsSwitch] ne s'appliquent
+     * pas à ce type, jamais appelés ici.
+     */
+    suspend fun getSensorStatus(device: Device): SensorStatusResult {
+        val local = getLocalSensorStatus(device)
+        if (!local.isConnectivityFailure()) return SensorStatusResult(local, viaCloud = false)
+        val cloud = cloudSensorStatusFallback(device)
+        return if (cloud != null) SensorStatusResult(cloud, viaCloud = true) else SensorStatusResult(local, viaCloud = false)
+    }
+
+    /** Comme [getStatuses], pour plusieurs détecteurs de fumée à la fois (un seul appel cloud groupé). */
+    suspend fun getSensorStatuses(devices: List<Device>): Map<Long, SensorStatusResult> = coroutineScope {
+        val local = devices.map { device -> async { device to getLocalSensorStatus(device) } }.awaitAll().toMap()
+        val needFallback = local.filterValues { it.isConnectivityFailure() }.keys.filter { it.cloudDeviceId() != null }
+        if (needFallback.isEmpty()) return@coroutineScope local.mapValues { SensorStatusResult(it.value, viaCloud = false) }.mapKeys { it.key.id }
+
+        val (authKey, server) = cloudCredentialsOrNull()
+            ?: return@coroutineScope local.mapValues { SensorStatusResult(it.value, viaCloud = false) }.mapKeys { it.key.id }
+        val cloudIds = needFallback.mapNotNull { it.cloudDeviceId() }
+        val cloudStatus = cloudClient.getBatchStatus(server, authKey, cloudIds)
+
+        local.mapValues { (device, result) ->
+            val cloudId = device.cloudDeviceId()
+            if (result.isConnectivityFailure() && cloudId != null) {
+                cloudStatus[cloudId]?.let { SensorStatusResult(parseCloudSensorStatus(it), viaCloud = true) }
+                    ?: SensorStatusResult(result, viaCloud = false)
+            } else {
+                SensorStatusResult(result, viaCloud = false)
+            }
+        }.mapKeys { it.key.id }
+    }
+
+    private suspend fun getLocalSensorStatus(device: Device): RpcResult<SensorReadingResult> {
+        val (ip, result) = withIp(device) { i -> rpcClient.getFullStatus(i) }
+        // Même raison que getLocalStatus côté prises : remplir Device.cloudId dès qu'on en a
+        // l'occasion, jamais garanti avant le moment précis où le repli cloud en a besoin.
+        if (result is RpcResult.Success && device.cloudId == null) backfillCloudId(device, ip)
+        return when (result) {
+            is RpcResult.Success -> {
+                val full = result.value
+                RpcResult.Success(
+                    SensorReadingResult(
+                        alarm = full.smoke?.alarm ?: false,
+                        mute = full.smoke?.mute ?: false,
+                        batteryPercent = full.devicePower?.battery?.percent,
+                        batteryError = !full.devicePower?.errors.isNullOrEmpty(),
+                        temperatureC = full.temperature?.tC,
+                        updatedAtEpochSec = System.currentTimeMillis() / 1000,
+                    ),
+                )
+            }
+            is RpcResult.RpcError -> result
+            is RpcResult.Failure -> result
+        }
+    }
+
+    private suspend fun cloudSensorStatusFallback(device: Device): RpcResult<SensorReadingResult>? {
+        val cloudId = device.cloudDeviceId() ?: return null
+        val (authKey, server) = cloudCredentialsOrNull() ?: return null
+        val cloudStatus = cloudClient.getBatchStatus(server, authKey, listOf(cloudId))
+        return cloudStatus[cloudId]?.let { parseCloudSensorStatus(it) }
+    }
+
+    /**
+     * Reconstruit un [SensorReadingResult] à partir du bloc `status` du cloud — mêmes champs que
+     * le RPC local. `_updated` (ex. `"2026-08-31 17:04:07"`) n'est pas documenté explicitement par
+     * Shelly mais confirmé présent en pratique le 2026-08-31 (voir SMOKE-DETECTOR.md) ; supposé en
+     * UTC faute de certitude — à corriger si un décalage est constaté à l'usage.
+     */
+    private fun parseCloudSensorStatus(deviceStatus: JsonObject): RpcResult<SensorReadingResult> {
+        val smoke = deviceStatus["smoke:0"]?.jsonObject
+        val devicePower = deviceStatus["devicepower:0"]?.jsonObject
+        val battery = devicePower?.get("battery")?.jsonObject
+        val errors = devicePower?.get("errors")?.jsonArray
+        val temperature = deviceStatus["temperature:0"]?.jsonObject
+        val updated = deviceStatus["_updated"]?.jsonPrimitive?.contentOrNull
+        return RpcResult.Success(
+            SensorReadingResult(
+                alarm = smoke?.get("alarm")?.jsonPrimitive?.booleanOrNull ?: false,
+                mute = smoke?.get("mute")?.jsonPrimitive?.booleanOrNull ?: false,
+                batteryPercent = battery?.get("percent")?.jsonPrimitive?.intOrNull,
+                batteryError = errors != null && errors.isNotEmpty(),
+                temperatureC = temperature?.get("tC")?.jsonPrimitive?.doubleOrNull,
+                updatedAtEpochSec = updated?.let { parseCloudUpdatedTimestamp(it) },
+            ),
+        )
+    }
+
+    /** Parse `"yyyy-MM-dd HH:mm:ss"` (format `_updated` du cloud), supposé UTC — voir [parseCloudSensorStatus]. */
+    private fun parseCloudUpdatedTimestamp(text: String): Long? = runCatching {
+        LocalDateTime.parse(text, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).toEpochSecond(ZoneOffset.UTC)
+    }.getOrNull()
 
     /**
      * Identifiant cloud tel qu'attendu par l'API Shelly : MAC en minuscules, sans séparateur.

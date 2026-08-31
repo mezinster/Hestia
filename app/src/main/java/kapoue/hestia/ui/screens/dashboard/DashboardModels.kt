@@ -3,6 +3,7 @@ package kapoue.hestia.ui.screens.dashboard
 import android.os.SystemClock
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.repository.DeviceStatusResult
+import kapoue.hestia.data.repository.SensorStatusResult
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.domain.model.Planning
 
@@ -42,6 +43,50 @@ sealed interface TileStatus {
 }
 
 /**
+ * État visuel d'un détecteur de fumée sur le Tableau — voir SMOKE-DETECTOR.md. Distinct de
+ * [TileStatus] : pas de fait physique marche/arrêt, pas de minuteur, pas de puissance.
+ */
+sealed interface SensorStatus {
+    /** Avant la première lecture. */
+    data object Loading : SensorStatus
+
+    /** Jamais joignable, ni en local ni via le cloud (pas de lecture du tout à afficher). */
+    data object Offline : SensorStatus
+
+    data class Online(
+        val alarm: Boolean,
+        val mute: Boolean,
+        /** Pourcentage déjà calculé par le firmware — rien à calibrer côté Hestia. Null si
+         * jamais lu, ou si [batteryError] est vrai (lecture impossible plutôt que fausse valeur). */
+        val batteryPercent: Int?,
+        /** Vrai si l'appareil signale explicitement une erreur de lecture de sa batterie — peut
+         * venir d'une vraie panne ou d'une config corrompue (réparable par reset d'usine côté
+         * appareil), jamais présenté comme un défaut définitif. */
+        val batteryError: Boolean,
+        val temperatureC: Double?,
+        /** Instant de cette lecture (epoch Unix, secondes) — jamais garanti frais, l'appareil
+         * dort la majeure partie du temps. Null si l'appareil ne l'a pas fourni. */
+        val updatedAtEpochSec: Long?,
+        val viaCloud: Boolean,
+    ) : SensorStatus
+}
+
+/** Convertit un résultat de lecture capteur en état de tuile. Même principe que [toTileStatus]. */
+internal fun SensorStatusResult.toSensorStatus(): SensorStatus = when (val r = result) {
+    is RpcResult.Success -> SensorStatus.Online(
+        alarm = r.value.alarm,
+        mute = r.value.mute,
+        batteryPercent = if (r.value.batteryError) null else r.value.batteryPercent,
+        batteryError = r.value.batteryError,
+        temperatureC = r.value.temperatureC,
+        updatedAtEpochSec = r.value.updatedAtEpochSec,
+        viaCloud = viaCloud,
+    )
+    is RpcResult.RpcError -> SensorStatus.Offline
+    is RpcResult.Failure -> SensorStatus.Offline
+}
+
+/**
  * Simulation de présence **réellement en cours** sur l'appareil : l'exécution du script est
  * vérifiée via `Script.List` (jamais supposée), la plage horaire vient du cache local.
  * Nul quand aucune simulation ne tourne.
@@ -56,7 +101,11 @@ data class PresenceInfo(
 /** Une tuile = un canal, avec son état courant. */
 data class TileUiState(
     val device: Device,
+    /** Sans objet pour un détecteur de fumée (`device.type == SMOKE_DETECTOR`) — [sensorStatus]
+     * porte alors son état réel, celui-ci reste à [TileStatus.Loading] sans jamais être lu. */
     val status: TileStatus,
+    /** État du détecteur de fumée, seulement pour ce type d'appareil — voir SMOKE-DETECTOR.md. */
+    val sensorStatus: SensorStatus? = null,
     val presence: PresenceInfo? = null,
     /** Plannings présents sur l'appareil ; la tuile affiche celui **en cours** s'il y en a un. */
     val plannings: List<Planning> = emptyList(),

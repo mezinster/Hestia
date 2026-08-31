@@ -55,6 +55,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.theme.stateColors
 import kotlinx.coroutines.delay
@@ -196,24 +197,31 @@ fun DashboardScreen(
                             }
                             if (!tile.isMultiChannel) {
                                 item(key = tile.device.id) {
-                                    DeviceTile(
-                                        tile = tile,
-                                        elapsedNow = elapsedNow,
-                                        onToggle = { turnOn ->
-                                            // Présence active : le bouton ON/OFF ne fait que
-                                            // couper la simulation pour aujourd'hui, jamais
-                                            // relancer autre chose à la place (retour David,
-                                            // 2026-08-22) — confirmation d'abord.
-                                            val running = tile.presence
-                                            if (running != null) {
-                                                pendingToggle = PendingToggle(tile.device, running)
-                                            } else {
-                                                viewModel.toggle(tile.device, turnOn)
-                                            }
-                                        },
-                                        onOpenDetail = { onOpenDetail(tile.device.id) },
-                                        onPlanningWindowEnded = { viewModel.refresh(force = true) },
-                                    )
+                                    if (tile.device.type == DeviceType.SMOKE_DETECTOR) {
+                                        SmokeDetectorTile(
+                                            tile = tile,
+                                            onOpenDetail = { onOpenDetail(tile.device.id) },
+                                        )
+                                    } else {
+                                        DeviceTile(
+                                            tile = tile,
+                                            elapsedNow = elapsedNow,
+                                            onToggle = { turnOn ->
+                                                // Présence active : le bouton ON/OFF ne fait que
+                                                // couper la simulation pour aujourd'hui, jamais
+                                                // relancer autre chose à la place (retour David,
+                                                // 2026-08-22) — confirmation d'abord.
+                                                val running = tile.presence
+                                                if (running != null) {
+                                                    pendingToggle = PendingToggle(tile.device, running)
+                                                } else {
+                                                    viewModel.toggle(tile.device, turnOn)
+                                                }
+                                            },
+                                            onOpenDetail = { onOpenDetail(tile.device.id) },
+                                            onPlanningWindowEnded = { viewModel.refresh(force = true) },
+                                        )
+                                    }
                                 }
                             }
                         }

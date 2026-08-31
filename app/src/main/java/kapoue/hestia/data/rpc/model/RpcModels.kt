@@ -187,10 +187,18 @@ data class CloudStatusResult(
     val connected: Boolean = false,
 )
 
-/** Horloge de l'appareil, extraite de Shelly.GetStatus → sys (contrôle de dérive). */
+/**
+ * État complet de l'appareil (Shelly.GetStatus). `sys` sert au contrôle de dérive d'horloge ;
+ * `smoke`/`devicePower`/`temperature` (2026-08-31, détecteur de fumée — voir SMOKE-DETECTOR.md)
+ * sont absents (null) sur tout appareil qui n'a pas ces composants, ignoreUnknownKeys s'occupant
+ * du reste sans qu'on ait à lister chaque type d'appareil.
+ */
 @Serializable
 data class ShellyFullStatus(
     val sys: SysStatus? = null,
+    @SerialName("smoke:0") val smoke: SmokeStatusResult? = null,
+    @SerialName("devicepower:0") val devicePower: DevicePowerStatusResult? = null,
+    @SerialName("temperature:0") val temperature: TemperatureStatusResult? = null,
 )
 
 @Serializable
@@ -200,6 +208,38 @@ data class SysStatus(
     /** Heure locale de l'appareil, ex. « 05:09 ». */
     val time: String? = null,
     @SerialName("utc_offset") val utcOffset: Int? = null,
+)
+
+/** `Smoke.GetStatus` (voir SMOKE-DETECTOR.md). */
+@Serializable
+data class SmokeStatusResult(
+    val alarm: Boolean = false,
+    val mute: Boolean = false,
+)
+
+/**
+ * `DevicePower.GetStatus`. [errors] non vide (ex. `["read"]`) signale une lecture de batterie
+ * impossible — vécu en direct : peut venir d'une vraie panne matérielle **ou** d'une config
+ * corrompue résolue par une simple réinitialisation d'usine côté appareil, jamais présenté comme
+ * un défaut définitif. `battery.V` (tension) n'est volontairement pas modélisée : elle peut
+ * valoir une chaîne non numérique (`"Q"`) en cas d'erreur, ce qui ferait échouer le décodage —
+ * seul `percent` est exploité par Hestia, déjà calculé par le firmware.
+ */
+@Serializable
+data class DevicePowerStatusResult(
+    val battery: BatteryStatus? = null,
+    val errors: List<String>? = null,
+)
+
+@Serializable
+data class BatteryStatus(
+    val percent: Int? = null,
+)
+
+/** `Temperature.GetStatus` — température de la pièce en degrés Celsius. */
+@Serializable
+data class TemperatureStatusResult(
+    val tC: Double? = null,
 )
 
 /**
@@ -260,4 +300,21 @@ data class SwitchStatusResult(
 @Serializable
 data class SwitchCounts(
     @SerialName("on_time") val onTime: Double? = null,
+)
+
+/**
+ * Lecture combinée d'un détecteur de fumée — mêmes champs qu'on lise en local
+ * (`Shelly.GetStatus` → `smoke`/`devicePower`/`temperature`) ou reconstruits depuis le cloud,
+ * comme [SwitchStatusResult] pour un canal (voir SMOKE-DETECTOR.md). [updatedAtEpochSec] :
+ * instant de cette lecture (epoch Unix, secondes) — l'heure du téléphone pour une lecture
+ * locale, le champ `_updated` du cloud sinon ; jamais garanti d'être frais, l'appareil dort la
+ * majeure partie du temps.
+ */
+data class SensorReadingResult(
+    val alarm: Boolean,
+    val mute: Boolean,
+    val batteryPercent: Int?,
+    val batteryError: Boolean,
+    val temperatureC: Double?,
+    val updatedAtEpochSec: Long?,
 )

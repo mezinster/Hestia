@@ -12,20 +12,26 @@ réinitialisation d'usine. IP de test : `192.168.1.94` (mac `3076F538EEF4`) et `
 
 Chaque lot produit quelque chose de réellement testable, pas juste du code invisible.
 
-- **Lot 1 — Ajouter le détecteur.** Nouveau `DeviceType` dédié « Détecteur de fumée » (pas
-  « Capteur » générique, réservé à d'éventuels autres capteurs futurs). Écran Nouvel appareil :
-  pas de test de connexion (confirmé inutile, un scan réseau classique ne le trouve jamais vu
-  qu'il dort la majeure partie du temps), bouton direct « Ajouter ». Insister sur l'activation
-  ntfy + Cloud Shelly sur cet écran.
+- **Lot 1 — Ajouter le détecteur. ✅ Codé le 2026-08-31, pas encore testé sur l'appareil réel.**
+  Nouveau `DeviceType` dédié « Détecteur de fumée » (pas « Capteur » générique, réservé à
+  d'éventuels autres capteurs futurs). Écran Nouvel appareil : pas de test de connexion (confirmé
+  inutile, un scan réseau classique ne le trouve jamais vu qu'il dort la majeure partie du temps),
+  bouton direct « Ajouter ». Insister sur l'activation ntfy + Cloud Shelly sur cet écran.
   → *Testable : ajouter le détecteur dans Hestia, le voir dans la liste.*
 
-- **Lot 2 — Tuile Tableau avec données réelles.** Lecture `Smoke.GetStatus`/`DevicePower.
-  GetStatus`/`Temperature.GetStatus` en RPC local si joignable, repli Cloud Control API sinon
-  (même clé de compte que les prises, confirmée fonctionnelle). Pourcentage batterie (déjà calculé
-  par le firmware, rien à calibrer côté Hestia), orange sous 30 %. Heure du dernier contact via le
-  champ `_updated` du Cloud. État « lecture impossible » distinct si `devicepower:0.errors`
-  présent (peut être une vraie panne ou une config corrompue réparable par reset d'usine — ne pas
-  présenter comme définitif à l'utilisateur).
+- **Lot 2 — Tuile Tableau avec données réelles. ✅ Codé le 2026-08-31, pas encore testé sur
+  l'appareil réel.** Lecture `Smoke.GetStatus`/`DevicePower.GetStatus`/`Temperature.GetStatus` en
+  un seul appel `Shelly.GetStatus` local si joignable, repli Cloud Control API sinon (même clé de
+  compte que les prises, `DeviceRepository.getSensorStatus(es)`, calqué sur `getStatus(es)`).
+  Pourcentage batterie (déjà calculé par le firmware, rien à calibrer côté Hestia), orange sous
+  30 % (`StateColorSet.warningText`, nouveau — premier passage de couleur, à affiner). Heure du
+  dernier contact via `_updated` (cloud) ou l'heure du téléphone (lecture locale réussie),
+  affichée en relatif (« il y a 3 min ») via `DateUtils.getRelativeTimeSpanString` — localisé
+  gratuitement, pas de nouvelles chaînes de pluriel à gérer. État « lecture impossible » distinct
+  si `devicepower:0.errors` présent (peut être une vraie panne ou une config corrompue réparable
+  par reset d'usine — jamais présenté comme définitif). Nouvelle tuile dédiée `SmokeDetectorTile`
+  (pas de fait physique marche/arrêt, pas d'interrupteur, sur `DeviceTile.kt`), branchée dans
+  `DashboardScreen.kt` selon `device.type`.
   → *Testable : la tuile affiche le vrai pourcentage batterie et l'heure du dernier contact.*
 
 - **Lot 3 — Écran Détail.** Couper l'alarme (`Smoke.Mute`). Bouton Test **avec confirmation**

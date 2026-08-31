@@ -222,6 +222,15 @@
     <string name="state_presence">Présence</string>
     <string name="tile_presence_disabled_today">Présence désactivée aujourd\'hui</string>
     <string name="tile_planning_disabled_today">Planning désactivé aujourd\'hui</string>
+
+    <!-- Tuile détecteur de fumée (voir SMOKE-DETECTOR.md) -->
+    <string name="sensor_state_normal">Normal</string>
+    <string name="sensor_state_alarm">Alarme !</string>
+    <string name="sensor_state_mute">Alarme coupée</string>
+    <string name="sensor_state_battery_error">Lecture impossible</string>
+    <string name="sensor_state_unreachable">Injoignable</string>
+    <string name="sensor_last_contact">Dernier contact : %1$s</string>
+    <string name="sensor_never_contacted">Jamais contacté</string>
     <string name="state_offline">Indisponible</string>
     <string name="state_loading">Lecture…</string>
 

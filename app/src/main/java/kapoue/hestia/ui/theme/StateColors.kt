@@ -38,6 +38,10 @@ data class StateColorSet(
     val offlineLed: Color,
     val offlineText: Color,
     val offlineBg: Color,
+    /** Alerte non critique (ex. batterie <30 % d'un détecteur de fumée, 2026-08-31) — distinct
+     * d'[offlineText] (rouge, plus grave qu'une simple alerte). Premier passage de couleur, à
+     * affiner à l'usage (voir SMOKE-DETECTOR.md, David : « on doit faire joli »). */
+    val warningText: Color,
 )
 
 private val DarkStateColors = StateColorSet(
@@ -46,6 +50,7 @@ private val DarkStateColors = StateColorSet(
     presenceLed = Color(0xFF85B7EB), presenceText = Color(0xFF85B7EB),
     plannedLed = Color(0xFFAFA9EC), plannedText = Color(0xFFAFA9EC),
     offlineLed = Color(0xFFF0716E), offlineText = Color(0xFFF0716E), offlineBg = Color(0xFF2E1918),
+    warningText = Color(0xFFF0A560),
 )
 
 private val LightStateColors = StateColorSet(
@@ -54,6 +59,7 @@ private val LightStateColors = StateColorSet(
     presenceLed = Color(0xFF378ADD), presenceText = Color(0xFF0C447C),
     plannedLed = Color(0xFF7F77DD), plannedText = Color(0xFF534AB7),
     offlineLed = Color(0xFFD8342A), offlineText = Color(0xFFC0342B), offlineBg = Color(0xFFFCEBEB),
+    warningText = Color(0xFF9A5300),
 )
 
 /** Jeu de couleurs d'état adapté au thème courant. */
