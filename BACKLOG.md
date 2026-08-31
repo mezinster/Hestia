@@ -521,20 +521,23 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
 
   **Premier contact avec le matériel réel, le 2026-08-31 (David a reçu ses deux détecteurs) —
   aucun code touché, mais plusieurs points confirmés/corrigés en conditions réelles :**
-  - **Un des deux exemplaires (94) est défectueux (matériel, pas logiciel)** : injoignable dès le
-    départ (batterie lue <20%, MAJ firmware bloquée, AP Wi-Fi instable). Diagnostic confirmé par
-    un test décisif — pile échangée avec l'autre détecteur (bonne, validée par une MAJ firmware
-    réussie sur ce dernier) : toujours injoignable localement, y compris triple-clic de réveil, y
-    compris après vidage de cache + fermeture forcée de l'app Shelly. **Confirmé avec une preuve
-    dure via le Cloud Control API** (même appel que ci-dessous) : l'appareil est en fait bien
-    connecté au Wi-Fi (`online:1`, `sta_ip:192.168.1.94`, a bien rejoint le réseau — ce n'était
-    donc pas un souci de provisioning) mais son capteur de batterie remonte une erreur de lecture
-    explicite : `"devicepower:0":{"battery":{"V":"Q","percent":null},"errors":["read"]}` — le
-    firmware lui-même signale ne pas réussir à lire la pile (`"V":"Q"`, pas un nombre valide).
-    Cause isolée au circuit de mesure de batterie, pas au Wi-Fi ni à la config. À faire jouer en
-    garantie/échange, rien à voir avec Hestia. **Nouveau champ à prévoir dans le design de la
-    tuile capteur** : `devicepower:0.errors` — un état « capteur défaillant » distinct d'une
-    simple batterie basse.
+  - **Correctif : le 94 n'était pas défectueux, conclusion revue après coup — une config
+    corrompue, pas un défaut matériel.** Diagnostic initial (à tort) : injoignable dès le départ
+    (batterie lue <20%, MAJ firmware bloquée, AP Wi-Fi instable), semblait confirmé par un test de
+    pile croisée (toujours injoignable localement avec une pile connue bonne) puis par une preuve
+    Cloud apparemment dure : `"devicepower:0":{"battery":{"V":"Q","percent":null},
+    "errors":["read"]}` — le firmware signalait explicitement ne pas réussir à lire la pile.
+    **Résolu par une réinitialisation d'usine** (5 appuis brefs sur le bouton, distinct des 3
+    appuis qui ne font que réveiller l'appareil) : après reconfiguration Wi-Fi, nouvel appel Cloud
+    entièrement sain — `battery.percent:100`, plus aucun champ `errors`, `available_updates:{}`
+    (la MAJ bloquée s'est aussi résolue). **Leçon à retenir** : même un champ `errors` explicite
+    côté Cloud ne prouve pas forcément un défaut matériel — une config corrompue peut produire
+    exactement les mêmes symptômes (y compris une fausse erreur de lecture de capteur). Toujours
+    essayer une réinitialisation d'usine avant de conclure à un renvoi. Les deux exemplaires sont
+    finalement sains. Le champ `devicepower:0.errors` reste malgré tout à prévoir dans le design
+    de la tuile capteur (état « lecture impossible », qu'il vienne d'un vrai défaut ou d'une
+    config corrompue — dans les deux cas Hestia doit l'afficher clairement plutôt que planter ou
+    afficher une valeur fausse).
   - **Le pourcentage batterie bas au départ était bien un artefact de charge (« voltage sag »),
     pas une pile déficiente**, sur l'exemplaire fonctionnel : batterie retirée quelques minutes,
     remise → lecture à 100 % et MAJ firmware possible. Confirme l'hypothèse envisagée avant
