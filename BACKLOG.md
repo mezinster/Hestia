@@ -519,7 +519,7 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
     réseau classique ne trouve pas l'appareil) — bouton direct « Ajouter » plutôt que « Tester et
     ajouter », à ajuster spécifiquement pour ce type.
 
-  **Premier contact avec le matériel réel, le 2026-08-24 (David a reçu ses deux détecteurs) —
+  **Premier contact avec le matériel réel, le 2026-08-31 (David a reçu ses deux détecteurs) —
   aucun code touché, mais plusieurs points confirmés/corrigés en conditions réelles :**
   - **Un des deux exemplaires est défectueux (matériel, pas logiciel)** : injoignable dès le
     départ (batterie lue <20%, MAJ firmware bloquée, AP Wi-Fi instable). Diagnostic confirmé par
@@ -550,6 +550,22 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
     détecteur aussi (cohérent avec l'app Shelly qui l'a reconnu sans redemander d'identifiants) —
     à confirmer par un appel réel une fois le détecteur fonctionnel enregistré, pas suffisant en
     théorie seule.
+  - **Confirmé par un appel réel (David, `/v2/devices/api/get`) le jour même : la même clé de
+    compte que pour les prises fonctionne bien pour le détecteur, aucune clé séparée nécessaire.**
+    Réponse complète obtenue sur l'exemplaire fonctionnel (95, id Cloud `3076f522a208`) :
+    `online:1`, `smoke:0.alarm:false`/`mute:false`, `devicepower:0.battery.percent:100`
+    (confirme la remise à zéro par retrait/remise de pile, tenue). Deux points auparavant
+    incertains, désormais tranchés en conditions réelles :
+    - **`_updated` est bien présent dans la réponse** (`"2026-08-31 17:04:07"`) — horodatage de
+      la dernière remontée, exactement ce qu'il fallait pour un « dernier contact » honnête côté
+      tuile. La doc ne le mentionnait pas explicitement, c'est confirmé en pratique.
+    - **`sys.wakeup_period` est bien lisible, et vaut `86400` (24h) pour ce Smoke** — pas ~2h par
+      analogie avec le H&T comme supposé plus tôt, une vraie valeur mesurée. Réveil périodique
+      donc bien plus rare que redouté ; combiné au réveil immédiat sur alarme, ça reste largement
+      suffisant pour l'usage (alerte temps réel + batterie/temp rafraîchies au moins une fois par
+      jour via le Cloud).
+    Champs confirmés utilisables tels quels : `status["smoke:0"]`, `status["devicepower:0"].
+    battery.percent`, `status.sys.wakeup_period`, `status.wifi.sta_ip`, `status._updated`.
 
 - **Conflit minuteur bouton / présence sur un même canal — évaluation détaillée demandée par
   David le 2026-08-22 avant tout « go », pas codé.** Vécu en direct sur la prise 4 (Strip4,
