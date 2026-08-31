@@ -514,6 +514,38 @@ Retenus le 2026-08-14 pour ce lot, pas encore attaqués :
     ci-dessus — rien à calibrer côté Hestia), **passe en orange sous 30 %** (rendu visuel à
     soigner pour la zone <30 %, pas encore dessiné).
 
+  **Premier contact avec le matériel réel, le 2026-08-24 (David a reçu ses deux détecteurs) —
+  aucun code touché, mais plusieurs points confirmés/corrigés en conditions réelles :**
+  - **Un des deux exemplaires est défectueux (matériel, pas logiciel)** : injoignable dès le
+    départ (batterie lue <20%, MAJ firmware bloquée, AP Wi-Fi instable). Diagnostic confirmé par
+    un test décisif — pile échangée avec l'autre détecteur (bonne, validée par une MAJ firmware
+    réussie sur ce dernier) : toujours injoignable, y compris triple-clic de réveil, y compris
+    après vidage de cache + fermeture forcée de l'app Shelly. Isolé au matériel, pas à la pile ni
+    à la config. À faire jouer en garantie/échange, rien à voir avec Hestia.
+  - **Le pourcentage batterie bas au départ était bien un artefact de charge (« voltage sag »),
+    pas une pile déficiente**, sur l'exemplaire fonctionnel : batterie retirée quelques minutes,
+    remise → lecture à 100 % et MAJ firmware possible. Confirme l'hypothèse envisagée avant
+    réception du matériel.
+  - **LED d'état (repère « C » sur l'appareil) : 1 flash rouge/53s en fonctionnement normal ET en
+    pile faible — seule différence, un bip accompagne chaque flash en cas de pile faible.** Ne pas
+    se fier au flash seul. Test = 3 flashs + 3 bips ; anomalie = 2 flashs/53s sans bip ; alarme =
+    flashs et bips continus.
+  - **Confirmé en conditions réelles : un scan réseau classique ne trouve pas l'appareil** (testé
+    par David avec Network Scanner, F-Droid) — la fenêtre de réveil est trop courte/rare pour
+    qu'un sondage ponctuel tombe dedans. Décision tranchée avec David : **l'écran « Ajouter un
+    appareil » ne doit pas exiger de test de connexion réussi pour ce type d'appareil** — faire
+    confiance à l'IP saisie par l'utilisateur, contrairement aux prises.
+  - **Clarification importante sur le Cloud** : l'URL vue en activant le Cloud depuis
+    `192.168.33.1` (`shelly-api-eu.shelly.cloud:6022/jrpc`) est la connexion **propre à
+    l'appareil** vers l'infrastructure Shelly (réglage `Cloud.SetConfig` de l'appareil, JRPC brut)
+    — **pas** le serveur que Hestia appelle. Le Cloud Control API qu'Hestia utilise déjà pour les
+    prises (`/v2/devices/api/get`, clé de compte dans Réglages) est un serveur HTTP distinct,
+    obtenu via l'authentification de compte. D'après la doc, cette API est **liée au compte, pas à
+    l'appareil** — la même clé déjà configurée dans Hestia pour les prises devrait donc couvrir le
+    détecteur aussi (cohérent avec l'app Shelly qui l'a reconnu sans redemander d'identifiants) —
+    à confirmer par un appel réel une fois le détecteur fonctionnel enregistré, pas suffisant en
+    théorie seule.
+
 - **Conflit minuteur bouton / présence sur un même canal — évaluation détaillée demandée par
   David le 2026-08-22 avant tout « go », pas codé.** Vécu en direct sur la prise 4 (Strip4,
   switchId 3), qui a les deux configurés en même temps.
