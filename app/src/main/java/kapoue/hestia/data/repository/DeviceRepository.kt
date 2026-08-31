@@ -1654,6 +1654,34 @@ class DeviceRepository @Inject constructor(
         return added
     }
 
+    /**
+     * Ajoute un détecteur de fumée — sans sonde préalable, contrairement à [addChannels] : cet
+     * appareil dort la majeure partie du temps (voir SMOKE-DETECTOR.md), un test de connexion à
+     * l'ajout échouerait presque toujours pour rien. L'IP saisie par l'utilisateur est prise
+     * telle quelle, vérifiée au premier contact réel (comme pour toute autre RPC). Pas de relais
+     * (`supportsSwitch = false`), pas de script (`hasScripting = false` — présence/planning/
+     * minuteur bouton ne s'appliquent pas à ce type), pas de mesure de puissance.
+     * @return false si ce canal (IP, switchId 0) existe déjà.
+     */
+    suspend fun addSmokeDetector(name: String, ip: String): Boolean {
+        if (deviceDao.exists(ip, 0)) return false
+        deviceDao.insert(
+            Device(
+                name = name,
+                deviceName = name,
+                ipAddress = ip,
+                switchId = 0,
+                type = DeviceType.SMOKE_DETECTOR,
+                supportsSwitch = false,
+                hasScripting = false,
+                hasPowerMetering = false,
+                position = deviceDao.maxPosition() + 1,
+            ),
+        )
+        logger.info(DiagnosticLogger.DB, "Ajout détecteur de fumée $ip")
+        return true
+    }
+
     suspend fun updateDevice(device: Device) = deviceDao.update(device)
 
     /**

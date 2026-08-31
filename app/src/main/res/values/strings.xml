@@ -159,7 +159,10 @@
     <string name="device_type_plug">Plug</string>
     <string name="device_type_lamp">Lamp</string>
     <string name="device_type_sensor">Sensor</string>
+    <string name="device_type_smoke_detector">Smoke detector</string>
     <string name="add_device_test_and_add">Test connection and add</string>
+    <string name="add_device_add_smoke_detector">Add</string>
+    <string name="add_device_smoke_detector_hint">This device runs on battery and spends most of its time asleep: Hestia can\'t check the connection right now, the IP you enter will be used as-is. Consider enabling ntfy notifications and Shelly Cloud for this detector — that\'s what lets you get an alert even while it\'s asleep.</string>
     <string name="add_device_testing">Testing connection…</string>
     <string name="add_device_save">Save</string>
     <string name="add_device_cancel">Cancel</string>

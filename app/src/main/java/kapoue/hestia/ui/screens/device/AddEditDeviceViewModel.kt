@@ -320,6 +320,23 @@ class AddEditDeviceViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Mode ajout d'un détecteur de fumée : pas de sonde, contrairement à [testAndAdd] — voir
+     * SMOKE-DETECTOR.md. L'IP saisie est prise telle quelle, jamais vérifiée à ce stade.
+     */
+    fun addSmokeDetector() {
+        if (!validateFields()) return
+        val state = _uiState.value
+        viewModelScope.launch {
+            val added = repository.addSmokeDetector(state.name.trim(), state.ipAddress.trim())
+            if (added) {
+                _uiState.update { it.copy(done = true) }
+            } else {
+                _uiState.update { it.copy(error = UserMessage(R.string.error_device_exists)) }
+            }
+        }
+    }
+
     fun toggleChannel(channelId: Int) = _uiState.update { state ->
         val selection = state.channelSelection ?: return@update state
         val newSelected = if (channelId in selection.selected) {

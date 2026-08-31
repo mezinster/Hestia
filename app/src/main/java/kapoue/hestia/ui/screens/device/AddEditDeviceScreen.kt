@@ -131,6 +131,13 @@ fun AddEditDeviceScreen(
             return
         }
         if (!viewModel.validate()) return
+        // Détecteur de fumée : pas de contact réseau à l'ajout (voir SMOKE-DETECTOR.md), donc
+        // pas besoin de la permission réseau local à ce stade — elle sera demandée au premier
+        // vrai appel RPC, comme pour tout appareil.
+        if (state.type == DeviceType.SMOKE_DETECTOR) {
+            viewModel.addSmokeDetector()
+            return
+        }
         when (LocalNetworkPermission.status(context)) {
             LocalNetworkPermissionStatus.NOT_REQUIRED,
             LocalNetworkPermissionStatus.GRANTED -> viewModel.testAndAdd()
@@ -218,6 +225,17 @@ fun AddEditDeviceScreen(
                 selected = state.type,
                 onSelected = viewModel::onTypeChange,
             )
+
+            // Pas de test de connexion possible pour ce type (voir SMOKE-DETECTOR.md) — insiste
+            // sur ntfy et le Cloud à la place, seul moyen réaliste d'être alerté vu que l'appareil
+            // dort la majeure partie du temps.
+            if (!state.isEditMode && state.type == DeviceType.SMOKE_DETECTOR) {
+                Text(
+                    text = stringResource(R.string.add_device_smoke_detector_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             if (state.isEditMode) {
                 HorizontalDivider()
@@ -365,6 +383,7 @@ private fun onActionOrConfirm(
 private fun primaryButtonLabel(state: AddEditUiState): String = when {
     state.channelSelection != null -> stringResource(R.string.add_device_add_selected)
     state.isEditMode -> stringResource(R.string.add_device_save)
+    state.type == DeviceType.SMOKE_DETECTOR -> stringResource(R.string.add_device_add_smoke_detector)
     else -> stringResource(R.string.add_device_test_and_add)
 }
 
@@ -410,6 +429,7 @@ private fun deviceTypeLabel(type: DeviceType): Int = when (type) {
     DeviceType.PLUG -> R.string.device_type_plug
     DeviceType.LAMP -> R.string.device_type_lamp
     DeviceType.SENSOR -> R.string.device_type_sensor
+    DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector
 }
 
 @Composable
@@ -569,6 +589,7 @@ private fun nounFor(type: DeviceType): Int = when (type) {
     DeviceType.PLUG -> R.string.device_type_plug
     DeviceType.LAMP -> R.string.device_type_lamp
     DeviceType.SENSOR -> R.string.device_type_sensor
+    DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector
 }
 
 /**

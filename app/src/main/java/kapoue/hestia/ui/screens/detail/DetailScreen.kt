@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.SmokeFree
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -1349,4 +1350,5 @@ private fun iconFor(type: DeviceType): ImageVector = when (type) {
     DeviceType.PLUG -> Icons.Filled.Power
     DeviceType.LAMP -> Icons.Filled.Lightbulb
     DeviceType.SENSOR -> Icons.Filled.Sensors
+    DeviceType.SMOKE_DETECTOR -> Icons.Filled.SmokeFree
 }
