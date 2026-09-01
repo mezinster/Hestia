@@ -69,7 +69,16 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
 - `Smoke.Mute` → coupe l'alarme à distance
 - `DevicePower.GetStatus` → `{ id, battery: { V, percent }, external: { present } }` — le firmware
   calcule déjà le pourcentage, aucune calibration tension→% à faire côté Hestia
-- `Temperature.GetStatus` → température de la pièce
+- `Temperature.GetStatus` → **non confirmé sur ce matériel précis, à corriger.** Affirmé le
+  2026-08-31 sur la seule foi d'un article communautaire (Shelly H&T et Shelly Smoke), jamais
+  vérifié au curl à l'époque — erreur reconnue le 2026-09-01 après relecture des JSON déjà en
+  main : **aucune des quatre réponses `Shelly.GetStatus` obtenues ce soir-là ou le lendemain
+  (94 et 95, à deux moments différents) ne contient de clé `"temperature:0"`.** Ce modèle
+  (`SNSN-0031Z`) ne semble donc pas exposer de capteur de température exploitable en RPC,
+  contrairement à ce qui était supposé. Le code Hestia reste défensif (`temperatureC` nullable,
+  n'affiche rien si absent — jamais de plantage), pas la peine de le retirer, mais ne pas
+  compter dessus pour ce matériel. Leçon : la doc web générale sur une famille de produits ne
+  remplace pas une vérification sur le SKU exact possédé.
 - Webhooks natifs : `smoke.alarm`, `smoke.alarm_off`, `smoke.alarm_test` — l'appareil appelle une
   URL directement (ntfy, ou une autre prise Shelly), sans script ni app
 - `Sys.GetStatus.wakeup_period` : confirmé à `86400` (24h) sur ce modèle — pas ~2h comme le cousin
