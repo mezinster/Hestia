@@ -221,10 +221,25 @@ fun AddEditDeviceScreen(
 
             HorizontalDivider()
 
-            DeviceTypeDropdown(
-                selected = state.type,
-                onSelected = viewModel::onTypeChange,
-            )
+            // En édition, un détecteur de fumée ne doit pas pouvoir changer de type : les
+            // capacités enregistrées à l'ajout (supportsSwitch = false, notamment) ne seraient
+            // jamais recalculées, laissant un appareil "Prise" avec aucun relais — retour David,
+            // test réel 2026-08-31 (« l'appareil ne va pas se changer pour devenir une prise »).
+            if (state.isEditMode && state.type == DeviceType.SMOKE_DETECTOR) {
+                OutlinedTextField(
+                    value = stringResource(deviceTypeLabel(state.type)),
+                    onValueChange = {},
+                    readOnly = true,
+                    enabled = false,
+                    label = { Text(stringResource(R.string.add_device_type_label)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                DeviceTypeDropdown(
+                    selected = state.type,
+                    onSelected = viewModel::onTypeChange,
+                )
+            }
 
             // Pas de test de connexion possible pour ce type (voir SMOKE-DETECTOR.md) — insiste
             // sur ntfy et le Cloud à la place, seul moyen réaliste d'être alerté vu que l'appareil
@@ -238,8 +253,13 @@ fun AddEditDeviceScreen(
             }
 
             if (state.isEditMode) {
-                HorizontalDivider()
-                LedSection(state = state.ledState, onToggle = viewModel::onToggleLed)
+                // Pas de composant LED sur un détecteur de fumée (réglage propre aux prises/
+                // blocs multi-canaux) — la section était affichée sans rien faire, confusion
+                // repérée en test réel le 2026-08-31.
+                if (state.type != DeviceType.SMOKE_DETECTOR) {
+                    HorizontalDivider()
+                    LedSection(state = state.ledState, onToggle = viewModel::onToggleLed)
+                }
 
                 HorizontalDivider()
                 FirmwareSection(

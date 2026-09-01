@@ -16,10 +16,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryAlert
-import androidx.compose.material.icons.filled.BatteryFull
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SettingsInputAntenna
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -259,15 +258,13 @@ fun SmokeDetectorTile(
 
             Spacer(Modifier.height(10.dp))
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                // Même picto que l'écran Détail (flamme) — un picto de pile ici prêtait à
+                // confusion sur la nature de l'appareil (retour David, test réel 2026-08-31).
                 Icon(
-                    imageVector = if (sensor is SensorStatus.Online && (sensor.alarm || sensor.batteryError)) {
-                        Icons.Filled.BatteryAlert
-                    } else {
-                        Icons.Filled.BatteryFull
-                    },
+                    imageVector = Icons.Filled.Whatshot,
                     contentDescription = null,
-                    tint = if (sensor is SensorStatus.Online && sensor.alarm) stateColor else batteryColor,
-                    modifier = Modifier.size(48.dp),
+                    tint = stateColor,
+                    modifier = Modifier.size(40.dp),
                 )
             }
 
