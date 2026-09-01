@@ -50,8 +50,11 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
 - **Lot 4 — Notifications ntfy.** Revu en profondeur en discutant (2026-09-01) : le plan initial
   « webhook natif → ntfy directement » ne fonctionne **pas** — voir § Faits techniques. Découpé en
   3 sous-lots :
-  - **4a — script relais + déploiement opportuniste + webhooks sur les détecteurs. ✅ Codé le
-    2026-09-01, pas encore testé sur l'appareil réel.** Nouveau `SmokeRelayScriptGenerator`
+  - **4a — script relais + déploiement opportuniste + webhooks sur les détecteurs. ✅ Codé et
+    validé en conditions réelles le 2026-09-01** (relais déployé sur 2 appareils à la fois —
+    redondance confirmée ; bug de comparaison d'événement trouvé et corrigé en testant, voir
+    § Faits ; test de bout en bout réussi : appui long sur 94 → notif ntfy reçue, sans aucune
+    intervention manuelle). Nouveau `SmokeRelayScriptGenerator`
     (`hestia_smoke_relay`), déployé de façon opportuniste par `DeviceRepository.resyncSmokeRelay`
     sur jusqu'à 5 appareils scriptables ayant de la place (jamais un appareil désigné à l'avance —
     retour David : « je vois bien TOUS les appareils compatibles, tant pis pour les notifs en
