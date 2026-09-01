@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -78,7 +79,9 @@ import kapoue.hestia.ui.components.ValueWheelPicker
 import kapoue.hestia.ui.icons.SmokeDetectorIcon
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.screens.dashboard.PresenceInfo
+import kapoue.hestia.ui.screens.dashboard.SensorStatus
 import kapoue.hestia.ui.screens.dashboard.TileStatus
+import kapoue.hestia.ui.screens.dashboard.formatLastContact
 import kapoue.hestia.ui.theme.stateColors
 import kotlinx.coroutines.delay
 import java.time.LocalDate
@@ -91,6 +94,7 @@ fun DetailScreen(
 ) {
     val device by viewModel.device.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
+    val sensorStatus by viewModel.sensorStatus.collectAsStateWithLifecycle()
     val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
     val pendingThresholdW by viewModel.pendingThresholdW.collectAsStateWithLifecycle()
     val pendingLabel by viewModel.pendingLabel.collectAsStateWithLifecycle()
@@ -201,6 +205,18 @@ fun DetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             DeviceHeader(dev, activeIp ?: dev.ipAddress)
+
+            if (dev.type == DeviceType.SMOKE_DETECTOR) {
+                // Chemin entièrement séparé (voir SMOKE-DETECTOR.md) : StatusBadge est construit
+                // autour de TileStatus (relais/minuteur/planning), sans objet ici.
+                HorizontalDivider()
+                SmokeDetectorSection(
+                    sensorStatus = sensorStatus,
+                    onMute = { viewModel.muteAlarm() },
+                )
+                return@Column
+            }
+
             // Même classification que le Tableau (voir StatusBadge) : présence et planning
             // reconstruits depuis la même liste unifiée que le reste de l'écran, jamais une
             // requête de plus.
@@ -1175,6 +1191,89 @@ private fun DeviceHeader(device: Device, displayIp: String) {
                 )
             }
         }
+    }
+}
+
+/**
+ * Écran Détail d'un détecteur de fumée — voir SMOKE-DETECTOR.md. Volontairement séparé du reste
+ * de l'écran (StatusBadge/TimerSection/PlanningSection/ButtonTimerSection), tous construits
+ * autour d'un relais que ce type d'appareil n'a pas.
+ */
+@Composable
+private fun SmokeDetectorSection(sensorStatus: SensorStatus, onMute: () -> Unit) {
+    val colors = MaterialTheme.stateColors
+    val stateColor: Color
+    val stateLabel: String
+    when (sensorStatus) {
+        SensorStatus.Loading -> {
+            stateColor = colors.idleText
+            stateLabel = stringResource(R.string.state_loading)
+        }
+        SensorStatus.Offline -> {
+            stateColor = colors.idleText
+            stateLabel = stringResource(R.string.sensor_state_unreachable)
+        }
+        is SensorStatus.Online -> when {
+            sensorStatus.alarm -> {
+                stateColor = colors.offlineText
+                stateLabel = stringResource(R.string.sensor_state_alarm)
+            }
+            sensorStatus.mute -> {
+                stateColor = colors.idleText
+                stateLabel = stringResource(R.string.sensor_state_mute)
+            }
+            sensorStatus.batteryError -> {
+                stateColor = colors.idleText
+                stateLabel = stringResource(R.string.sensor_state_battery_error)
+            }
+            else -> {
+                stateColor = colors.activeText
+                stateLabel = stringResource(R.string.sensor_state_normal)
+            }
+        }
+    }
+    val online = sensorStatus as? SensorStatus.Online
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = stateLabel, style = MaterialTheme.typography.titleMedium, color = stateColor)
+        Text(
+            text = formatLastContact(online?.updatedAtEpochSec),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        online?.batteryPercent?.let { percent ->
+            val batteryColor = if (percent < 30) colors.warningText else MaterialTheme.colorScheme.onSurface
+            Text(text = stringResource(R.string.sensor_battery_label, percent), color = batteryColor)
+        }
+        online?.temperatureC?.let { temperature ->
+            Text(text = stringResource(R.string.sensor_temperature_label, temperature))
+        }
+
+        Text(
+            text = stringResource(R.string.sensor_battery_threshold_info),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        // Grisé hors alarme réelle : couper une alarme silencieuse n'a pas de sens (et
+        // Smoke.Mute ne fait qu'assourdir le son, ne touche pas à la détection elle-même).
+        Button(
+            onClick = onMute,
+            enabled = online?.alarm == true,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Filled.VolumeOff, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+            Text(stringResource(R.string.sensor_mute_action))
+        }
+
+        // Pas de bouton Test : confirmé absent de l'API RPC Shelly (recherché le 2026-08-31),
+        // le test ne se déclenche que physiquement sur l'appareil.
+        Text(
+            text = stringResource(R.string.sensor_no_remote_test),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

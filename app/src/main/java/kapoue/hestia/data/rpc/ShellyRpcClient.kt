@@ -137,6 +137,16 @@ class ShellyRpcClient @Inject constructor(
     suspend fun reboot(ip: String): RpcResult<SetConfigResult> =
         call(ip, "Shelly.Reboot", null, SetConfigResult.serializer())
 
+    /**
+     * Coupe l'alarme sonore d'un détecteur de fumée en cours (voir SMOKE-DETECTOR.md). Ne touche
+     * pas à la détection elle-même : si de la fumée est toujours présente, l'appareil réarmera
+     * l'alarme de lui-même (comportement natif, jamais Hestia). Pas de `Smoke.Test` : confirmé
+     * absent de l'API RPC officielle (recherché le 2026-08-31) — le test ne se déclenche que
+     * physiquement, par appui sur le bouton de l'appareil.
+     */
+    suspend fun muteSmoke(ip: String, id: Int): RpcResult<SetConfigResult> =
+        call(ip, "Smoke.Mute", buildJsonObject { put("id", id) }, SetConfigResult.serializer())
+
     /** État complet de l'appareil ; on n'exploite que la section `sys` (horloge). */
     suspend fun getFullStatus(ip: String): RpcResult<ShellyFullStatus> =
         call(ip, "Shelly.GetStatus", null, ShellyFullStatus.serializer())

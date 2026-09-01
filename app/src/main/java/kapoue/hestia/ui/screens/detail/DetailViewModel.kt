@@ -12,9 +12,12 @@ import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.domain.model.CreatePlanningResult
+import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.ui.navigation.StackedRoutes
+import kapoue.hestia.ui.screens.dashboard.SensorStatus
 import kapoue.hestia.ui.screens.dashboard.TileStatus
+import kapoue.hestia.ui.screens.dashboard.toSensorStatus
 import kapoue.hestia.ui.screens.dashboard.toTileStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -40,6 +43,10 @@ class DetailViewModel @Inject constructor(
 
     private val _status = MutableStateFlow<TileStatus>(TileStatus.Loading)
     val status: StateFlow<TileStatus> = _status.asStateFlow()
+
+    /** Sans objet hors détecteur de fumée (`device.type == SMOKE_DETECTOR`) — voir SMOKE-DETECTOR.md. */
+    private val _sensorStatus = MutableStateFlow<SensorStatus>(SensorStatus.Loading)
+    val sensorStatus: StateFlow<SensorStatus> = _sensorStatus.asStateFlow()
 
     /** IP effectivement utilisée lors du dernier appel réussi (1ᵉʳ ou 2ᵉ emplacement). */
     private val _activeIp = MutableStateFlow<String?>(null)
@@ -258,8 +265,24 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch { repository.deletePausedPlanning(paused) }
     }
 
+    /** Coupe l'alarme sonore en cours (`Smoke.Mute`) puis relit l'état réel. */
+    fun muteAlarm() {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            repository.muteSmokeAlarm(dev)
+            fetch()
+        }
+    }
+
     private suspend fun fetch() {
         val dev = repository.getDevice(deviceId) ?: return
+        // Détecteur de fumée : chemin entièrement séparé, pas de relais ni de script (voir
+        // SMOKE-DETECTOR.md) — Switch.GetStatus/plannings/minuteur bouton n'ont aucun sens ici.
+        if (dev.type == DeviceType.SMOKE_DETECTOR) {
+            _sensorStatus.value = repository.getSensorStatus(dev).toSensorStatus()
+            _activeIp.value = repository.activeIp(dev)
+            return
+        }
         val status = repository.getStatus(dev).toTileStatus()
         _status.value = status
         _activeIp.value = repository.activeIp(dev)

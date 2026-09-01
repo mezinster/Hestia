@@ -312,7 +312,7 @@ fun SmokeDetectorTile(
  * (voir SMOKE-DETECTOR.md) — l'affichage lui-même le porte, pas juste une valeur muette.
  */
 @Composable
-private fun formatLastContact(epochSec: Long?): String {
+internal fun formatLastContact(epochSec: Long?): String {
     if (epochSec == null) return stringResource(R.string.sensor_never_contacted)
     val relative = android.text.format.DateUtils.getRelativeTimeSpanString(
         epochSec * 1000,

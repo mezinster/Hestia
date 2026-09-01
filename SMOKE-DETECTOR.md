@@ -34,10 +34,18 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
   `DashboardScreen.kt` selon `device.type`.
   → *Testable : la tuile affiche le vrai pourcentage batterie et l'heure du dernier contact.*
 
-- **Lot 3 — Écran Détail.** Couper l'alarme (`Smoke.Mute`). Bouton Test **avec confirmation**
-  (déclenche une vraie sirène). Seuil de notif batterie affiché en dur à 15 %, non modifiable, non
-  désactivable. Température de la pièce si disponible.
-  → *Testable : ouvrir le détail, déclencher/couper une vraie alarme de test.*
+- **Lot 3 — Écran Détail. ✅ Codé le 2026-08-31, pas encore testé sur l'appareil réel — et
+  réduit en route : pas de bouton Test.** Recherché avant de coder (comme prévu) : **l'API RPC
+  Shelly n'expose aucune commande pour déclencher un test à distance** — seuls `Smoke.GetConfig`/
+  `SetConfig`/`GetStatus`/`Mute` existent, aucun `Smoke.Test`. Le test ne se déclenche que
+  physiquement, par appui sur le bouton de l'appareil (3 flashs + 3 bips). Un bouton « Test » dans
+  Hestia aurait donc été un attrape-clic sans effet — abandonné, remplacé par un texte qui
+  l'explique. Fait à la place : `Smoke.Mute` (grisé hors alarme réelle — le couper sans alarme
+  n'a pas de sens, et ça n'agit que sur le son, jamais sur la détection elle-même), seuil batterie
+  15 % affiché en texte fixe, température si disponible, état + dernier contact réutilisant
+  `SensorStatus`/`formatLastContact` du Lot 2 (`DetailViewModel.fetch()` a maintenant un chemin
+  entièrement séparé pour ce type, comme `DashboardViewModel`).
+  → *Testable : ouvrir le détail, voir batterie/température/état, couper une vraie alarme.*
 
 - **Lot 4 — Notifications ntfy.** Webhooks natifs Shelly (pas de script) sur `smoke.alarm`,
   `smoke.alarm_off`, `smoke.alarm_test`, et batterie sous 15 %.

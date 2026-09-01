@@ -226,6 +226,20 @@ class DeviceRepository @Inject constructor(
         }.mapKeys { it.key.id }
     }
 
+    /**
+     * Coupe l'alarme sonore en cours (`Smoke.Mute`, voir SMOKE-DETECTOR.md) — action locale
+     * uniquement, jamais de repli cloud (l'API Cloud Control ne propose pas d'appel de contrôle
+     * pour ce composant, seulement de la lecture d'état).
+     */
+    suspend fun muteSmokeAlarm(device: Device): RpcResult<Unit> {
+        val (_, result) = withIp(device) { ip -> rpcClient.muteSmoke(ip, device.switchId) }
+        return when (result) {
+            is RpcResult.Success -> RpcResult.Success(Unit)
+            is RpcResult.RpcError -> result
+            is RpcResult.Failure -> result
+        }
+    }
+
     private suspend fun getLocalSensorStatus(device: Device): RpcResult<SensorReadingResult> {
         val (ip, result) = withIp(device) { i -> rpcClient.getFullStatus(i) }
         // Même raison que getLocalStatus côté prises : remplir Device.cloudId dès qu'on en a
