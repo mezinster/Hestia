@@ -247,7 +247,6 @@ fun SettingsScreen(
                                 device = channel,
                                 online = connectivity[channel.id],
                                 onRename = { channelToRename = channel },
-                                onDelete = { deviceToDelete = channel },
                             )
                         }
                     }
@@ -548,7 +547,14 @@ private fun DeviceGroupHeaderRow(
  * bloc, affichées une seule fois sur son en-tête ([DeviceGroupHeaderRow]).
  */
 @Composable
-private fun ChannelSubRow(device: Device, online: Boolean?, onRename: () -> Unit, onDelete: () -> Unit) {
+/**
+ * Pas de suppression individuelle d'un canal ici, contrairement à [DeviceRow] (appareil mono-
+ * canal) : un canal fait partie d'un bloc physique multi-prises, le retirer seul n'a pas de sens
+ * (retour David, 2026-09-01 — « on affiche tout, libre à l'utilisateur d'utiliser les prises »).
+ * Seul [DeviceGroupHeaderRow.onDeleteGroup] retire le bloc entier, tous canaux confondus.
+ */
+@Composable
+private fun ChannelSubRow(device: Device, online: Boolean?, onRename: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -562,13 +568,6 @@ private fun ChannelSubRow(device: Device, online: Boolean?, onRename: () -> Unit
             Icon(
                 Icons.Filled.Edit,
                 contentDescription = stringResource(R.string.settings_rename_channel),
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        IconButton(onClick = onDelete) {
-            Icon(
-                Icons.Filled.Delete,
-                contentDescription = stringResource(R.string.settings_delete_device),
                 modifier = Modifier.size(18.dp),
             )
         }
