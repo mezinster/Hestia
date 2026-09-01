@@ -1236,11 +1236,14 @@ private fun SmokeDetectorSection(sensorStatus: SensorStatus, onMute: () -> Unit)
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(text = stateLabel, style = MaterialTheme.typography.titleMedium, color = stateColor)
-        Text(
-            text = formatLastContact(online?.updatedAtEpochSec),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        // Rien tant qu'il n'y a pas de vraie donnée à dater (voir DeviceTile.SmokeDetectorTile).
+        online?.updatedAtEpochSec?.let { epochSec ->
+            Text(
+                text = formatLastContact(epochSec),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         online?.batteryPercent?.let { percent ->
             val batteryColor = if (percent < 30) colors.warningText else MaterialTheme.colorScheme.onSurface

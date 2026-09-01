@@ -234,7 +234,6 @@
     <string name="sensor_state_battery_error">Reading unavailable</string>
     <string name="sensor_state_unreachable">Unreachable</string>
     <string name="sensor_last_contact">Last contact: %1$s</string>
-    <string name="sensor_never_contacted">Never contacted</string>
 
     <!-- Smoke detector Detail screen (see SMOKE-DETECTOR.md) -->
     <string name="sensor_mute_action">Mute alarm</string>

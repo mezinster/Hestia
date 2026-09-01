@@ -292,16 +292,21 @@ fun SmokeDetectorTile(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = formatLastContact(online?.updatedAtEpochSec),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelSmall,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // Rien tant qu'il n'y a pas de vraie donnée à dater — « Jamais contacté » pendant le
+            // chargement laissait croire à tort que l'appareil n'avait jamais répondu (retour
+            // David, 2026-09-01).
+            online?.updatedAtEpochSec?.let { epochSec ->
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = formatLastContact(epochSec),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }
@@ -310,10 +315,14 @@ fun SmokeDetectorTile(
  * « Il y a 3 min »/« hier » — délégué à `DateUtils` (Android), qui applique déjà la langue du
  * système sans qu'Hestia ait à gérer les pluriels de chaque langue lui-même. Jamais garanti frais
  * (voir SMOKE-DETECTOR.md) — l'affichage lui-même le porte, pas juste une valeur muette.
+ *
+ * Appelant responsable de ne pas appeler cette fonction sans donnée réelle ([epochSec] non nul
+ * en amont) : pendant le chargement ou sans contact cette fois-ci, ne rien afficher plutôt qu'un
+ * texte par défaut trompeur (« Jamais contacté » alors qu'on n'a simplement pas encore de
+ * réponse) — retour David, 2026-09-01.
  */
 @Composable
-internal fun formatLastContact(epochSec: Long?): String {
-    if (epochSec == null) return stringResource(R.string.sensor_never_contacted)
+internal fun formatLastContact(epochSec: Long): String {
     val relative = android.text.format.DateUtils.getRelativeTimeSpanString(
         epochSec * 1000,
         System.currentTimeMillis(),
