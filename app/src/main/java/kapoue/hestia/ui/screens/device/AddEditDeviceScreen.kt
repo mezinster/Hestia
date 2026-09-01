@@ -221,19 +221,24 @@ fun AddEditDeviceScreen(
 
             HorizontalDivider()
 
-            // En édition, un détecteur de fumée ne doit pas pouvoir changer de type : les
-            // capacités enregistrées à l'ajout (supportsSwitch = false, notamment) ne seraient
-            // jamais recalculées, laissant un appareil "Prise" avec aucun relais — retour David,
-            // test réel 2026-08-31 (« l'appareil ne va pas se changer pour devenir une prise »).
-            if (state.isEditMode && state.type == DeviceType.SMOKE_DETECTOR) {
-                OutlinedTextField(
-                    value = stringResource(deviceTypeLabel(state.type)),
-                    onValueChange = {},
-                    readOnly = true,
-                    enabled = false,
-                    label = { Text(stringResource(R.string.add_device_type_label)) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            // En édition, le type ne se change plus du tout, quel que soit l'appareil — une
+            // prise EST une prise (retour David, 2026-08-31) : le proposer comme un champ
+            // modifiable laissait croire qu'un appareil pouvait changer de nature, et pour un
+            // détecteur de fumée c'était même risqué (les capacités enregistrées à l'ajout,
+            // supportsSwitch = false notamment, ne seraient jamais recalculées). Affiché comme
+            // FirmwareSection ci-dessous (titre + texte), pas comme un champ grisé.
+            if (state.isEditMode) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = stringResource(R.string.add_device_type_label),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = stringResource(deviceTypeLabel(state.type)),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             } else {
                 DeviceTypeDropdown(
                     selected = state.type,

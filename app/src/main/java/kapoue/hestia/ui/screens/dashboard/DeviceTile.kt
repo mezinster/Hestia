@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SettingsInputAntenna
-import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,6 +52,7 @@ import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.isActiveNow
+import kapoue.hestia.ui.icons.SmokeDetectorIcon
 import kapoue.hestia.ui.theme.StateColorSet
 import kapoue.hestia.ui.theme.stateColors
 
@@ -258,10 +258,11 @@ fun SmokeDetectorTile(
 
             Spacer(Modifier.height(10.dp))
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                // Même picto que l'écran Détail (flamme) — un picto de pile ici prêtait à
-                // confusion sur la nature de l'appareil (retour David, test réel 2026-08-31).
+                // Même picto que l'écran Détail (dessiné sur mesure, voir SmokeDetectorIcon) —
+                // un picto de pile ici prêtait à confusion sur la nature de l'appareil (retour
+                // David, test réel 2026-08-31).
                 Icon(
-                    imageVector = Icons.Filled.Whatshot,
+                    imageVector = SmokeDetectorIcon,
                     contentDescription = null,
                     tint = stateColor,
                     modifier = Modifier.size(40.dp),

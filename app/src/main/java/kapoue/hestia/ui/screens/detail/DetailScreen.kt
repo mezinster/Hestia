@@ -26,7 +26,6 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,6 +75,7 @@ import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.components.StatusBadge
 import kapoue.hestia.ui.components.TimeWheelPicker
 import kapoue.hestia.ui.components.ValueWheelPicker
+import kapoue.hestia.ui.icons.SmokeDetectorIcon
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.screens.dashboard.PresenceInfo
 import kapoue.hestia.ui.screens.dashboard.TileStatus
@@ -1346,11 +1346,13 @@ fun durationLabel(totalSeconds: Int): String {
     }
 }
 
+@Composable
 private fun iconFor(type: DeviceType): ImageVector = when (type) {
     DeviceType.PLUG -> Icons.Filled.Power
     DeviceType.LAMP -> Icons.Filled.Lightbulb
     DeviceType.SENSOR -> Icons.Filled.Sensors
-    // Filled.SmokeFree est le picto « interdiction de fumer », pas « détecteur de fumée » —
-    // erreur repérée en test réel le 2026-08-31 (David : « rien à voir avec un détecteur »).
-    DeviceType.SMOKE_DETECTOR -> Icons.Filled.Whatshot
+    // Picto dessiné à la main (voir SmokeDetectorIcon) — aucune icône Material standard ne
+    // représente un vrai détecteur de fumée ; Filled.SmokeFree (essayé un temps) est en fait
+    // « interdiction de fumer », confusion vécue en test réel le 2026-08-31.
+    DeviceType.SMOKE_DETECTOR -> SmokeDetectorIcon
 }
