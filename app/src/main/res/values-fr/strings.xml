@@ -237,6 +237,11 @@
     <string name="sensor_temperature_label">Température : %1$.1f °C</string>
     <string name="sensor_battery_threshold_info">Une notification est envoyée automatiquement si la batterie descend sous 15 %.</string>
     <string name="sensor_no_remote_test">Pas de test à distance possible : Shelly ne propose aucune commande pour ça. Pour tester, appuie sur le bouton du détecteur lui-même (3 bips, 3 flashs).</string>
+
+    <!-- Relais ntfy des détecteurs de fumée (voir SMOKE-DETECTOR.md, Lot 4a) — le nom de l'appareil sert de titre à la notif, ces textes sont le corps, un par événement natif. -->
+    <string name="sensor_relay_body_alarm">Alarme réelle détectée !</string>
+    <string name="sensor_relay_body_alarm_off">Fin de l\'alarme.</string>
+    <string name="sensor_relay_body_alarm_test">Test déclenché (3 bips).</string>
     <string name="state_offline">Indisponible</string>
     <string name="state_loading">Lecture…</string>
 

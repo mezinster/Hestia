@@ -143,6 +143,28 @@ data class ScriptEntry(
     val running: Boolean = false,
 )
 
+// --- Webhooks natifs (relais ntfy des détecteurs de fumée, lot 4a — voir SMOKE-DETECTOR.md) ---
+
+/** Réponse de Webhook.Create. */
+@Serializable
+data class WebhookCreateResult(val id: Int = 0)
+
+/** Réponse de Webhook.List. */
+@Serializable
+data class WebhookListResult(
+    val hooks: List<WebhookEntry> = emptyList(),
+)
+
+@Serializable
+data class WebhookEntry(
+    val id: Int,
+    val cid: Int? = null,
+    val enable: Boolean = false,
+    val event: String = "",
+    val name: String? = null,
+    val urls: List<String> = emptyList(),
+)
+
 /** Réponse de Schedule.List : les programmes cron stockés dans l'appareil (plannings). */
 @Serializable
 data class ScheduleListResult(

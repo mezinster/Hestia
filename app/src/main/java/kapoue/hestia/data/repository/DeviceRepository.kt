@@ -16,6 +16,7 @@ import kapoue.hestia.data.presence.ButtonTimerScriptGenerator
 import kapoue.hestia.data.presence.ChargeScriptGenerator
 import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
+import kapoue.hestia.data.presence.SmokeRelayScriptGenerator
 import kapoue.hestia.data.presence.TimerNotifyScriptGenerator
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcFailure
@@ -2047,6 +2048,127 @@ class DeviceRepository @Inject constructor(
         return reachable
     }
 
+    // --- Relais ntfy pour les détecteurs de fumée (Lot 4a, voir SMOKE-DETECTOR.md) ---
+
+    /**
+     * Recalcule et repousse la couverture du relais ntfy pour tous les détecteurs de fumée connus
+     * — script relais déployé de façon **opportuniste** sur jusqu'à [MAX_RELAY_TARGETS] appareils
+     * scriptables ayant de la place (jamais un appareil désigné à l'avance, voir
+     * `SmokeRelayScriptGenerator`), puis `Webhook.Create` reposé sur chaque détecteur joignable
+     * avec la liste actuelle. Best-effort et silencieux : un appareil injoignable ou saturé est
+     * simplement ignoré, sans erreur visible côté utilisateur.
+     *
+     * Mêmes déclencheurs que [resyncNtfyForAllDevices] (activation/sujet ntfy), en plus de l'ajout
+     * d'un détecteur — jamais de tâche de fond dédiée. Un détecteur endormi au moment de l'appel
+     * sera rattrapé de lui-même à son prochain réveil détecté par le Tableau (voir
+     * [smokeWebhookCatchUpIfNeeded]).
+     */
+    fun resyncSmokeRelay() {
+        appScope.launch { resyncSmokeRelayInternal() }
+    }
+
+    /**
+     * Rattrapage best-effort : appelé par le Tableau dès qu'un détecteur répond en local (donc
+     * réveillé, la seule fenêtre où poser un webhook a un sens) — même principe que
+     * [ntfyCatchUpIfNeeded], ne fait rien s'il est déjà à jour pour la génération ntfy courante.
+     */
+    suspend fun smokeWebhookCatchUpIfNeeded(device: Device) {
+        if (appPreferences.isSmokeRelaySynced(device.id)) return
+        resyncSmokeRelayInternal()
+        appPreferences.markSmokeRelaySynced(device.id)
+    }
+
+    private suspend fun resyncSmokeRelayInternal() {
+        val all = getDevicesOnce()
+        val detectors = all.filter { it.type == DeviceType.SMOKE_DETECTOR }
+        if (detectors.isEmpty()) return
+
+        val topic = if (appPreferences.ntfyEnabled.value) appPreferences.ntfyTopic.value else null
+        val bodies = SmokeRelayScriptGenerator.Bodies(
+            alarm = context.getString(R.string.sensor_relay_body_alarm),
+            alarmOff = context.getString(R.string.sensor_relay_body_alarm_off),
+            alarmTest = context.getString(R.string.sensor_relay_body_alarm_test),
+        )
+        val names = detectors.mapNotNull { d ->
+            d.cloudId?.let { mac -> SmokeRelayScriptGenerator.DeviceName(mac.uppercase(), d.name) }
+        }
+
+        // Un candidat par appareil physique (même IP), pas par canal : le moteur de scripts Shelly
+        // est partagé par appareil, pas par canal (voir ButtonTimerScriptGenerator).
+        val candidates = all.filter { it.hasScripting }.groupBy { it.ipAddress }.map { (_, members) -> members.first() }
+
+        val relayTargets = mutableListOf<Pair<String, Int>>()
+        for (device in candidates) {
+            if (relayTargets.size >= MAX_RELAY_TARGETS) break
+            deploySmokeRelay(device, topic, names, bodies)?.let { relayTargets += it }
+        }
+
+        for (detector in detectors) {
+            pushSmokeWebhooks(detector, relayTargets)
+        }
+    }
+
+    /**
+     * Déploie ou met à jour `hestia_smoke_relay` sur [device] si possible : mise à jour ciblée par
+     * `Script.Eval` si déjà vivant (mémoire des autres détecteurs déjà relayés inchangée), premier
+     * déploiement sinon — mais **jamais** si l'appareil est déjà saturé (3 scripts actifs, cf.
+     * [MAX_ENABLED_SCRIPTS_PER_DEVICE]) sans que ce script y soit déjà : toujours évictable par un vrai
+     * réglage métier, jamais l'inverse.
+     * @return (ip, id du script) si prêt à recevoir des appels, sinon `null` (injoignable ou saturé).
+     */
+    private suspend fun deploySmokeRelay(
+        device: Device,
+        topic: String?,
+        names: List<SmokeRelayScriptGenerator.DeviceName>,
+        bodies: SmokeRelayScriptGenerator.Bodies,
+    ): Pair<String, Int>? {
+        val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
+        val scripts = listResult.getOrNull()?.scripts ?: return null
+        val existing = scripts.firstOrNull { it.name == SmokeRelayScriptGenerator.SCRIPT_NAME }
+        if (existing == null && scripts.count { it.enable } >= MAX_ENABLED_SCRIPTS_PER_DEVICE) return null
+
+        val scriptId = existing?.id ?: run {
+            val create = rpcClient.scriptCreate(ip, SmokeRelayScriptGenerator.SCRIPT_NAME)
+            create.getOrNull()?.id ?: return null
+        }
+
+        if (existing == null || !existing.running) {
+            val code = SmokeRelayScriptGenerator.generate(topic, names, bodies)
+            rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return null }
+            rpcClient.scriptSetConfig(ip, scriptId, enable = true)
+            rpcClient.scriptStart(ip, scriptId).errorOrNull()?.let { return null }
+        } else {
+            rpcClient.scriptEval(ip, scriptId, SmokeRelayScriptGenerator.evalSetTopic(topic))
+            rpcClient.scriptEval(ip, scriptId, SmokeRelayScriptGenerator.evalSetBodies(bodies))
+            for (n in names) rpcClient.scriptEval(ip, scriptId, SmokeRelayScriptGenerator.evalUpsertName(n.mac, n.name))
+        }
+        return ip to scriptId
+    }
+
+    /**
+     * Repose les 3 webhooks natifs (un par événement) sur [detector], visant [relayTargets] —
+     * repart de zéro à chaque resynchronisation (supprime d'abord tout webhook déjà posé par
+     * Hestia, reconnu par son nom). Ne fait rien si le détecteur est injoignable ou sans MAC en
+     * cache ([Device.cloudId], voir [getLocalSensorStatus]) : réessaiera à son prochain réveil.
+     */
+    private suspend fun pushSmokeWebhooks(detector: Device, relayTargets: List<Pair<String, Int>>) {
+        val mac = detector.cloudId?.uppercase() ?: return
+        val (ip, listResult) = withIp(detector) { i -> rpcClient.webhookList(i) }
+        val existing = listResult.getOrNull()?.hooks ?: return
+        for (hook in existing.filter { it.name == SMOKE_WEBHOOK_NAME }) {
+            rpcClient.webhookDelete(ip, hook.id)
+        }
+        if (relayTargets.isEmpty()) return
+
+        for (event in SMOKE_WEBHOOK_EVENTS) {
+            val urls = relayTargets.map { (relayIp, scriptId) ->
+                val code = java.net.URLEncoder.encode("notifySmoke(\"$event\",\"$mac\")", "UTF-8")
+                "http://$relayIp/rpc/Script.Eval?id=$scriptId&code=$code"
+            }
+            rpcClient.webhookCreate(ip, cid = 0, event = event, name = SMOKE_WEBHOOK_NAME, urls = urls)
+        }
+    }
+
     // --- Mode démo (captures d'écran, build debug uniquement) ---
 
     suspend fun hasDemoDevices(): Boolean = deviceDao.countDemoDevices() > 0
@@ -2104,5 +2226,13 @@ class DeviceRepository @Inject constructor(
         val LED_NIGHT_WINDOW = listOf("22:00", "08:00")
         /** LED éteinte en permanence : même mécanisme `night_mode`, fenêtre couvrant toute la journée. */
         val LED_ALWAYS_WINDOW = listOf("00:00", "23:59")
+
+        // --- Relais ntfy des détecteurs de fumée (Lot 4a, voir SMOKE-DETECTOR.md) ---
+        val SMOKE_WEBHOOK_EVENTS = listOf("smoke.alarm", "smoke.alarm_off", "smoke.alarm_test")
+        const val SMOKE_WEBHOOK_NAME = "hestia_smoke_relay"
+        /** Limite dure du firmware Shelly (RPC `-108` au-delà), voir `ButtonTimerScriptGenerator`. */
+        const val MAX_ENABLED_SCRIPTS_PER_DEVICE = 3
+        /** Limite du firmware sur le nombre d'URLs d'un même webhook natif (`Webhook.Create`). */
+        const val MAX_RELAY_TARGETS = 5
     }
 }

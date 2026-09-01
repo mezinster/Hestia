@@ -111,6 +111,24 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         prefs.edit().putString(KEY_NTFY_SYNCED, json.encodeToString(updated)).apply()
     }
 
+    /**
+     * Même mécanisme que [isNtfySynced]/[markNtfySynced], pour le relais ntfy des détecteurs de
+     * fumée (Lot 4a, voir SMOKE-DETECTOR.md) — réutilise volontairement [ntfyGeneration] : la
+     * couverture du relais dépend exactement des mêmes réglages (activation/sujet ntfy), pas
+     * besoin d'un second compteur. Un détecteur « à jour » pour la génération courante n'a pas
+     * besoin d'être re-sondé à chaque réveil.
+     */
+    private fun smokeRelaySyncedMap(): Map<String, Int> =
+        runCatching { json.decodeFromString<Map<String, Int>>(prefs.getString(KEY_SMOKE_RELAY_SYNCED, null) ?: "{}") }
+            .getOrDefault(emptyMap())
+
+    fun isSmokeRelaySynced(deviceId: Long): Boolean = smokeRelaySyncedMap()[deviceId.toString()] == ntfyGeneration
+
+    fun markSmokeRelaySynced(deviceId: Long) {
+        val updated = smokeRelaySyncedMap() + (deviceId.toString() to ntfyGeneration)
+        prefs.edit().putString(KEY_SMOKE_RELAY_SYNCED, json.encodeToString(updated)).apply()
+    }
+
     // --- Cloud Shelly, repli à distance (opt-in, désactivé par défaut — voir CLAUDE.md) ---
 
     /** Clé d'autorisation cloud, à traiter comme un mot de passe — stockée chiffrée, jamais en clair. */
@@ -258,6 +276,7 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_NTFY_TOPIC = "ntfy_topic"
         const val KEY_NTFY_GEN = "ntfy_generation"
         const val KEY_NTFY_SYNCED = "ntfy_synced_devices"
+        const val KEY_SMOKE_RELAY_SYNCED = "smoke_relay_synced_devices"
         const val KEY_PENDING_TIMERS = "pending_timers"
         const val KEY_ON_TIME_BASELINE = "on_time_baseline"
         const val KEY_ON_SINCE_EPOCH = "on_since_epoch"

@@ -22,6 +22,8 @@ import kapoue.hestia.data.rpc.model.SetConfigResult
 import kapoue.hestia.data.rpc.model.ShellyFullStatus
 import kapoue.hestia.data.rpc.model.SwitchSetResult
 import kapoue.hestia.data.rpc.model.SwitchStatusResult
+import kapoue.hestia.data.rpc.model.WebhookCreateResult
+import kapoue.hestia.data.rpc.model.WebhookListResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -271,6 +273,34 @@ class ShellyRpcClient @Inject constructor(
             },
             ScriptEvalResult.serializer(),
         )
+
+    // --- Webhooks natifs (relais ntfy des détecteurs de fumée, lot 4a — voir SMOKE-DETECTOR.md) ---
+
+    suspend fun webhookList(ip: String): RpcResult<WebhookListResult> =
+        call(ip, "Webhook.List", null, WebhookListResult.serializer())
+
+    /**
+     * Le webhook natif ne sait faire qu'une simple requête **GET** par URL — pas de méthode POST,
+     * pas de corps, pas d'en-tête personnalisable (vérifié dans la doc officielle Shelly le
+     * 2026-09-01). [urls] vise donc toujours un autre appareil Shelly du réseau local
+     * ([kapoue.hestia.data.presence.SmokeRelayScriptGenerator]), jamais ntfy directement.
+     */
+    suspend fun webhookCreate(ip: String, cid: Int, event: String, name: String, urls: List<String>): RpcResult<WebhookCreateResult> =
+        call(
+            ip,
+            "Webhook.Create",
+            buildJsonObject {
+                put("cid", cid)
+                put("enable", true)
+                put("event", event)
+                put("name", name)
+                put("urls", buildJsonArray { urls.forEach { add(it) } })
+            },
+            WebhookCreateResult.serializer(),
+        )
+
+    suspend fun webhookDelete(ip: String, id: Int): RpcResult<ScriptRunResult> =
+        call(ip, "Webhook.Delete", buildJsonObject { put("id", id) }, ScriptRunResult.serializer())
 
     // --- Schedule (planning natif de l'appareil) ---
 

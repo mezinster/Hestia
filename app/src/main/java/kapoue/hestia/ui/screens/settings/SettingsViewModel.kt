@@ -99,6 +99,9 @@ class SettingsViewModel @Inject constructor(
 
     private fun resyncNtfy() {
         repository.resyncNtfyForAllDevices()
+        // Couverture du relais webhook des détecteurs de fumée : dépend des mêmes réglages
+        // (activation/sujet ntfy), voir SMOKE-DETECTOR.md § Lot 4a.
+        repository.resyncSmokeRelay()
     }
 
     /** Envoie une notif de test avec le texte choisi par l'utilisateur (pas configurable). */

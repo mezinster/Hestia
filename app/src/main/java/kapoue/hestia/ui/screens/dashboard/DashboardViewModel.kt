@@ -200,7 +200,16 @@ class DashboardViewModel @Inject constructor(
                     // Détecteurs de fumée (voir SMOKE-DETECTOR.md) : chemin entièrement séparé du
                     // relevé switch ci-dessus, jamais mélangé.
                     devices.filter { it.type == DeviceType.SMOKE_DETECTOR }.map { device ->
-                        async { device.id to repository.getSensorStatus(device).toSensorStatus() }
+                        async {
+                            val sensorResult = repository.getSensorStatus(device)
+                            // Rattrapage best-effort du relais webhook (Lot 4a) : seule fenêtre où
+                            // le poser a un sens est un réveil réel en local, jamais via le cloud.
+                            // Détaché du cycle de relevé, même principe que le rattrapage ntfy.
+                            if (!sensorResult.viaCloud && sensorResult.result is RpcResult.Success) {
+                                viewModelScope.launch { repository.smokeWebhookCatchUpIfNeeded(device) }
+                            }
+                            device.id to sensorResult.toSensorStatus()
+                        }
                     }.awaitAll()
                 }
                 val presenceResults = async {

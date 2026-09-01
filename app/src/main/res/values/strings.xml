@@ -241,6 +241,11 @@
     <string name="sensor_temperature_label">Temperature: %1$.1f °C</string>
     <string name="sensor_battery_threshold_info">A notification is sent automatically if the battery drops below 15%.</string>
     <string name="sensor_no_remote_test">No remote test available: Shelly doesn\'t offer a command for that. To test, press the button on the detector itself (3 beeps, 3 flashes).</string>
+
+    <!-- ntfy relay for smoke detectors (see SMOKE-DETECTOR.md, Lot 4a) — device name is the notification title, these are the body texts, one per native event. -->
+    <string name="sensor_relay_body_alarm">Real alarm detected!</string>
+    <string name="sensor_relay_body_alarm_off">Alarm has stopped.</string>
+    <string name="sensor_relay_body_alarm_test">Test triggered (3 beeps).</string>
     <string name="state_offline">Unavailable</string>
     <string name="state_loading">Loading…</string>
 

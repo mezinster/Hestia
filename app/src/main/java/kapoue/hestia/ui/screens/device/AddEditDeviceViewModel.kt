@@ -330,6 +330,9 @@ class AddEditDeviceViewModel @Inject constructor(
         viewModelScope.launch {
             val added = repository.addSmokeDetector(state.name.trim(), state.ipAddress.trim())
             if (added) {
+                // Un appareil scriptable a peut-être de la place pour relayer ses alertes ntfy
+                // dès maintenant (voir SMOKE-DETECTOR.md § Lot 4a) — best-effort, silencieux.
+                repository.resyncSmokeRelay()
                 _uiState.update { it.copy(done = true) }
             } else {
                 _uiState.update { it.copy(error = UserMessage(R.string.error_device_exists)) }
