@@ -86,6 +86,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.data.notifications.ProgrammationNotifier
 import kapoue.hestia.domain.model.ThemeMode
 import kapoue.hestia.ui.permission.LocalNetworkPermission
@@ -385,9 +386,13 @@ private fun DeviceRow(
     val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
 
+    // Détecteur de fumée : "Hors ligne" en rouge prêtait à confusion (appareil endormi, pas
+    // vraiment hors réseau — retour David, 2026-09-01) — label et couleur neutres pour ce type,
+    // cohérent avec la tuile du Tableau (déjà en gris, jamais rouge, pour ce même état).
+    val isSensor = device.type == DeviceType.SMOKE_DETECTOR
     val connectivityLabel = when (online) {
         true -> stringResource(R.string.settings_connectivity_online)
-        false -> stringResource(R.string.settings_connectivity_offline)
+        false -> stringResource(if (isSensor) R.string.sensor_state_unreachable else R.string.settings_connectivity_offline)
         null -> stringResource(R.string.settings_connectivity_checking)
     }
 
@@ -398,7 +403,7 @@ private fun DeviceRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ConnectivityIndicator(online)
+            ConnectivityIndicator(online, neutralOffline = isSensor)
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(device.name, style = MaterialTheme.typography.titleSmall)
@@ -617,8 +622,13 @@ private fun RenameChannelDialog(initialName: String, onConfirm: (String) -> Unit
  * Wi-Fi (forme différente) pour dire « joignable », jamais le vert « allumé ». Le gris est
  * évité pour l'état transitoire (il se lirait « désactivé ») au profit d'un spinner.
  */
+/**
+ * [neutralOffline] : gris plutôt que rouge quand `online == false` — pour un détecteur de fumée,
+ * ce n'est pas une alerte (l'appareil dort la majeure partie du temps, voir SMOKE-DETECTOR.md),
+ * contrairement à une prise réellement injoignable.
+ */
 @Composable
-private fun ConnectivityIndicator(online: Boolean?) {
+private fun ConnectivityIndicator(online: Boolean?, neutralOffline: Boolean = false) {
     when (online) {
         true -> Icon(
             imageVector = Icons.Filled.Wifi,
@@ -629,7 +639,7 @@ private fun ConnectivityIndicator(online: Boolean?) {
         false -> Icon(
             imageVector = Icons.Filled.WifiOff,
             contentDescription = null,
-            tint = MaterialTheme.stateColors.offlineLed,
+            tint = if (neutralOffline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.stateColors.offlineLed,
             modifier = Modifier.size(18.dp),
         )
         null -> CircularProgressIndicator(

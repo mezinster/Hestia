@@ -17,6 +17,7 @@ import kapoue.hestia.data.notifications.NtfyClient
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.RpcResult
+import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.ThemeMode
 import kapoue.hestia.ui.common.UserMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -221,7 +222,14 @@ class SettingsViewModel @Inject constructor(
             val current = repository.getDevicesOnce()
             _connectivity.value = current.associate { it.id to null }
             for (device in current) {
-                val online = repository.getStatus(device).result is RpcResult.Success
+                // Détecteur de fumée : Switch.GetStatus n'a aucun sens pour ce type (voir
+                // SMOKE-DETECTOR.md), retournait toujours faux — chemin dédié, même principe que
+                // partout ailleurs pour ce type d'appareil.
+                val online = if (device.type == DeviceType.SMOKE_DETECTOR) {
+                    repository.getSensorStatus(device).result is RpcResult.Success
+                } else {
+                    repository.getStatus(device).result is RpcResult.Success
+                }
                 _connectivity.value = _connectivity.value + (device.id to online)
                 _activeIp.value = _activeIp.value + (device.id to repository.activeIp(device))
             }

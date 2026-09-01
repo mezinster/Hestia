@@ -281,32 +281,32 @@ fun SmokeDetectorTile(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            if (batteryPercent != null) {
-                Text(
-                    text = "$batteryPercent %",
-                    color = batteryColor,
-                    fontWeight = FontWeight.Medium,
-                    style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            // Toujours affiché, même vide (jamais omis) : réserve la même hauteur de ligne que la
+            // batterie soit connue ou non, pour que les tuiles d'un même rang ne sautent pas en
+            // hauteur selon l'état de chaque détecteur (retour David, 2026-09-01).
+            Text(
+                text = batteryPercent?.let { "$it %" }.orEmpty(),
+                color = batteryColor,
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-            // Rien tant qu'il n'y a pas de vraie donnée à dater — « Jamais contacté » pendant le
-            // chargement laissait croire à tort que l'appareil n'avait jamais répondu (retour
-            // David, 2026-09-01).
-            online?.updatedAtEpochSec?.let { epochSec ->
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = formatLastContact(epochSec),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            // Texte vide plutôt qu'omis tant qu'il n'y a pas de vraie donnée à dater — pas de
+            // texte trompeur (« Jamais contacté » pendant le chargement, retour David,
+            // 2026-09-01), mais la ligne reste réservée pour que les tuiles d'un même rang ne
+            // sautent pas en hauteur selon l'état de chaque détecteur (même retour, suite).
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = online?.updatedAtEpochSec?.let { formatLastContact(it) }.orEmpty(),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
 }
