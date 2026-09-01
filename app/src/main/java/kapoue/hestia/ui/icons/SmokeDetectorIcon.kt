@@ -11,14 +11,16 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.unit.dp
 
 /**
- * Détecteur de fumée mural (boîtier à coins coupés + grille + volutes de fumée) — n'existe dans
- * aucun jeu d'icônes Material standard. `Filled.SmokeFree` (utilisé un temps) est en fait le
- * picto « interdiction de fumer », pas un détecteur — confusion vécue en test réel le
- * 2026-08-31 (David : « rien à voir avec un détecteur »), corrigée en dessinant celui-ci à la
- * main plutôt que de réutiliser un picto au sens différent. Dessiné en traits (pas de
- * remplissage) sur une grille 24×24 comme les icônes Material, à partir d'une capture fournie
- * par David. La couleur du trait ci-dessous n'a pas d'importance : `Icon(tint = …)` la remplace
- * entièrement au dessin.
+ * Détecteur de fumée vu de dessous (dôme extérieur + chambre centrale + grille radiale) —
+ * n'existe dans aucun jeu d'icônes Material standard. Deux essais précédents écartés en test
+ * réel le 2026-08-31 : `Filled.SmokeFree` (picto « interdiction de fumer », pas un détecteur),
+ * puis un premier dessin maison (boîtier à coins coupés + volutes de fumée, jugé par David
+ * « on dirait une méduse »). Reparti d'une capture fournie par David : deux cercles concentriques
+ * reliés par des traits radiaux courts (grille d'aération), motif classique du picto détecteur.
+ * Les cercles sont approximés par des polygones à 12 côtés (calculés à la main, `arcTo` du DSL
+ * `path{}` étant plus risqué à écrire juste sans prévisualisation possible ici). Dessiné en
+ * traits (pas de remplissage) sur une grille 24×24 comme les icônes Material. La couleur du
+ * trait ci-dessous n'a pas d'importance : `Icon(tint = …)` la remplace entièrement au dessin.
  */
 val SmokeDetectorIcon: ImageVector
     @Composable
@@ -33,41 +35,57 @@ val SmokeDetectorIcon: ImageVector
             path(
                 fill = null,
                 stroke = SolidColor(Color.Black),
-                strokeLineWidth = 1.6f,
+                strokeLineWidth = 1.4f,
                 strokeLineCap = StrokeCap.Round,
                 strokeLineJoin = StrokeJoin.Round,
             ) {
-                // Boîtier : rectangle à coins coupés (évite les arcs, plus simple à tracer juste).
-                moveTo(7f, 4f)
-                lineTo(17f, 4f)
-                lineTo(19f, 6f)
-                lineTo(19f, 8f)
-                lineTo(17f, 10f)
-                lineTo(7f, 10f)
-                lineTo(5f, 8f)
-                lineTo(5f, 6f)
+                // Dôme extérieur : polygone à 12 côtés, centre (12,12), rayon 8.
+                moveTo(20f, 12f)
+                lineTo(18.93f, 16f)
+                lineTo(16f, 18.93f)
+                lineTo(12f, 20f)
+                lineTo(8f, 18.93f)
+                lineTo(5.07f, 16f)
+                lineTo(4f, 12f)
+                lineTo(5.07f, 8f)
+                lineTo(8f, 5.07f)
+                lineTo(12f, 4f)
+                lineTo(16f, 5.07f)
+                lineTo(18.93f, 8f)
                 close()
 
-                // Grille (volets d'aération), 4 traits verticaux courts à l'intérieur du boîtier.
-                moveTo(8f, 6f)
-                lineTo(8f, 8.5f)
-                moveTo(10.5f, 6f)
-                lineTo(10.5f, 8.5f)
-                moveTo(13.5f, 6f)
-                lineTo(13.5f, 8.5f)
-                moveTo(16f, 6f)
-                lineTo(16f, 8.5f)
+                // Chambre centrale : même principe, rayon 3.5.
+                moveTo(15.5f, 12f)
+                lineTo(15.03f, 13.75f)
+                lineTo(13.75f, 15.03f)
+                lineTo(12f, 15.5f)
+                lineTo(10.25f, 15.03f)
+                lineTo(8.97f, 13.75f)
+                lineTo(8.5f, 12f)
+                lineTo(8.97f, 10.25f)
+                lineTo(10.25f, 8.97f)
+                lineTo(12f, 8.5f)
+                lineTo(13.75f, 8.97f)
+                lineTo(15.03f, 10.25f)
+                close()
 
-                // Volutes de fumée sous le boîtier, 3 ondulations.
-                moveTo(9f, 11.5f)
-                quadTo(7f, 13.5f, 9f, 15.5f)
-                quadTo(11f, 17.5f, 9f, 19.5f)
-                moveTo(12f, 11.5f)
-                quadTo(10f, 13.5f, 12f, 15.5f)
-                quadTo(14f, 17.5f, 12f, 19.5f)
-                moveTo(15f, 11.5f)
-                quadTo(13f, 13.5f, 15f, 15.5f)
-                quadTo(17f, 17.5f, 15f, 19.5f)
+                // Grille radiale : 8 traits courts entre les deux cercles (rayon 4.5 à 7).
+                moveTo(16.5f, 12f)
+                lineTo(19f, 12f)
+                moveTo(15.18f, 15.18f)
+                lineTo(16.95f, 16.95f)
+                moveTo(12f, 16.5f)
+                lineTo(12f, 19f)
+                moveTo(8.82f, 15.18f)
+                lineTo(7.05f, 16.95f)
+                moveTo(7.5f, 12f)
+                lineTo(5f, 12f)
+                moveTo(8.82f, 8.82f)
+                lineTo(7.05f, 7.05f)
+                moveTo(12f, 7.5f)
+                lineTo(12f, 5f)
+                moveTo(15.18f, 8.82f)
+                lineTo(16.95f, 7.05f)
             }
         }.build()
     }
