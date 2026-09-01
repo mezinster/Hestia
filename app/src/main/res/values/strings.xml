@@ -240,7 +240,7 @@
     <string name="sensor_mute_action">Mute alarm</string>
     <string name="sensor_battery_label">Battery: %1$d%%</string>
     <string name="sensor_temperature_label">Temperature: %1$.1f °C</string>
-    <string name="sensor_battery_threshold_info">A notification is sent automatically if the battery drops below 15%. This threshold cannot be changed.</string>
+    <string name="sensor_battery_threshold_info">A notification is sent automatically if the battery drops below 15%.</string>
     <string name="sensor_no_remote_test">No remote test available: Shelly doesn\'t offer a command for that. To test, press the button on the detector itself (3 beeps, 3 flashes).</string>
     <string name="state_offline">Unavailable</string>
     <string name="state_loading">Loading…</string>

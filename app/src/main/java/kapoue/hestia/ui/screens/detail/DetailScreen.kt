@@ -1250,12 +1250,6 @@ private fun SmokeDetectorSection(sensorStatus: SensorStatus, onMute: () -> Unit)
             Text(text = stringResource(R.string.sensor_temperature_label, temperature))
         }
 
-        Text(
-            text = stringResource(R.string.sensor_battery_threshold_info),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
         // Grisé hors alarme réelle : couper une alarme silencieuse n'a pas de sens (et
         // Smoke.Mute ne fait qu'assourdir le son, ne touche pas à la détection elle-même).
         Button(
@@ -1266,6 +1260,11 @@ private fun SmokeDetectorSection(sensorStatus: SensorStatus, onMute: () -> Unit)
             Icon(Icons.Filled.VolumeOff, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
             Text(stringResource(R.string.sensor_mute_action))
         }
+        Text(
+            text = stringResource(R.string.sensor_battery_threshold_info),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         // Pas de bouton Test : confirmé absent de l'API RPC Shelly (recherché le 2026-08-31),
         // le test ne se déclenche que physiquement sur l'appareil.

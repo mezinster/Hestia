@@ -236,7 +236,7 @@
     <string name="sensor_mute_action">Couper l\'alarme</string>
     <string name="sensor_battery_label">Batterie : %1$d %%</string>
     <string name="sensor_temperature_label">Température : %1$.1f °C</string>
-    <string name="sensor_battery_threshold_info">Une notification est envoyée automatiquement si la batterie descend sous 15 %. Ce seuil n\'est pas modifiable.</string>
+    <string name="sensor_battery_threshold_info">Une notification est envoyée automatiquement si la batterie descend sous 15 %.</string>
     <string name="sensor_no_remote_test">Pas de test à distance possible : Shelly ne propose aucune commande pour ça. Pour tester, appuie sur le bouton du détecteur lui-même (3 bips, 3 flashs).</string>
     <string name="state_offline">Indisponible</string>
     <string name="state_loading">Lecture…</string>
