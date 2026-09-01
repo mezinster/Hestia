@@ -74,9 +74,9 @@ object SmokeRelayScriptGenerator {
             if (CFG.names[i][0] === mac) { name = CFG.names[i][1]; break; }
           }
           let body = "";
-          if (event === "alarm") body = CFG.bodies.alarm;
-          else if (event === "alarm_off") body = CFG.bodies.alarm_off;
-          else if (event === "alarm_test") body = CFG.bodies.alarm_test;
+          if (event === "smoke.alarm") body = CFG.bodies.alarm;
+          else if (event === "smoke.alarm_off") body = CFG.bodies.alarm_off;
+          else if (event === "smoke.alarm_test") body = CFG.bodies.alarm_test;
           if (body === "") return;
           Shelly.call("HTTP.Request", { method: "POST", url: "https://ntfy.sh/" + CFG.topic, body: body, timeout: 5, headers: { Title: name } });
         }
