@@ -44,22 +44,22 @@ val SmokeDetectorIcon: ImageVector
             ) {
                 // Dôme extérieur : large et plat, bas droit.
                 moveTo(4f, 10f)
-                cubicTo(4f, 5.5f, 7.5f, 3f, 12f, 3f)
-                cubicTo(16.5f, 3f, 20f, 5.5f, 20f, 10f)
+                curveTo(4f, 5.5f, 7.5f, 3f, 12f, 3f)
+                curveTo(16.5f, 3f, 20f, 5.5f, 20f, 10f)
                 lineTo(4f, 10f)
                 close()
 
                 // Rebord intérieur (liseré parallèle, effet 3D du dôme).
                 moveTo(6f, 9.3f)
-                cubicTo(6f, 6.2f, 8.5f, 4.3f, 12f, 4.3f)
-                cubicTo(15.5f, 4.3f, 18f, 6.2f, 18f, 9.3f)
+                curveTo(6f, 6.2f, 8.5f, 4.3f, 12f, 4.3f)
+                curveTo(15.5f, 4.3f, 18f, 6.2f, 18f, 9.3f)
 
                 // Chambre centrale (cercle, centre 12/15, rayon 3 — 4 arcs cubiques, k = r*0.5523).
                 moveTo(12f, 12f)
-                cubicTo(13.657f, 12f, 15f, 13.343f, 15f, 15f)
-                cubicTo(15f, 16.657f, 13.657f, 18f, 12f, 18f)
-                cubicTo(10.343f, 18f, 9f, 16.657f, 9f, 15f)
-                cubicTo(9f, 13.343f, 10.343f, 12f, 12f, 12f)
+                curveTo(13.657f, 12f, 15f, 13.343f, 15f, 15f)
+                curveTo(15f, 16.657f, 13.657f, 18f, 12f, 18f)
+                curveTo(10.343f, 18f, 9f, 16.657f, 9f, 15f)
+                curveTo(9f, 13.343f, 10.343f, 12f, 12f, 12f)
                 close()
 
                 // Grille : 5 traits verticaux courts entre le bas du dôme et la chambre.
