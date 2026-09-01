@@ -60,14 +60,14 @@ val SmokeDetectorIcon: ImageVector
 
                 // Volutes de fumée sous le boîtier, 3 ondulations.
                 moveTo(9f, 11.5f)
-                quadraticBezierTo(7f, 13.5f, 9f, 15.5f)
-                quadraticBezierTo(11f, 17.5f, 9f, 19.5f)
+                quadTo(7f, 13.5f, 9f, 15.5f)
+                quadTo(11f, 17.5f, 9f, 19.5f)
                 moveTo(12f, 11.5f)
-                quadraticBezierTo(10f, 13.5f, 12f, 15.5f)
-                quadraticBezierTo(14f, 17.5f, 12f, 19.5f)
+                quadTo(10f, 13.5f, 12f, 15.5f)
+                quadTo(14f, 17.5f, 12f, 19.5f)
                 moveTo(15f, 11.5f)
-                quadraticBezierTo(13f, 13.5f, 15f, 15.5f)
-                quadraticBezierTo(17f, 17.5f, 15f, 19.5f)
+                quadTo(13f, 13.5f, 15f, 15.5f)
+                quadTo(17f, 17.5f, 15f, 19.5f)
             }
         }.build()
     }
