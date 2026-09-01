@@ -122,8 +122,12 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
   réinitialisation d'usine (5 appuis brefs sur le bouton). Ne jamais la présenter à l'utilisateur
   comme un défaut définitif sans lui suggérer un reset d'usine d'abord.
 
-**Réinitialisation / réveil (bouton physique)**
-- 3 appuis brefs : réveil / mode configuration 2 min, sans rien effacer
+**Réinitialisation / réveil / test (bouton physique)** — doc officielle Shelly (guide utilisateur,
+citée mot pour mot le 2026-09-01, après une confusion vécue en direct : 3 appuis brefs ne
+déclenchent **pas** le test, seulement le mode configuration, LED verte clignotante + halo bleu)
+- Appui bref (1x) : coupe une alarme en cours (mute)
+- **3 appuis brefs : mode configuration 2 min** (réveil, sans rien effacer) — pas le test
+- **Appui long, plus de 3 secondes : déclenche le test** (3 flashs rouges + 3 bips)
 - 5 appuis brefs : réinitialisation d'usine (efface Wi-Fi + réglages), repasse en config 2 min
   ensuite
 
