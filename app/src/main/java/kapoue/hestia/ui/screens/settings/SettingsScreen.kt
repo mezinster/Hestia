@@ -543,15 +543,12 @@ private fun DeviceGroupHeaderRow(
 
 /**
  * Ligne d'un canal au sein d'un bloc multi-canaux : juste son propre nom (renommable
- * individuellement, ex. « Frigo ») et sa suppression — l'IP et l'ouverture web sont communes au
- * bloc, affichées une seule fois sur son en-tête ([DeviceGroupHeaderRow]).
- */
-@Composable
-/**
- * Pas de suppression individuelle d'un canal ici, contrairement à [DeviceRow] (appareil mono-
- * canal) : un canal fait partie d'un bloc physique multi-prises, le retirer seul n'a pas de sens
- * (retour David, 2026-09-01 — « on affiche tout, libre à l'utilisateur d'utiliser les prises »).
- * Seul [DeviceGroupHeaderRow.onDeleteGroup] retire le bloc entier, tous canaux confondus.
+ * individuellement, ex. « Frigo ») — l'IP et l'ouverture web sont communes au bloc, affichées une
+ * seule fois sur son en-tête ([DeviceGroupHeaderRow]). Pas de suppression individuelle ici,
+ * contrairement à [DeviceRow] (appareil mono-canal) : un canal fait partie d'un bloc physique
+ * multi-prises, le retirer seul n'a pas de sens (retour David, 2026-09-01 — « on affiche tout,
+ * libre à l'utilisateur d'utiliser les prises »). Seul [DeviceGroupHeaderRow.onDeleteGroup]
+ * retire le bloc entier, tous canaux confondus.
  */
 @Composable
 private fun ChannelSubRow(device: Device, online: Boolean?, onRename: () -> Unit) {
