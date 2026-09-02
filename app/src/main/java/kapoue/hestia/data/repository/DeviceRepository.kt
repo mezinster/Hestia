@@ -26,6 +26,7 @@ import kapoue.hestia.data.rpc.ShellyRpcClient
 import kapoue.hestia.data.rpc.errorOrNull
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.rpc.model.ScheduleJob
+import kapoue.hestia.data.rpc.model.ScriptEntry
 import kapoue.hestia.data.rpc.model.SensorReadingResult
 import kapoue.hestia.data.rpc.model.SwitchSetResult
 import kapoue.hestia.data.rpc.model.SwitchStatusResult
@@ -528,6 +529,7 @@ class DeviceRepository @Inject constructor(
         }
 
         val scriptId = existing?.id ?: run {
+            evictSmokeRelayIfNeeded(ip, list.getOrNull()?.scripts.orEmpty())
             val create = rpcClient.scriptCreate(ip, ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME)
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
@@ -867,6 +869,7 @@ class DeviceRepository @Inject constructor(
         }
 
         val scriptId = existing?.id ?: run {
+            evictSmokeRelayIfNeeded(ip, list.getOrNull()?.scripts.orEmpty())
             val create = rpcClient.scriptCreate(ip, PresenceScriptGenerator.SCRIPT_NAME)
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
@@ -964,6 +967,7 @@ class DeviceRepository @Inject constructor(
         }
 
         val scriptId = existing?.id ?: run {
+            evictSmokeRelayIfNeeded(ip, list.getOrNull()?.scripts.orEmpty())
             val create = rpcClient.scriptCreate(ip, ButtonTimerScriptGenerator.SCRIPT_NAME)
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
@@ -1374,6 +1378,7 @@ class DeviceRepository @Inject constructor(
      * `Script.Create`.
      */
     private suspend fun createCutoffScript(ip: String, switchId: Int, thresholdW: Int, ntfyTitle: String): Int? {
+        evictSmokeRelayIfNeeded(ip, rpcClient.scriptList(ip).getOrNull()?.scripts.orEmpty())
         val id = rpcClient.scriptCreate(ip, ChargeScriptGenerator.uniquePlanningScriptName()).getOrNull()?.id ?: return null
         val topic = ntfyTopic()
         val code = ChargeScriptGenerator.generate(
@@ -2048,7 +2053,25 @@ class DeviceRepository @Inject constructor(
         return reachable
     }
 
-    // --- Relais ntfy pour les détecteurs de fumée (Lot 4a, voir SMOKE-DETECTOR.md) ---
+    // --- Relais ntfy pour les détecteurs de fumée (Lot 4a/4b, voir SMOKE-DETECTOR.md) ---
+
+    /**
+     * Libère un slot en évinçant `hestia_smoke_relay` si l'appareil est déjà saturé — **jamais
+     * l'inverse** : un vrai réglage métier (présence, minuteur bouton, coupure sur seuil) a
+     * toujours priorité sur le relais, qui n'est qu'un confort ajouté par Hestia pour un besoin
+     * qui n'est pas le sien (Lot 4b, retour David 2026-09-01 : « il ne faut jamais que
+     * l'utilisateur soit bloqué dans l'usage de sa prise à cause d'un besoin technique pour le
+     * détecteur »). À appeler juste avant de créer un **nouveau** script métier sur [ip], à partir
+     * de [scripts] déjà lu par l'appelant (pas de second appel réseau). Ne fait rien si le relais
+     * est absent ou si l'appareil a encore de la place — jamais d'éviction inutile.
+     */
+    private suspend fun evictSmokeRelayIfNeeded(ip: String, scripts: List<ScriptEntry>) {
+        if (scripts.count { it.enable } < MAX_ENABLED_SCRIPTS_PER_DEVICE) return
+        val relay = scripts.firstOrNull { it.name == SmokeRelayScriptGenerator.SCRIPT_NAME } ?: return
+        rpcClient.scriptStop(ip, relay.id)
+        rpcClient.scriptDelete(ip, relay.id)
+        logger.info(DiagnosticLogger.RPC, "Relais détecteur de fumée évincé sur $ip (place nécessaire pour un vrai réglage)")
+    }
 
     /**
      * Recalcule et repousse la couverture du relais ntfy pour tous les détecteurs de fumée connus
@@ -2065,6 +2088,17 @@ class DeviceRepository @Inject constructor(
      */
     fun resyncSmokeRelay() {
         appScope.launch { resyncSmokeRelayInternal() }
+    }
+
+    /**
+     * Vrai si [device] héberge actuellement le script relais — pour le picto de Réglages (Lot 4b).
+     * Relu à chaque fois, jamais mémorisé (peut changer à tout moment par éviction ou
+     * redistribution) : un seul `Script.List`, valable pour n'importe quel canal d'un même bloc
+     * physique (même IP, script partagé).
+     */
+    suspend fun isSmokeRelay(device: Device): Boolean {
+        val (_, result) = withIp(device) { ip -> rpcClient.scriptList(ip) }
+        return result.getOrNull()?.scripts?.any { it.name == SmokeRelayScriptGenerator.SCRIPT_NAME } == true
     }
 
     /**

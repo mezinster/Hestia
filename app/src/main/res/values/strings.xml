@@ -55,6 +55,7 @@
     <string name="settings_delete_group">Delete this device</string>
     <string name="settings_rename_channel">Rename this channel</string>
     <string name="settings_rename_channel_title">Rename this channel</string>
+    <string name="settings_smoke_relay_badge">Relays smoke detector alerts to ntfy — freed automatically if a real setting needs the room</string>
     <string name="delete_group_title">Delete this device?</string>
     <string name="delete_group_message">\"%1$s\" and its %2$d channels will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</string>
     <string name="settings_permission_section">Local network permission</string>

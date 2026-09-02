@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -103,6 +104,7 @@ fun SettingsScreen(
     val devices by viewModel.devices.collectAsStateWithLifecycle()
     val connectivity by viewModel.connectivity.collectAsStateWithLifecycle()
     val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
+    val smokeRelayDevices by viewModel.smokeRelayDevices.collectAsStateWithLifecycle()
     val backupMessage by viewModel.backupMessage.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
@@ -220,6 +222,7 @@ fun SettingsScreen(
                                 displayIp = activeIp[device.id] ?: device.ipAddress,
                                 isFirst = isFirst,
                                 isLast = isLast,
+                                isSmokeRelay = device.id in smokeRelayDevices,
                                 onEdit = { onEditDevice(device.id) },
                                 onDelete = { deviceToDelete = device },
                                 onMoveUp = { viewModel.moveUp(device) },
@@ -236,6 +239,7 @@ fun SettingsScreen(
                                 displayIp = activeIp[head.id] ?: head.ipAddress,
                                 isFirst = isFirst,
                                 isLast = isLast,
+                                isSmokeRelay = head.id in smokeRelayDevices,
                                 onEdit = { onEditDevice(head.id) },
                                 onMoveUp = { viewModel.moveUp(head) },
                                 onMoveDown = { viewModel.moveDown(head) },
@@ -377,6 +381,8 @@ private fun DeviceRow(
     displayIp: String,
     isFirst: Boolean,
     isLast: Boolean,
+    /** Héberge actuellement le script relais des détecteurs de fumée (Lot 4b) — voir [SmokeRelayBadge]. */
+    isSmokeRelay: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onMoveUp: () -> Unit,
@@ -413,6 +419,7 @@ private fun DeviceRow(
                     fontFamily = FontFamily.Monospace,
                 )
             }
+            if (isSmokeRelay) SmokeRelayBadge()
 
             IconButton(onClick = onMoveUp, enabled = !isFirst) {
                 Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.settings_move_up))
@@ -453,6 +460,22 @@ private fun DeviceRow(
 }
 
 /**
+ * Picto « cet appareil relaie actuellement les alertes des détecteurs de fumée vers ntfy » (Lot
+ * 4b, voir SmokeRelayScriptGenerator/DeviceRepository.isSmokeRelay) — jamais un réglage qu'on
+ * bascule ici : purement informatif, l'appareil peut cesser d'être relais à tout moment (éviction
+ * automatique dès qu'un vrai réglage en a besoin, ou redistribution vers un autre appareil).
+ */
+@Composable
+private fun SmokeRelayBadge() {
+    Icon(
+        Icons.Filled.Cast,
+        contentDescription = stringResource(R.string.settings_smoke_relay_badge),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.size(20.dp).padding(end = 4.dp),
+    )
+}
+
+/**
  * En-tête d'un bloc multi-canaux (ex. Strip 4) : nom de l'appareil (partagé, jamais un nom de
  * canal), IP partagée, et les actions communes à tout le bloc — monter/descendre une seule fois
  * (déplace le groupe entier), un crayon dédié pour modifier nom/IP/type (plutôt que caché dans le
@@ -466,6 +489,8 @@ private fun DeviceGroupHeaderRow(
     displayIp: String,
     isFirst: Boolean,
     isLast: Boolean,
+    /** Héberge actuellement le script relais des détecteurs de fumée (Lot 4b) — voir [SmokeRelayBadge]. */
+    isSmokeRelay: Boolean,
     onEdit: () -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
@@ -503,6 +528,7 @@ private fun DeviceGroupHeaderRow(
                     fontFamily = FontFamily.Monospace,
                 )
             }
+            if (isSmokeRelay) SmokeRelayBadge()
             IconButton(onClick = onMoveUp, enabled = !isFirst) {
                 Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.settings_move_up))
             }

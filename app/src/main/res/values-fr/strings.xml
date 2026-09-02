@@ -51,6 +51,7 @@
     <string name="settings_delete_group">Supprimer cet appareil</string>
     <string name="settings_rename_channel">Renommer ce canal</string>
     <string name="settings_rename_channel_title">Renommer ce canal</string>
+    <string name="settings_smoke_relay_badge">Relaie les alertes du détecteur de fumée vers ntfy — libéré automatiquement si un vrai réglage a besoin de la place</string>
     <string name="delete_group_title">Supprimer cet appareil ?</string>
     <string name="delete_group_message">« %1$s » et ses %2$d canaux seront retirés de Hestia. Ça n\'affecte pas l\'appareil lui-même ni sa configuration.</string>
     <string name="settings_permission_section">Permission réseau local</string>

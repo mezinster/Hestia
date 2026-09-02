@@ -164,6 +164,15 @@ class SettingsViewModel @Inject constructor(
     private val _activeIp = MutableStateFlow<Map<Long, String>>(emptyMap())
     val activeIp: StateFlow<Map<Long, String>> = _activeIp.asStateFlow()
 
+    /**
+     * Appareils (tous les canaux d'un même bloc physique inclus) hébergeant actuellement le
+     * relais ntfy des détecteurs de fumée (Lot 4b, voir DeviceRepository.isSmokeRelay) — recalculé
+     * à chaque [checkConnectivity], jamais mémorisé au-delà (peut changer à tout moment par
+     * éviction ou redistribution).
+     */
+    private val _smokeRelayDevices = MutableStateFlow<Set<Long>>(emptySet())
+    val smokeRelayDevices: StateFlow<Set<Long>> = _smokeRelayDevices.asStateFlow()
+
     fun deleteDevice(device: Device) {
         viewModelScope.launch { repository.deleteDevice(device) }
     }
@@ -219,6 +228,7 @@ class SettingsViewModel @Inject constructor(
     fun checkConnectivity(permissionUsable: Boolean) {
         if (!permissionUsable) {
             _connectivity.value = emptyMap()
+            _smokeRelayDevices.value = emptySet()
             return
         }
         viewModelScope.launch {
@@ -236,6 +246,14 @@ class SettingsViewModel @Inject constructor(
                 _connectivity.value = _connectivity.value + (device.id to online)
                 _activeIp.value = _activeIp.value + (device.id to repository.activeIp(device))
             }
+
+            // Picto « relais détecteur de fumée » (Lot 4b) : un seul appel par appareil physique
+            // (même IP), jamais par canal individuel — le script relais est partagé par appareil.
+            val relayIds = mutableSetOf<Long>()
+            for ((_, members) in current.filter { it.hasScripting }.groupBy { it.ipAddress }) {
+                if (repository.isSmokeRelay(members.first())) relayIds += members.map { it.id }
+            }
+            _smokeRelayDevices.value = relayIds
         }
     }
 
