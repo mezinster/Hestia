@@ -4,6 +4,9 @@
     <string name="action_ok">OK</string>
     <string name="action_cancel">Annuler</string>
 
+    <!-- Coquille de l'application (zone de la barre de navigation basse) -->
+    <string name="app_shell_smoke_relay_banner">Aucun appareil ne peut relayer les alertes du détecteur de fumée vers ntfy en ce moment (script déjà occupé par un vrai réglage sur chacun, ou appareil éteint/hors réseau). Libère de la place sur l\'un d\'eux, vérifie qu\'il est bien allumé et connecté, ou utilise l\'application officielle Shelly pour les notifications de ce détecteur en attendant. Touche pour les détails.</string>
+
     <!-- Navigation -->
     <string name="nav_dashboard">Tableau</string>
     <string name="nav_settings">Réglages</string>

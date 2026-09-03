@@ -4,6 +4,9 @@
     <string name="action_ok">OK</string>
     <string name="action_cancel">Cancel</string>
 
+    <!-- App shell (bottom navigation bar area) -->
+    <string name="app_shell_smoke_relay_banner">No device can currently relay smoke detector alerts to ntfy (script already busy with a real setting on each one, or device off/unreachable). Free up room on one of them, check it\'s powered and connected, or use the official Shelly app for that detector\'s notifications in the meantime. Tap for details.</string>
+
     <!-- Navigation -->
     <string name="nav_dashboard">Dashboard</string>
     <string name="nav_settings">Settings</string>

@@ -2142,6 +2142,9 @@ class DeviceRepository @Inject constructor(
             if (relayTargets.size >= MAX_RELAY_TARGETS) break
             deploySmokeRelay(device, topic, names, bodies)?.let { relayTargets += it }
         }
+        // Bandeau de couverture zéro (Lot 4c) : dernier résultat connu, pas recalculé à l'ouverture
+        // de l'app — seulement à chaque resynchronisation réelle comme celle-ci.
+        appPreferences.setSmokeRelayCoverageOk(relayTargets.isNotEmpty())
 
         for (detector in detectors) {
             pushSmokeWebhooks(detector, relayTargets)

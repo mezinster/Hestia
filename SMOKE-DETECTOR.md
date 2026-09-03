@@ -78,13 +78,19 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
     (`DeviceRepository.isSmokeRelay`, relu à chaque visite de l'écran, jamais mémorisé).
     → *Testable : saturer un appareil à 3/3 relais compris, ajouter un vrai réglage dessus, vérifier
     que ça passe sans erreur et que le picto disparaît.*
-  - **4c — bandeau de couverture zéro.** Pas commencé. Bandeau permanent au-dessus de la barre de
-    navigation (Accueil/Réglages/À propos) si aucun appareil ne peut relayer les alertes d'un
-    détecteur présent, avec renvoi vers Réglages/ntfy. Message unique, sans distinguer « saturé »
-    de « injoignable » (même remède : libérer de la place, ou utiliser l'appli officielle Shelly en
-    attendant).
-    → *Testable : saturer volontairement tous les appareils, voir le bandeau apparaître et pointer
-    au bon endroit.*
+  - **4c — bandeau de couverture zéro. ✅ Codé le 2026-09-01, pas encore testé sur l'appareil
+    réel.** Bandeau permanent (`AppShellViewModel.showSmokeRelayBanner`, combinaison réactive de la
+    présence d'un détecteur + activation ntfy + `AppPreferences.smokeRelayCoverageOk`) au-dessus de
+    la barre de navigation, sur les 3 écrans de premier niveau. Le dernier résultat de couverture
+    connu est écrit par `DeviceRepository.resyncSmokeRelayInternal` à chaque resynchronisation
+    réelle — jamais recalculé au lancement de l'app (pas d'appel réseau juste pour l'afficher).
+    Message unique, sans distinguer « saturé » de « injoignable » (même remède : libérer de la
+    place, vérifier que l'appareil est allumé, ou utiliser l'appli officielle Shelly en attendant).
+    Clic → navigue vers Réglages et défile jusqu'à la section ntfy (`BringIntoViewRequester` +
+    `SettingsScrollCoordinator`, un singleton Hilt plutôt qu'un argument de navigation).
+    → *Testable : saturer volontairement tous les appareils scriptables, voir le bandeau
+    apparaître et pointer au bon endroit ; libérer un appareil, voir le bandeau disparaître au
+    prochain réveil d'un détecteur.*
 
 - **Lot 5 — Coupure de prise en cas d'alarme.** Proposer la fonctionnalité ; si activée, cases à
   cocher sur les appareils connus d'Hestia (format « Nom noté dans Hestia — IP ») + champ de

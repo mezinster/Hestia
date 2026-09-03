@@ -11,6 +11,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
@@ -120,6 +122,13 @@ fun SettingsScreen(
     var groupToDelete by remember { mutableStateOf<List<Device>?>(null) }
     var channelToRename by remember { mutableStateOf<Device?>(null) }
     var pendingImportUri by remember { mutableStateOf<Uri?>(null) }
+
+    // Défilement ponctuel vers la section ntfy (Lot 4c, bandeau de couverture zéro du relais des
+    // détecteurs de fumée dans HestiaApp) — un clic dessus navigue ici puis émet cet événement.
+    val ntfyBringIntoViewRequester = remember { BringIntoViewRequester() }
+    LaunchedEffect(Unit) {
+        viewModel.scrollToNtfyEvents.collect { ntfyBringIntoViewRequester.bringIntoView() }
+    }
 
     // À chaque reprise, revérifier la connectivité (si la permission le permet) et réconcilier
     // l'interrupteur Notifications avec l'autorisation système : si elle a été retirée (révocation
@@ -307,13 +316,15 @@ fun SettingsScreen(
             }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item {
-                NtfySection(
-                    enabled = ntfyEnabled,
-                    topic = ntfyTopic.orEmpty(),
-                    onToggle = viewModel::setNtfyEnabled,
-                    onTopicChange = viewModel::setNtfyTopic,
-                    onTest = viewModel::testNtfy,
-                )
+                Box(modifier = Modifier.bringIntoViewRequester(ntfyBringIntoViewRequester)) {
+                    NtfySection(
+                        enabled = ntfyEnabled,
+                        topic = ntfyTopic.orEmpty(),
+                        onToggle = viewModel::setNtfyEnabled,
+                        onTopicChange = viewModel::setNtfyTopic,
+                        onTest = viewModel::testNtfy,
+                    )
+                }
             }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item {

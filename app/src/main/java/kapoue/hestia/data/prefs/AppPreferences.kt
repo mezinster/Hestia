@@ -129,6 +129,22 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         prefs.edit().putString(KEY_SMOKE_RELAY_SYNCED, json.encodeToString(updated)).apply()
     }
 
+    /**
+     * Dernier résultat connu (best-effort) de [kapoue.hestia.data.repository.DeviceRepository.
+     * resyncSmokeRelay] : vrai si au moins un appareil relaie actuellement les détecteurs de
+     * fumée vers ntfy. Sert uniquement au bandeau de couverture zéro (Lot 4c) — jamais recalculé
+     * à l'ouverture de l'app (pas d'appel réseau juste pour ça), seulement à chaque
+     * resynchronisation réelle. Défaut à vrai (pas de bandeau) : l'absence d'information ne doit
+     * jamais alarmer inutilement avant la première resynchronisation.
+     */
+    private val _smokeRelayCoverageOk = MutableStateFlow(prefs.getBoolean(KEY_SMOKE_RELAY_COVERAGE_OK, true))
+    val smokeRelayCoverageOk: StateFlow<Boolean> = _smokeRelayCoverageOk.asStateFlow()
+
+    fun setSmokeRelayCoverageOk(ok: Boolean) {
+        prefs.edit().putBoolean(KEY_SMOKE_RELAY_COVERAGE_OK, ok).apply()
+        _smokeRelayCoverageOk.value = ok
+    }
+
     // --- Cloud Shelly, repli à distance (opt-in, désactivé par défaut — voir CLAUDE.md) ---
 
     /** Clé d'autorisation cloud, à traiter comme un mot de passe — stockée chiffrée, jamais en clair. */
@@ -277,6 +293,7 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_NTFY_GEN = "ntfy_generation"
         const val KEY_NTFY_SYNCED = "ntfy_synced_devices"
         const val KEY_SMOKE_RELAY_SYNCED = "smoke_relay_synced_devices"
+        const val KEY_SMOKE_RELAY_COVERAGE_OK = "smoke_relay_coverage_ok"
         const val KEY_PENDING_TIMERS = "pending_timers"
         const val KEY_ON_TIME_BASELINE = "on_time_baseline"
         const val KEY_ON_SINCE_EPOCH = "on_since_epoch"

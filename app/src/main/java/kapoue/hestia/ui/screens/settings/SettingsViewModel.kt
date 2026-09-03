@@ -20,6 +20,7 @@ import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.ThemeMode
 import kapoue.hestia.ui.common.UserMessage
+import kapoue.hestia.ui.navigation.SettingsScrollCoordinator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -38,7 +39,11 @@ class SettingsViewModel @Inject constructor(
     private val logger: DiagnosticLogger,
     private val ntfyClient: NtfyClient,
     private val cloudClient: ShellyCloudClient,
+    scrollCoordinator: SettingsScrollCoordinator,
 ) : ViewModel() {
+
+    /** Signal ponctuel « défile jusqu'à la section ntfy » (Lot 4c, bandeau de couverture zéro). */
+    val scrollToNtfyEvents = scrollCoordinator.scrollToNtfy
 
     // Même ordre que le Tableau (canaux d'un même appareil physique toujours groupés) — un
     // « monter »/« descendre » ci-dessous déplace donc bien un groupe entier, jamais un seul canal.
