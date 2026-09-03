@@ -22,7 +22,7 @@
     <string name="about_name_origin">In Greek mythology, Hestia is the goddess of the hearth and domestic fire. She watches over the home, quietly.</string>
     <string name="about_positioning_title">Local control by default</string>
     <string name="about_positioning">Hestia controls your devices entirely on the local network, with no cloud and no account, by default. Two separate options exist, both off by default and opt-in: instant notifications via ntfy (Settings), which send the text of your notifications to an external service of your choice; and connecting a device to Shelly Cloud (Edit screen), which lets you keep control from a mobile network away from home.</string>
-    <string name="about_positioning_network">On local Wi-Fi: every feature works. On mobile data (cloud fallback, if enabled): only state, power use and on/off — everything else (schedules, presence simulation, button timer, threshold cutoff, LED, firmware update) requires being on the same Wi-Fi network as the plug.</string>
+    <string name="about_positioning_network">On local Wi-Fi: every feature works. On mobile data (cloud fallback, if enabled): only state, power use and on/off for a plug, state (alarm, battery) for a smoke detector — everything else (schedules, presence simulation, button timer, threshold cutoff, LED, firmware update, muting the alarm) requires being on the same Wi-Fi network as the device.</string>
     <string name="about_permission_title">Local network permission</string>
     <string name="about_permission_body">Since Android 17, an app must ask your permission to talk to devices on your local network. Hestia needs it to talk to your devices. It only contacts the addresses you\'ve entered yourself, never scans your network, and never sends anything outside it.</string>
     <string name="about_independence_title">Independence</string>
@@ -97,7 +97,7 @@
          stores and validates the key/server for now; the actual fallback (on/off, state) is wired
          up in a later batch. -->
     <string name="settings_cloud_section">Shelly Cloud</string>
-    <string name="settings_cloud_desc">Lets Hestia keep showing your outlets\' state and consumption, and turn them on/off, even when you\'re away from your home network. Off by default: without a key below, Hestia only ever talks to your outlets over the local network, as usual.</string>
+    <string name="settings_cloud_desc">Lets Hestia keep showing your outlets\' state (consumption, on/off) and your smoke detectors\' state (alarm, battery), even when you\'re away from your home network. Off by default: without a key below, Hestia only ever talks to your devices over the local network, as usual.</string>
     <string name="settings_cloud_where_before">Get your authorization key and server address from </string>
     <string name="settings_cloud_where_after"> → User → Access and permissions → Authorization cloud key.</string>
     <string name="settings_cloud_key_label">Authorization key</string>

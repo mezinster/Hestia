@@ -122,9 +122,12 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
   (>3s — 3 appuis brefs ne déclenchent que le mode configuration, pas le test, même confusion déjà
   rencontrée avec ntfy).*
 
-- **Lot 6 — Documentation.** Étendre le principe Cloud Shelly dans CLAUDE.md (« état des prises »
-  → « état des prises et des capteurs »), toujours opt-in, jamais silencieux. À propos/Réglages.
-  → Pas testable en soi, à caser n'importe quand.
+- **Lot 6 — Documentation. ✅ Fait le 2026-09-03.** Principe Cloud Shelly étendu dans CLAUDE.md
+  (« état, consommation et marche/arrêt » → distingue prise/détecteur) + précision sur le relais
+  ntfy (un autre appareil Shelly, jamais Hestia ni le cloud). Écran À propos
+  (`about_positioning_network`) et Réglages (`settings_cloud_desc`) mis à jour en FR+EN pour
+  refléter les détecteurs de fumée, en plus des prises.
+  → Pas testable en soi, fait.
 
 ## Faits techniques confirmés (2026-08-31, en conditions réelles)
 

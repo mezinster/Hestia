@@ -9,13 +9,20 @@ principalement en HTTP sur le réseau local avec les appareils, via leur API RPC
 Deux exceptions à ce jour, toutes deux explicites et désactivées par défaut :
 - les **notifications instantanées via ntfy** (ajoutées le 2026-07-29). Si l'utilisateur
   l'active dans les Réglages, ce sont les **appareils eux-mêmes** (pas Hestia) qui envoient le
-  texte de leurs notifications à `ntfy.sh`, un service tiers de son choix.
+  texte de leurs notifications à `ntfy.sh`, un service tiers de son choix. Cas particulier des
+  **détecteurs de fumée** (ajoutés le 2026-08-31) : leur webhook natif ne sait faire qu'une
+  requête GET, incompatible avec ntfy (qui exige un POST) — c'est alors un **autre appareil
+  Shelly du réseau local** (jamais Hestia, jamais le cloud) qui relaie le texte à sa place, via
+  un petit script déployé de façon opportuniste sur un appareil ayant de la place (jamais désigné
+  à l'avance, toujours évincé au profit d'un vrai réglage si besoin de la place — voir
+  SMOKE-DETECTOR.md § Lot 4).
 - le **Cloud Shelly** (ajouté le 2026-08-20) : un interrupteur par appareil (écran Modifier)
   le connecte au cloud officiel Shelly ; si l'utilisateur renseigne en plus une clé de compte
   dans les Réglages, Hestia peut basculer sur l'API Cloud Control de Shelly quand le réseau
-  local échoue (repli à distance) — état, consommation et marche/arrêt uniquement, jamais
-  planning, présence, seuils, scripts, LED ou firmware, qui restent strictement locaux, cloud
-  activé ou non.
+  local échoue (repli à distance) — état, consommation et marche/arrêt pour une prise, état
+  (alarme, pile) pour un détecteur de fumée, jamais plus : planning, présence, seuils, scripts,
+  LED, firmware, ou la coupure de l'alarme (`Smoke.Mute`, strictement locale, aucun équivalent
+  cloud), qui restent strictement locaux, cloud activé ou non.
 
 Toujours opt-in, jamais activé sans action explicite, toujours réversible. Toute nouvelle
 fonctionnalité qui ferait sortir des données du réseau local doit suivre le même principe :
