@@ -5,7 +5,7 @@
     <string name="action_cancel">Annuler</string>
 
     <!-- Coquille de l'application (zone de la barre de navigation basse) -->
-    <string name="app_shell_smoke_relay_banner">Aucun appareil ne peut relayer les alertes du détecteur de fumée vers ntfy en ce moment (script déjà occupé par un vrai réglage sur chacun, ou appareil éteint/hors réseau). Libère de la place sur l\'un d\'eux, vérifie qu\'il est bien allumé et connecté, ou utilise l\'application officielle Shelly pour les notifications de ce détecteur en attendant. Touche pour les détails.</string>
+    <string name="app_shell_smoke_relay_banner">Aucun appareil ne peut relayer les alertes du détecteur de fumée vers ntfy en ce moment. Libère de la place sur l\'un d\'eux, vérifie qu\'il est bien allumé et connecté, ou utilise l\'application officielle Shelly pour les notifications de ce détecteur en attendant. Touche pour les détails.</string>
 
     <!-- Navigation -->
     <string name="nav_dashboard">Tableau</string>
@@ -55,7 +55,7 @@
     <string name="settings_rename_channel">Renommer ce canal</string>
     <string name="settings_rename_channel_title">Renommer ce canal</string>
     <string name="settings_smoke_relay_badge">Relaie les alertes du détecteur de fumée — peut changer automatiquement</string>
-    <string name="settings_smoke_relay_explanation">Cet appareil relaie actuellement les alertes de ton détecteur de fumée. Il peut être remplacé automatiquement par un autre appareil si tu ajoutes un vrai réglage ici.</string>
+    <string name="settings_smoke_relay_explanation">Cet appareil relaie actuellement les alertes de ton détecteur de fumée.</string>
     <string name="delete_group_title">Supprimer cet appareil ?</string>
     <string name="delete_group_message">« %1$s » et ses %2$d canaux seront retirés de Hestia. Ça n\'affecte pas l\'appareil lui-même ni sa configuration.</string>
     <string name="settings_permission_section">Permission réseau local</string>

@@ -5,7 +5,7 @@
     <string name="action_cancel">Cancel</string>
 
     <!-- App shell (bottom navigation bar area) -->
-    <string name="app_shell_smoke_relay_banner">No device can currently relay smoke detector alerts to ntfy (script already busy with a real setting on each one, or device off/unreachable). Free up room on one of them, check it\'s powered and connected, or use the official Shelly app for that detector\'s notifications in the meantime. Tap for details.</string>
+    <string name="app_shell_smoke_relay_banner">No device can currently relay smoke detector alerts to ntfy. Free up room on one of them, check it\'s powered and connected, or use the official Shelly app for that detector\'s notifications in the meantime. Tap for details.</string>
 
     <!-- Navigation -->
     <string name="nav_dashboard">Dashboard</string>
@@ -59,7 +59,7 @@
     <string name="settings_rename_channel">Rename this channel</string>
     <string name="settings_rename_channel_title">Rename this channel</string>
     <string name="settings_smoke_relay_badge">Relays smoke detector alerts — may change automatically</string>
-    <string name="settings_smoke_relay_explanation">This device is currently relaying your smoke detector\'s alerts. It may be replaced automatically by another device if you add a real setting here.</string>
+    <string name="settings_smoke_relay_explanation">This device is currently relaying your smoke detector\'s alerts.</string>
     <string name="delete_group_title">Delete this device?</string>
     <string name="delete_group_message">\"%1$s\" and its %2$d channels will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</string>
     <string name="settings_permission_section">Local network permission</string>
