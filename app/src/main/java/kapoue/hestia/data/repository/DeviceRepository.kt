@@ -528,8 +528,11 @@ class DeviceRepository @Inject constructor(
             return RpcResult.Success(Unit)
         }
 
+        // Pas d'éviction du relais ici, volontairement : ce script reste enable:false en
+        // permanence (voir plus bas), il ne consomme donc jamais de slot dans la limite des 3
+        // scripts activés — l'évincer avant sa création serait inutile (bug trouvé le 2026-09-01,
+        // en creusant pourquoi le relais disparaissait sans raison lors d'un test de saturation).
         val scriptId = existing?.id ?: run {
-            evictSmokeRelayIfNeeded(ip, list.getOrNull()?.scripts.orEmpty())
             val create = rpcClient.scriptCreate(ip, ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME)
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
@@ -1384,7 +1387,10 @@ class DeviceRepository @Inject constructor(
      * `Script.Create`.
      */
     private suspend fun createCutoffScript(ip: String, switchId: Int, thresholdW: Int, ntfyTitle: String): Int? {
-        evictSmokeRelayIfNeeded(ip, rpcClient.scriptList(ip).getOrNull()?.scripts.orEmpty())
+        // Pas d'éviction du relais ici, volontairement : ce script reste enable:false en
+        // permanence (voir plus bas), il ne consomme donc jamais de slot dans la limite des 3
+        // scripts activés — même raison que ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME, voir
+        // upsertChargeSupervisorChannel.
         val id = rpcClient.scriptCreate(ip, ChargeScriptGenerator.uniquePlanningScriptName()).getOrNull()?.id ?: return null
         val topic = ntfyTopic()
         val code = ChargeScriptGenerator.generate(

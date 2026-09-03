@@ -70,10 +70,19 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
     chaque création d'un nouveau script métier (minuteur bouton, présence, coupure sur seuil
     persistante, coupure de planning) : si l'appareil est déjà à 3 scripts actifs et que le relais
     en fait partie, il est arrêté et supprimé avant la création du vrai script — jamais l'inverse.
-    Limite connue et acceptée : une coupure de planning déjà créée redémarre son script via le cron
-    de l'appareil (`Script.Start`), pas via l'app — si le relais reprend la place entre-temps, cette
-    éviction-là n'a pas pu être anticipée (cas très rare : il faudrait un appareil avec déjà 3
-    scripts actifs, relais compris, ET une coupure de planning programmée dessus).
+    **Bug trouvé et corrigé le 2026-09-01, en creusant pourquoi le relais disparaissait sans
+    raison lors d'un test de saturation** : `hestia_charge` (coupure sur seuil manuelle) et
+    `hestia_pcut_*` (coupure de planning) restent `enable:false` en permanence, ils ne consomment
+    donc jamais de slot dans la limite des 3 scripts activés — l'éviction placée avant leur
+    création était inutile et virait le relais sans raison. Retirée des deux endroits concernés
+    (`upsertChargeSupervisorChannel`, `createCutoffScript`) ; seuls `deployButtonTimerScript` et
+    `deployPresenceScript` (les deux seuls types de script réel qui passent en `enable:true`) ont
+    vraiment besoin de cette éviction.
+    **Conséquence découverte en testant** : avec seulement ces deux types réels, un appareil ne
+    peut jamais dépasser 2 scripts activés « réels » — le relais a donc toujours sa place comme
+    3ᵉ slot en usage normal. Une vraie couverture zéro (Lot 4c) ne peut donc réalistement survenir
+    que si les appareils candidats sont **injoignables** (éteints/hors réseau), pas par saturation
+    de réglages.
     Picto (`Icons.Filled.Cast`) dans Réglages sur les appareils hébergeant actuellement le relais
     (`DeviceRepository.isSmokeRelay`, relu à chaque visite de l'écran, jamais mémorisé).
     → *Testable : saturer un appareil à 3/3 relais compris, ajouter un vrai réglage dessus, vérifier
