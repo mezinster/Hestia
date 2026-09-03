@@ -257,6 +257,10 @@ dans l'historique git).
 - **Tags QR code** (idée du 2026-08-14, écartée le 2026-09-03 sur retour David) : coller un QR
   code sur un appareil pour lancer sa programmation au scan (deep link). Chantier de taille
   comparable à ntfy en son temps, jamais engagé.
+- **Protections matérielles natives du Switch** (`power_limit`/`voltage_limit`/
+  `undervoltage_limit`/`current_limit`/`autorecover_voltage_errors`) — identifiées le 2026-09-03
+  en auditant la doc RPC, **écartées le même jour** (retour David : pas intéressant). Jamais
+  vérifiées au curl, jamais codées.
 
 ## Fonctionnalités futures
 
@@ -325,20 +329,6 @@ dans l'historique git).
   sur `TileStatus.toVisual` (même classification qu'au Tableau) dans un commit ultérieur
   (`19d74ec`, jamais reflété ici) — l'incohérence n'existe donc plus, code déjà bon.
 
-- **Audit des fonctions RPC de la prise non gérées par Hestia — première passe faite le
-  2026-09-03, doc officielle `Switch.SetConfig`/`GetConfig` (à confirmer au curl avant de coder,
-  comme toujours).** Piste la plus intéressante trouvée, applicable au matériel possédé (Plug M,
-  Strip4 — champs marqués « shown if applicable », donc pas garanti sur tout modèle) :
-  **protections matérielles natives**, gérées par le firmware lui-même, pas par un script Hestia :
-  - `power_limit` (W) : coupure automatique si dépassement de puissance.
-  - `voltage_limit` / `undervoltage_limit` (V) : coupure si sur/sous-tension.
-  - `current_limit` (A) : coupure si surintensité.
-  - `autorecover_voltage_errors` (bool) : rallume automatiquement une fois l'erreur de tension
-    résorbée, ou reste éteint en attente d'une action manuelle.
-  Différent de la coupure sur seuil actuelle (`hestia_charge`, un script qui surveille et coupe
-  volontairement en usage normal) : ici il s'agirait d'une **protection de sécurité passive**
-  (l'appareil se protège lui-même d'un défaut électrique), pas une automatisation d'usage — deux
-  besoins distincts, pourraient coexister. Rien codé, juste identifié comme piste à creuser.
 - **Historique / graphique de consommation par prise** (2026-08-18) : histogramme ou courbe dans
   le temps, pour repérer visuellement des cycles réguliers (recharge mensuelle d'un scooter
   électrique, d'un Mac...). Pas trivial : l'API RPC classique n'expose qu'un compteur cumulatif
