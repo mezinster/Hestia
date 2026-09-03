@@ -250,6 +250,7 @@
     <!-- Cutting a plug off during an alarm (see SMOKE-DETECTOR.md, Lot 5) -->
     <string name="sensor_cutoff_title">Cut a plug off during an alarm</string>
     <string name="sensor_cutoff_desc">The detector can switch off one or more plugs directly as soon as a real alarm triggers — without going through the app.</string>
+    <string name="sensor_cutoff_wake_first">Wake the detector up (3 short presses) to view or change this setting.</string>
     <string name="sensor_cutoff_enable">Enable</string>
     <string name="sensor_cutoff_manual_ip">IP address</string>
     <string name="sensor_cutoff_manual_add">Add</string>

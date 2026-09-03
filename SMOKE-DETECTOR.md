@@ -117,6 +117,15 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
   routine couperait une vraie prise et l'utilisateur croirait à un bug.
   → *Testable : cocher une prise, déclencher un test (appui long, 3 bips), vérifier qu'elle se
   coupe vraiment. Puis retirer `smoke.alarm_test` du câblage avant de considérer le lot terminé.*
+  **Validé en direct le 2026-09-03** sur Strip4 prise 2 → Plug M : coupure effective dans la
+  seconde suivant l'appui long. Deux corrections en cours de route : (1) une IP saisie à la main
+  était poussée sur l'appareil mais totalement invisible à l'écran, sans moyen de la retirer —
+  ajouté une ligne dédiée par IP manuelle avec suppression ; (2) `Unknown` vs `Configured([])`
+  distingués (`DeviceRepository.SmokeCutoffState`) — un réglage fait juste avant que le détecteur
+  ne se rendorme semblait « non pris » (interrupteur à Off par défaut) alors que c'était juste
+  injoignable au moment de la lecture, pas une vraie coupure désactivée (retour David : « ça
+  laisse penser que la config n'est pas passée »). 3 clics = mode config (pas de test, LED verte),
+  confusion déjà rencontrée avec ntfy — appui **long** (>3s) nécessaire pour tout test réel.
 
 - **Lot 6 — Documentation.** Étendre le principe Cloud Shelly dans CLAUDE.md (« état des prises »
   → « état des prises et des capteurs »), toujours opt-in, jamais silencieux. À propos/Réglages.

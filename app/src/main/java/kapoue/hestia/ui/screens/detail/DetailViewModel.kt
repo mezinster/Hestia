@@ -51,9 +51,14 @@ class DetailViewModel @Inject constructor(
     private val _sensorStatus = MutableStateFlow<SensorStatus>(SensorStatus.Loading)
     val sensorStatus: StateFlow<SensorStatus> = _sensorStatus.asStateFlow()
 
-    /** Coupure de prise en cas d'alarme (Lot 5) — cibles actuellement configurées sur le détecteur. */
-    private val _cutoffTargets = MutableStateFlow<List<DeviceRepository.SmokeCutoffTarget>>(emptyList())
-    val cutoffTargets: StateFlow<List<DeviceRepository.SmokeCutoffTarget>> = _cutoffTargets.asStateFlow()
+    /**
+     * Coupure de prise en cas d'alarme (Lot 5) — état actuellement configuré sur le détecteur.
+     * [DeviceRepository.SmokeCutoffState.Unknown] tant qu'il n'a pas été lu avec succès au moins
+     * une fois (détecteur endormi la plupart du temps) : à ne jamais confondre avec une coupure
+     * désactivée, sous peine de laisser croire qu'un réglage tout juste fait n'a pas pris.
+     */
+    private val _cutoffState = MutableStateFlow<DeviceRepository.SmokeCutoffState>(DeviceRepository.SmokeCutoffState.Unknown)
+    val cutoffState: StateFlow<DeviceRepository.SmokeCutoffState> = _cutoffState.asStateFlow()
 
     /**
      * Message transitoire si la coupure n'a pas pu être enregistrée — quasi toujours parce que le
@@ -311,7 +316,7 @@ class DetailViewModel @Inject constructor(
             if (result !is RpcResult.Success) {
                 _cutoffMessage.value = UserMessage(R.string.sensor_cutoff_unreachable)
             }
-            _cutoffTargets.value = repository.getSmokeCutoffTargets(dev)
+            _cutoffState.value = repository.getSmokeCutoffState(dev)
         }
     }
 
@@ -322,7 +327,7 @@ class DetailViewModel @Inject constructor(
         if (dev.type == DeviceType.SMOKE_DETECTOR) {
             _sensorStatus.value = repository.getSensorStatus(dev).toSensorStatus()
             _activeIp.value = repository.activeIp(dev)
-            _cutoffTargets.value = repository.getSmokeCutoffTargets(dev)
+            _cutoffState.value = repository.getSmokeCutoffState(dev)
             return
         }
         val status = repository.getStatus(dev).toTileStatus()

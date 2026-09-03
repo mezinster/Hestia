@@ -246,6 +246,7 @@
     <!-- Coupure de prise en cas d'alarme (voir SMOKE-DETECTOR.md, Lot 5) -->
     <string name="sensor_cutoff_title">Couper une prise en cas d\'alarme</string>
     <string name="sensor_cutoff_desc">Le détecteur peut éteindre directement une ou plusieurs prises dès qu\'une vraie alarme se déclenche — sans passer par l\'application.</string>
+    <string name="sensor_cutoff_wake_first">Réveille le détecteur (3 appuis brefs) pour voir ou modifier ce réglage.</string>
     <string name="sensor_cutoff_enable">Activer</string>
     <string name="sensor_cutoff_manual_ip">Adresse IP</string>
     <string name="sensor_cutoff_manual_add">Ajouter</string>

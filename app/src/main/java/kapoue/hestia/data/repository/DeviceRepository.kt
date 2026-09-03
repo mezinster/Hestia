@@ -2236,16 +2236,30 @@ class DeviceRepository @Inject constructor(
     data class SmokeCutoffTarget(val ip: String, val switchId: Int)
 
     /**
-     * Cibles de coupure actuellement configurées sur [detector] — relues directement depuis ses
-     * webhooks natifs (`Webhook.List`), **jamais stockées côté Hestia** (principe du projet :
-     * aucune configuration d'appareil en propre). Best-effort : liste vide si injoignable ou si
-     * aucune coupure configurée. Un seul hook suffit à connaître la liste actuelle : tous les
-     * événements câblés partagent exactement les mêmes URLs (voir [setSmokeCutoffTargets]).
+     * État de la config de coupure d'un détecteur : [Unknown] = jamais lue avec succès (détecteur
+     * endormi la plupart du temps, à distinguer d'une vraie liste vide — sinon l'écran affiche
+     * « désactivé » alors qu'on n'en sait simplement rien, retour David 2026-09-03 : « ça laisse
+     * penser que la config n'est pas passée »). [Configured] = lue avec succès, éventuellement vide.
      */
-    suspend fun getSmokeCutoffTargets(detector: Device): List<SmokeCutoffTarget> {
+    sealed interface SmokeCutoffState {
+        data object Unknown : SmokeCutoffState
+        data class Configured(val targets: List<SmokeCutoffTarget>) : SmokeCutoffState
+    }
+
+    /**
+     * État de coupure actuellement configuré sur [detector] — relu directement depuis ses
+     * webhooks natifs (`Webhook.List`), **jamais stocké côté Hestia** (principe du projet : aucune
+     * configuration d'appareil en propre). [SmokeCutoffState.Unknown] si injoignable à cet instant
+     * (détecteur endormi) : pas d'appel réseau visible tant qu'on ne l'a pas réveillé, très
+     * différent de « coupure désactivée ». Un seul hook suffit à connaître la liste actuelle : tous
+     * les événements câblés partagent exactement les mêmes URLs (voir [setSmokeCutoffTargets]).
+     */
+    suspend fun getSmokeCutoffState(detector: Device): SmokeCutoffState {
         val (_, result) = withIp(detector) { ip -> rpcClient.webhookList(ip) }
-        val hooks = result.getOrNull()?.hooks.orEmpty().filter { it.name == SMOKE_CUTOFF_WEBHOOK_NAME }
-        return hooks.firstOrNull()?.urls.orEmpty().mapNotNull(::parseSwitchSetUrl)
+        val hooks = result.getOrNull()?.hooks ?: return SmokeCutoffState.Unknown
+        val targets = hooks.filter { it.name == SMOKE_CUTOFF_WEBHOOK_NAME }
+            .firstOrNull()?.urls.orEmpty().mapNotNull(::parseSwitchSetUrl)
+        return SmokeCutoffState.Configured(targets)
     }
 
     /** Décode `http://<ip>/rpc/Switch.Set?id=<n>&on=false` tel qu'écrit par [setSmokeCutoffTargets], ou `null` si autre chose. */

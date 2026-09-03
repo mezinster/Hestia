@@ -98,7 +98,7 @@ fun DetailScreen(
     val device by viewModel.device.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
     val sensorStatus by viewModel.sensorStatus.collectAsStateWithLifecycle()
-    val cutoffTargets by viewModel.cutoffTargets.collectAsStateWithLifecycle()
+    val cutoffState by viewModel.cutoffState.collectAsStateWithLifecycle()
     val cutoffCandidates by viewModel.cutoffCandidates.collectAsStateWithLifecycle()
     val cutoffMessage by viewModel.cutoffMessage.collectAsStateWithLifecycle()
     val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
@@ -231,7 +231,7 @@ fun DetailScreen(
                 )
                 HorizontalDivider()
                 SmokeCutoffSection(
-                    targets = cutoffTargets,
+                    state = cutoffState,
                     candidates = cutoffCandidates.filter { it.id != dev.id },
                     onTargetsChange = { viewModel.setCutoffTargets(it) },
                 )
@@ -1306,24 +1306,18 @@ private fun SmokeDetectorSection(sensorStatus: SensorStatus, onMute: () -> Unit)
  * ni script** (contrairement au relais ntfy du Lot 4, qui n'avait pas cette option puisque ntfy
  * exige un POST). Pas de case « activé » séparée de la liste : au moins une prise cochée EST
  * l'état activé, tout décocher désactive.
+ *
+ * [DeviceRepository.SmokeCutoffState.Unknown] (détecteur jamais joint avec succès, endormi la
+ * plupart du temps) affiche un état **distinct** d'une coupure désactivée — sans quoi un réglage
+ * qui vient tout juste d'être fait donnerait l'impression de ne pas avoir pris (retour David,
+ * 2026-09-03 : « ça laisse penser que la config n'est pas passée »).
  */
 @Composable
 private fun SmokeCutoffSection(
-    targets: List<DeviceRepository.SmokeCutoffTarget>,
+    state: DeviceRepository.SmokeCutoffState,
     candidates: List<Device>,
     onTargetsChange: (List<DeviceRepository.SmokeCutoffTarget>) -> Unit,
 ) {
-    // Replié tant qu'aucune cible n'est configurée ; s'ouvre tout seul dès que la lecture réelle
-    // (fetch) en trouve — jamais géré comme un simple booléen local qui pourrait diverger de ce
-    // que l'appareil a vraiment en mémoire.
-    var expanded by remember { mutableStateOf(targets.isNotEmpty()) }
-    LaunchedEffect(targets) { if (targets.isNotEmpty()) expanded = true }
-    var manualIp by remember { mutableStateOf("") }
-
-    fun toggle(target: DeviceRepository.SmokeCutoffTarget, checked: Boolean) {
-        onTargetsChange(if (checked) targets + target else targets - target)
-    }
-
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.sensor_cutoff_title), style = MaterialTheme.typography.titleMedium)
         Text(
@@ -1331,6 +1325,30 @@ private fun SmokeCutoffSection(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        if (state !is DeviceRepository.SmokeCutoffState.Configured) {
+            // Jamais lu avec succès : pas d'interrupteur à afficher (rien à activer/désactiver
+            // tant qu'on ne sait pas ce qu'il y a vraiment), juste l'explication.
+            Text(
+                text = stringResource(R.string.sensor_cutoff_wake_first),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return
+        }
+        val targets = state.targets
+
+        // Replié tant qu'aucune cible n'est configurée ; s'ouvre tout seul dès que la lecture
+        // réelle (fetch) en trouve — jamais géré comme un simple booléen local qui pourrait
+        // diverger de ce que l'appareil a vraiment en mémoire.
+        var expanded by remember { mutableStateOf(targets.isNotEmpty()) }
+        LaunchedEffect(targets) { if (targets.isNotEmpty()) expanded = true }
+        var manualIp by remember { mutableStateOf("") }
+
+        fun toggle(target: DeviceRepository.SmokeCutoffTarget, checked: Boolean) {
+            onTargetsChange(if (checked) targets + target else targets - target)
+        }
+
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(
                 checked = expanded,
