@@ -101,31 +101,26 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
     apparaître et pointer au bon endroit ; libérer un appareil, voir le bandeau disparaître au
     prochain réveil d'un détecteur.*
 
-- **Lot 5 — Coupure de prise en cas d'alarme. ✅ Codé le 2026-09-03, pas encore testé sur
-  l'appareil réel.** Écran Détail du détecteur : interrupteur qui révèle une liste à cocher des
+- **Lot 5 — Coupure de prise en cas d'alarme. ✅ Codé, testé et validé en conditions réelles le
+  2026-09-03.** Écran Détail du détecteur : interrupteur qui révèle une liste à cocher des
   appareils connus d'Hestia (format « Nom — IP », un par canal), + champ IP libre pour une adresse
-  absente de la liste (canal 0 supposé). `DeviceRepository.getSmokeCutoffTargets`/
-  `setSmokeCutoffTargets` : lus/écrits directement via les webhooks natifs du détecteur
-  (`Webhook.List`/`Create`/`Delete`, nom `hestia_smoke_cutoff`), **jamais stockés côté Hestia**
-  (principe du projet). `Switch.Set?id=..&on=false` en GET — contrairement à ntfy (Lot 4), ce
-  webhook natif suffit **directement**, sans relais : `Switch.Set` accepte le GET nativement
-  (c'est l'exemple même de la doc officielle Shelly `Webhook.Create`).
-  **Décision prise avec David (2026-09-03)** : câblé temporairement sur `smoke.alarm` **et**
-  `smoke.alarm_test` (`DeviceRepository.SMOKE_CUTOFF_EVENTS`) pour valider tout le circuit avec un
-  appui long, sans attendre une vraie alarme — « on a déjà eu des surprises par le passé ». **À
-  retirer** (ne garder que `smoke.alarm`) une fois le test confirmé, sinon un test mensuel de
-  routine couperait une vraie prise et l'utilisateur croirait à un bug.
-  → *Testable : cocher une prise, déclencher un test (appui long, 3 bips), vérifier qu'elle se
-  coupe vraiment. Puis retirer `smoke.alarm_test` du câblage avant de considérer le lot terminé.*
-  **Validé en direct le 2026-09-03** sur Strip4 prise 2 → Plug M : coupure effective dans la
-  seconde suivant l'appui long. Deux corrections en cours de route : (1) une IP saisie à la main
-  était poussée sur l'appareil mais totalement invisible à l'écran, sans moyen de la retirer —
-  ajouté une ligne dédiée par IP manuelle avec suppression ; (2) `Unknown` vs `Configured([])`
-  distingués (`DeviceRepository.SmokeCutoffState`) — un réglage fait juste avant que le détecteur
-  ne se rendorme semblait « non pris » (interrupteur à Off par défaut) alors que c'était juste
-  injoignable au moment de la lecture, pas une vraie coupure désactivée (retour David : « ça
-  laisse penser que la config n'est pas passée »). 3 clics = mode config (pas de test, LED verte),
-  confusion déjà rencontrée avec ntfy — appui **long** (>3s) nécessaire pour tout test réel.
+  absente de la liste (canal 0 supposé), IP manuelles affichées avec suppression individuelle.
+  `DeviceRepository.getSmokeCutoffState`/`setSmokeCutoffTargets` : lus/écrits directement via les
+  webhooks natifs du détecteur (`Webhook.List`/`Create`/`Delete`, nom `hestia_smoke_cutoff`),
+  **jamais stockés côté Hestia** (principe du projet). `Switch.Set?id=..&on=false` en GET —
+  contrairement à ntfy (Lot 4), ce webhook natif suffit **directement**, sans relais : `Switch.Set`
+  accepte le GET nativement (c'est l'exemple même de la doc officielle Shelly `Webhook.Create`).
+  `SmokeCutoffState` distingue `Unknown` (détecteur jamais joint avec succès) de `Configured([])`
+  (coupure réellement désactivée) — sans quoi l'interrupteur affichait un faux « Off » trompeur
+  pendant que le détecteur dormait, comme si un réglage tout juste fait n'avait pas pris (retour
+  David).
+  **Câblé sur `smoke.alarm` uniquement** (`DeviceRepository.SMOKE_CUTOFF_EVENTS`) — `smoke.alarm_test`
+  y a été inclus temporairement pour valider tout le circuit avec un appui long réel sans attendre
+  une vraie alarme, puis retiré le 2026-09-03 une fois le test confirmé (sinon un test mensuel de
+  routine aurait coupé une vraie prise).
+  → *Testé : Strip4 prise 2 → Plug M, coupure effective dans la seconde suivant un appui long
+  (>3s — 3 appuis brefs ne déclenchent que le mode configuration, pas le test, même confusion déjà
+  rencontrée avec ntfy).*
 
 - **Lot 6 — Documentation.** Étendre le principe Cloud Shelly dans CLAUDE.md (« état des prises »
   → « état des prises et des capteurs »), toujours opt-in, jamais silencieux. À propos/Réglages.

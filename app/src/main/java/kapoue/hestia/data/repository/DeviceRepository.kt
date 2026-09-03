@@ -2366,12 +2366,10 @@ class DeviceRepository @Inject constructor(
         const val SMOKE_CUTOFF_WEBHOOK_NAME = "hestia_smoke_cutoff"
 
         /**
-         * **Temporaire** (retour David, 2026-09-03) : inclut `smoke.alarm_test` pour valider le
-         * câblage en conditions réelles avec un appui long, sans attendre une vraie alarme —
-         * jamais souhaité en usage normal (couperait une prise à chaque test mensuel de routine,
-         * l'utilisateur croirait à un bug). **À retirer** (ne garder que `smoke.alarm`) une fois
-         * le test confirmé.
+         * Alarme réelle uniquement — `smoke.alarm_test` retiré le 2026-09-03 après validation en
+         * conditions réelles (coupure confirmée dans la seconde suivant un appui long) : le garder
+         * aurait coupé une vraie prise à chaque test mensuel de routine du détecteur.
          */
-        val SMOKE_CUTOFF_EVENTS = listOf("smoke.alarm", "smoke.alarm_test")
+        val SMOKE_CUTOFF_EVENTS = listOf("smoke.alarm")
     }
 }
