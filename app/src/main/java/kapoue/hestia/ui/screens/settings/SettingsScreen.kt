@@ -257,6 +257,26 @@ fun SettingsScreen(
                 }
             }
 
+            // Explication du picto relais (Lot 4b), seulement si au moins un appareil le porte
+            // actuellement — inutile d'expliquer un picto qu'on ne voit jamais.
+            if (smokeRelayDevices.isNotEmpty()) {
+                item {
+                    Row(modifier = Modifier.padding(bottom = 8.dp)) {
+                        Icon(
+                            SmokeRelayIcon,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp).padding(top = 2.dp, end = 8.dp),
+                        )
+                        Text(
+                            stringResource(R.string.settings_smoke_relay_explanation),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
             // Ajout d'un appareil en fin de liste (comme « Exporter la config »), plutôt qu'un
             // bouton flottant « + » qui n'avait pas sa place par-dessus le contenu.
             item {
@@ -411,7 +431,10 @@ private fun DeviceRow(
             ConnectivityIndicator(online, neutralOffline = isSensor)
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(device.name, style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(device.name, style = MaterialTheme.typography.titleSmall)
+                    if (isSmokeRelay) SmokeRelayBadge()
+                }
                 Text(
                     text = "$displayIp · ${stringResource(R.string.settings_device_channel, device.switchId)} · $connectivityLabel",
                     style = MaterialTheme.typography.bodySmall,
@@ -419,7 +442,6 @@ private fun DeviceRow(
                     fontFamily = FontFamily.Monospace,
                 )
             }
-            if (isSmokeRelay) SmokeRelayBadge()
 
             IconButton(onClick = onMoveUp, enabled = !isFirst) {
                 Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.settings_move_up))
@@ -471,7 +493,7 @@ private fun SmokeRelayBadge() {
         SmokeRelayIcon,
         contentDescription = stringResource(R.string.settings_smoke_relay_badge),
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.size(20.dp).padding(end = 4.dp),
+        modifier = Modifier.padding(start = 6.dp).size(18.dp),
     )
 }
 
@@ -520,7 +542,10 @@ private fun DeviceGroupHeaderRow(
             )
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(deviceName, style = MaterialTheme.typography.titleSmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(deviceName, style = MaterialTheme.typography.titleSmall)
+                    if (isSmokeRelay) SmokeRelayBadge()
+                }
                 Text(
                     text = "$displayIp · ${stringResource(R.string.settings_group_channels, channelCount)} · $connectivityLabel",
                     style = MaterialTheme.typography.bodySmall,
@@ -528,7 +553,6 @@ private fun DeviceGroupHeaderRow(
                     fontFamily = FontFamily.Monospace,
                 )
             }
-            if (isSmokeRelay) SmokeRelayBadge()
             IconButton(onClick = onMoveUp, enabled = !isFirst) {
                 Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.settings_move_up))
             }
