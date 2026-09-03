@@ -25,7 +25,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
-import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -90,6 +89,7 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.data.notifications.ProgrammationNotifier
 import kapoue.hestia.domain.model.ThemeMode
+import kapoue.hestia.ui.icons.SmokeRelayIcon
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.permission.LocalNetworkPermissionStatus
 import kapoue.hestia.ui.theme.stateColors
@@ -468,7 +468,7 @@ private fun DeviceRow(
 @Composable
 private fun SmokeRelayBadge() {
     Icon(
-        Icons.Filled.Cast,
+        SmokeRelayIcon,
         contentDescription = stringResource(R.string.settings_smoke_relay_badge),
         tint = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.size(20.dp).padding(end = 4.dp),

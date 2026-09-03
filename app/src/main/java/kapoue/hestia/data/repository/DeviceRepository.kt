@@ -868,8 +868,11 @@ class DeviceRepository @Inject constructor(
             return RpcResult.Success(Unit)
         }
 
+        // Évince le relais avant toute transition vers enable:true — création comme réactivation
+        // d'un script existant mais désactivé (jamais le cas normalement pour celui-ci, mais reste
+        // défensif : voir DeviceRepository.evictSmokeRelayIfNeeded).
+        if (existing == null || !existing.enable) evictSmokeRelayIfNeeded(ip, list.getOrNull()?.scripts.orEmpty())
         val scriptId = existing?.id ?: run {
-            evictSmokeRelayIfNeeded(ip, list.getOrNull()?.scripts.orEmpty())
             val create = rpcClient.scriptCreate(ip, PresenceScriptGenerator.SCRIPT_NAME)
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
@@ -966,8 +969,11 @@ class DeviceRepository @Inject constructor(
             return RpcResult.Success(Unit)
         }
 
+        // Évince le relais avant toute transition vers enable:true — création comme réactivation
+        // d'un script existant mais désactivé (jamais le cas normalement pour celui-ci, mais reste
+        // défensif : voir DeviceRepository.evictSmokeRelayIfNeeded).
+        if (existing == null || !existing.enable) evictSmokeRelayIfNeeded(ip, list.getOrNull()?.scripts.orEmpty())
         val scriptId = existing?.id ?: run {
-            evictSmokeRelayIfNeeded(ip, list.getOrNull()?.scripts.orEmpty())
             val create = rpcClient.scriptCreate(ip, ButtonTimerScriptGenerator.SCRIPT_NAME)
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id

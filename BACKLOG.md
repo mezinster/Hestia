@@ -5,6 +5,12 @@ Dernière mise à jour : 2026-08-22 (correctif d'application immédiate des plan
 ON, seuils et refonte des couleurs d'état publiés en 2.5.0 — republiés en 2.5.1 après un correctif
 de compilation, apostrophe non échappée dans une chaîne anglaise).
 
+## Petits correctifs UI en attente
+
+- **2026-09-01, retour David** : à la création d'un planning, le bouton passe à une coche grisée
+  pour dire « c'est enregistré », mais le texte reste « Enregistrer » — devrait passer à
+  « Enregistré » (accord au participe passé). Pas bloquant, à corriger plus tard.
+
 ## Fait — en cours (à surveiller)
 
 - **Bug trouvé et corrigé le 2026-08-24, en testant le Lot 3 du conflit bouton/présence (voir plus
