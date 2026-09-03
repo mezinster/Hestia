@@ -187,6 +187,22 @@ déclenchent **pas** le test, seulement le mode configuration, LED verte clignot
   s'applique pas. RPC local en priorité si joignable, Cloud Shelly (opt-in) en secours pour
   l'état — pas de tâche de fond permanente ni de rattrapage rétroactif sans Cloud.
 
+## Revue de code avant publication (2026-09-03)
+
+3 bugs trouvés en relisant le chantier avant de publier, tous corrigés :
+- **`setSmokeCutoffTargets`** ne vérifiait pas l'échec de `Webhook.Delete` avant de recréer — si
+  le détecteur se rendormait en plein milieu de la séquence, l'ancien webhook (avec l'ancienne
+  liste de prises) pouvait rester actif en plus du nouveau, coupant une prise pourtant décochée.
+- **`smokeWebhookCatchUpIfNeeded`** marquait un détecteur « à jour » même si son webhook n'avait
+  pas pu être réellement reposé (rendormi entre le relevé du Tableau et l'appel) — pouvait le
+  laisser durablement sans relais, le rattrapage ne retentant plus jusqu'au prochain changement
+  ntfy (qui peut ne jamais arriver). `resyncSmokeRelayInternal`/`pushSmokeWebhooks` renvoient
+  désormais si le détecteur a vraiment été joint.
+- **Suppression d'un détecteur** ne déclenchait pas de resynchro du relais — corrigé
+  (`deleteDevice`). Limite mineure restante, acceptée : un relais déjà en cours d'exécution garde
+  l'entrée MAC→nom du détecteur supprimé en mémoire (`evalRemoveName` jamais câblé), sans
+  conséquence pratique (entrée fantôme jamais réutilisée).
+
 ## Faits techniques confirmés (2026-09-01, en creusant le Lot 4)
 
 **Le webhook natif Shelly ne peut pas appeler ntfy directement**

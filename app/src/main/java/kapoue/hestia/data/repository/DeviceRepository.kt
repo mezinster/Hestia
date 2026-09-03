@@ -1924,6 +1924,11 @@ class DeviceRepository @Inject constructor(
     suspend fun deleteDevice(device: Device) {
         deviceDao.delete(device)
         logger.info(DiagnosticLogger.DB, "Suppression appareil ${device.ipAddress} canal ${device.switchId}")
+        // Un détecteur supprimé ne doit plus apparaître dans les futurs déploiements du relais
+        // (trouvé en revue de code avant publication, 2026-09-03) — un relais déjà en cours
+        // d'exécution garde malgré tout son entrée MAC→nom en mémoire (limite connue et
+        // acceptée, jamais nettoyée, sans conséquence pratique : entrée fantôme jamais réutilisée).
+        if (device.type == DeviceType.SMOKE_DETECTOR) resyncSmokeRelay()
     }
 
     /** Supprime tous les canaux d'un même appareil physique d'un coup. */
@@ -2142,14 +2147,19 @@ class DeviceRepository @Inject constructor(
      */
     suspend fun smokeWebhookCatchUpIfNeeded(device: Device) {
         if (appPreferences.isSmokeRelaySynced(device.id)) return
-        resyncSmokeRelayInternal()
-        appPreferences.markSmokeRelaySynced(device.id)
+        // Ne marque « à jour » que si CE détecteur a réellement été joint (trouvé en revue de code
+        // avant publication, 2026-09-03) : sinon un détecteur rendormi entre le relevé du Tableau
+        // et cet appel restait marqué synced sans que son webhook n'ait pu être reposé, jusqu'au
+        // prochain changement ntfy — qui peut ne jamais arriver pour un utilisateur qui n'y touche
+        // plus, le laissant durablement sans relais malgré le rattrapage prévu pour ça.
+        if (device.id in resyncSmokeRelayInternal()) appPreferences.markSmokeRelaySynced(device.id)
     }
 
-    private suspend fun resyncSmokeRelayInternal() {
+    /** @return les détecteurs réellement joints (webhooks reposés ou confirmés sans changement) — pas ceux restés injoignables. */
+    private suspend fun resyncSmokeRelayInternal(): Set<Long> {
         val all = getDevicesOnce()
         val detectors = all.filter { it.type == DeviceType.SMOKE_DETECTOR }
-        if (detectors.isEmpty()) return
+        if (detectors.isEmpty()) return emptySet()
 
         val topic = if (appPreferences.ntfyEnabled.value) appPreferences.ntfyTopic.value else null
         val bodies = SmokeRelayScriptGenerator.Bodies(
@@ -2174,9 +2184,11 @@ class DeviceRepository @Inject constructor(
         // de l'app — seulement à chaque resynchronisation réelle comme celle-ci.
         appPreferences.setSmokeRelayCoverageOk(relayTargets.isNotEmpty())
 
+        val reached = mutableSetOf<Long>()
         for (detector in detectors) {
-            pushSmokeWebhooks(detector, relayTargets)
+            if (pushSmokeWebhooks(detector, relayTargets)) reached += detector.id
         }
+        return reached
     }
 
     /**
@@ -2222,14 +2234,15 @@ class DeviceRepository @Inject constructor(
      * Hestia, reconnu par son nom). Ne fait rien si le détecteur est injoignable ou sans MAC en
      * cache ([Device.cloudId], voir [getLocalSensorStatus]) : réessaiera à son prochain réveil.
      */
-    private suspend fun pushSmokeWebhooks(detector: Device, relayTargets: List<Pair<String, Int>>) {
-        val mac = detector.cloudId?.uppercase() ?: return
+    /** @return vrai si [detector] a pu être joint (webhooks reposés, ou rien à faire) — faux s'il était injoignable. */
+    private suspend fun pushSmokeWebhooks(detector: Device, relayTargets: List<Pair<String, Int>>): Boolean {
+        val mac = detector.cloudId?.uppercase() ?: return false
         val (ip, listResult) = withIp(detector) { i -> rpcClient.webhookList(i) }
-        val existing = listResult.getOrNull()?.hooks ?: return
+        val existing = listResult.getOrNull()?.hooks ?: return false
         for (hook in existing.filter { it.name == SMOKE_WEBHOOK_NAME }) {
             rpcClient.webhookDelete(ip, hook.id)
         }
-        if (relayTargets.isEmpty()) return
+        if (relayTargets.isEmpty()) return true
 
         for (event in SMOKE_WEBHOOK_EVENTS) {
             val urls = relayTargets.map { (relayIp, scriptId) ->
@@ -2238,6 +2251,7 @@ class DeviceRepository @Inject constructor(
             }
             rpcClient.webhookCreate(ip, cid = 0, event = event, name = SMOKE_WEBHOOK_NAME, urls = urls)
         }
+        return true
     }
 
     // --- Coupure de prise en cas d'alarme (Lot 5, voir SMOKE-DETECTOR.md) ---
@@ -2293,8 +2307,13 @@ class DeviceRepository @Inject constructor(
     suspend fun setSmokeCutoffTargets(detector: Device, targets: List<SmokeCutoffTarget>): RpcResult<Unit> {
         val (ip, listResult) = withIp(detector) { i -> rpcClient.webhookList(i) }
         listResult.errorOrNull()?.let { return it }
+        // Erreur de suppression jamais vérifiée jusqu'ici (trouvé en revue de code avant
+        // publication, 2026-09-03) : si le détecteur se rendort entre la liste et la suppression,
+        // l'ancien webhook (avec l'ancienne liste de prises, dont celles qu'on vient de décocher)
+        // restait actif en plus du nouveau créé juste après — une prise décochée continuait d'être
+        // coupée à la prochaine alarme, sans que rien ne le signale.
         for (hook in listResult.getOrNull()?.hooks.orEmpty().filter { it.name == SMOKE_CUTOFF_WEBHOOK_NAME }) {
-            rpcClient.webhookDelete(ip, hook.id)
+            rpcClient.webhookDelete(ip, hook.id).errorOrNull()?.let { return it }
         }
         if (targets.isEmpty()) return RpcResult.Success(Unit)
 
