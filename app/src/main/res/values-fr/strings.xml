@@ -243,6 +243,14 @@
     <string name="sensor_battery_threshold_info">Une notification est envoyée automatiquement si la batterie descend sous 15 %.</string>
     <string name="sensor_no_remote_test">Pas de test à distance possible : Shelly ne propose aucune commande pour ça. Pour tester, appuie sur le bouton du détecteur lui-même (3 bips, 3 flashs).</string>
 
+    <!-- Coupure de prise en cas d'alarme (voir SMOKE-DETECTOR.md, Lot 5) -->
+    <string name="sensor_cutoff_title">Couper une prise en cas d\'alarme</string>
+    <string name="sensor_cutoff_desc">Le détecteur peut éteindre directement une ou plusieurs prises dès qu\'une vraie alarme se déclenche — sans passer par l\'application.</string>
+    <string name="sensor_cutoff_enable">Activer</string>
+    <string name="sensor_cutoff_manual_ip">Adresse IP</string>
+    <string name="sensor_cutoff_manual_add">Ajouter</string>
+    <string name="sensor_cutoff_dhcp_hint">Réserve une IP fixe pour cet appareil depuis ta box (DHCP), plutôt qu\'une IP statique sur l\'appareil lui-même.</string>
+
     <!-- Relais ntfy des détecteurs de fumée (voir SMOKE-DETECTOR.md, Lot 4a) — le nom de l'appareil sert de titre à la notif, ces textes sont le corps, un par événement natif. -->
     <string name="sensor_relay_body_alarm">Alarme réelle détectée !</string>
     <string name="sensor_relay_body_alarm_off">Fin de l\'alarme.</string>

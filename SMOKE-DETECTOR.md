@@ -101,12 +101,22 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
     apparaître et pointer au bon endroit ; libérer un appareil, voir le bandeau disparaître au
     prochain réveil d'un détecteur.*
 
-- **Lot 5 — Coupure de prise en cas d'alarme.** Proposer la fonctionnalité ; si activée, cases à
-  cocher sur les appareils connus d'Hestia (format « Nom noté dans Hestia — IP ») + champ de
-  saisie libre pour une IP absente de la liste. Webhook natif du détecteur → `Switch.Set` direct
-  sur l'IP visée (autonome, sans app ni script). Inciter à fixer l'IP (réservation DHCP côté box,
-  méthode validée par David plutôt qu'IP statique sur l'appareil).
-  → *Testable : déclencher un test, vérifier qu'une prise choisie se coupe vraiment.*
+- **Lot 5 — Coupure de prise en cas d'alarme. ✅ Codé le 2026-09-03, pas encore testé sur
+  l'appareil réel.** Écran Détail du détecteur : interrupteur qui révèle une liste à cocher des
+  appareils connus d'Hestia (format « Nom — IP », un par canal), + champ IP libre pour une adresse
+  absente de la liste (canal 0 supposé). `DeviceRepository.getSmokeCutoffTargets`/
+  `setSmokeCutoffTargets` : lus/écrits directement via les webhooks natifs du détecteur
+  (`Webhook.List`/`Create`/`Delete`, nom `hestia_smoke_cutoff`), **jamais stockés côté Hestia**
+  (principe du projet). `Switch.Set?id=..&on=false` en GET — contrairement à ntfy (Lot 4), ce
+  webhook natif suffit **directement**, sans relais : `Switch.Set` accepte le GET nativement
+  (c'est l'exemple même de la doc officielle Shelly `Webhook.Create`).
+  **Décision prise avec David (2026-09-03)** : câblé temporairement sur `smoke.alarm` **et**
+  `smoke.alarm_test` (`DeviceRepository.SMOKE_CUTOFF_EVENTS`) pour valider tout le circuit avec un
+  appui long, sans attendre une vraie alarme — « on a déjà eu des surprises par le passé ». **À
+  retirer** (ne garder que `smoke.alarm`) une fois le test confirmé, sinon un test mensuel de
+  routine couperait une vraie prise et l'utilisateur croirait à un bug.
+  → *Testable : cocher une prise, déclencher un test (appui long, 3 bips), vérifier qu'elle se
+  coupe vraiment. Puis retirer `smoke.alarm_test` du câblage avant de considérer le lot terminé.*
 
 - **Lot 6 — Documentation.** Étendre le principe Cloud Shelly dans CLAUDE.md (« état des prises »
   → « état des prises et des capteurs »), toujours opt-in, jamais silencieux. À propos/Réglages.

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -37,6 +38,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -95,6 +97,8 @@ fun DetailScreen(
     val device by viewModel.device.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
     val sensorStatus by viewModel.sensorStatus.collectAsStateWithLifecycle()
+    val cutoffTargets by viewModel.cutoffTargets.collectAsStateWithLifecycle()
+    val cutoffCandidates by viewModel.cutoffCandidates.collectAsStateWithLifecycle()
     val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
     val pendingThresholdW by viewModel.pendingThresholdW.collectAsStateWithLifecycle()
     val pendingLabel by viewModel.pendingLabel.collectAsStateWithLifecycle()
@@ -213,6 +217,12 @@ fun DetailScreen(
                 SmokeDetectorSection(
                     sensorStatus = sensorStatus,
                     onMute = { viewModel.muteAlarm() },
+                )
+                HorizontalDivider()
+                SmokeCutoffSection(
+                    targets = cutoffTargets,
+                    candidates = cutoffCandidates.filter { it.id != dev.id },
+                    onTargetsChange = { viewModel.setCutoffTargets(it) },
                 )
                 return@Column
             }
@@ -1276,6 +1286,90 @@ private fun SmokeDetectorSection(sensorStatus: SensorStatus, onMute: () -> Unit)
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * Coupure d'une ou plusieurs prises en cas d'alarme réelle (Lot 5, voir SMOKE-DETECTOR.md) —
+ * webhook natif du détecteur → `Switch.Set` direct sur chaque prise visée, **autonome, sans app
+ * ni script** (contrairement au relais ntfy du Lot 4, qui n'avait pas cette option puisque ntfy
+ * exige un POST). Pas de case « activé » séparée de la liste : au moins une prise cochée EST
+ * l'état activé, tout décocher désactive.
+ */
+@Composable
+private fun SmokeCutoffSection(
+    targets: List<DeviceRepository.SmokeCutoffTarget>,
+    candidates: List<Device>,
+    onTargetsChange: (List<DeviceRepository.SmokeCutoffTarget>) -> Unit,
+) {
+    // Replié tant qu'aucune cible n'est configurée ; s'ouvre tout seul dès que la lecture réelle
+    // (fetch) en trouve — jamais géré comme un simple booléen local qui pourrait diverger de ce
+    // que l'appareil a vraiment en mémoire.
+    var expanded by remember { mutableStateOf(targets.isNotEmpty()) }
+    LaunchedEffect(targets) { if (targets.isNotEmpty()) expanded = true }
+    var manualIp by remember { mutableStateOf("") }
+
+    fun toggle(target: DeviceRepository.SmokeCutoffTarget, checked: Boolean) {
+        onTargetsChange(if (checked) targets + target else targets - target)
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(stringResource(R.string.sensor_cutoff_title), style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = stringResource(R.string.sensor_cutoff_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = expanded,
+                onCheckedChange = { checked ->
+                    expanded = checked
+                    if (!checked) onTargetsChange(emptyList())
+                },
+            )
+            Spacer(Modifier.size(8.dp))
+            Text(stringResource(R.string.sensor_cutoff_enable))
+        }
+
+        if (expanded) {
+            for (device in candidates) {
+                val target = DeviceRepository.SmokeCutoffTarget(device.ipAddress, device.switchId)
+                val checked = target in targets
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { toggle(target, !checked) },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = checked, onCheckedChange = { toggle(target, it) })
+                    Text("${device.name} — ${device.ipAddress}", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = manualIp,
+                    onValueChange = { manualIp = it },
+                    label = { Text(stringResource(R.string.sensor_cutoff_manual_ip)) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = {
+                    val ip = manualIp.trim()
+                    if (ip.isNotEmpty()) {
+                        onTargetsChange(targets + DeviceRepository.SmokeCutoffTarget(ip, 0))
+                        manualIp = ""
+                    }
+                }) {
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sensor_cutoff_manual_add))
+                }
+            }
+            Text(
+                text = stringResource(R.string.sensor_cutoff_dhcp_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

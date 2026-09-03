@@ -2230,6 +2230,58 @@ class DeviceRepository @Inject constructor(
         }
     }
 
+    // --- Coupure de prise en cas d'alarme (Lot 5, voir SMOKE-DETECTOR.md) ---
+
+    /** Une cible de coupure : adresse IP + canal (`switchId`) d'une prise à éteindre. */
+    data class SmokeCutoffTarget(val ip: String, val switchId: Int)
+
+    /**
+     * Cibles de coupure actuellement configurées sur [detector] — relues directement depuis ses
+     * webhooks natifs (`Webhook.List`), **jamais stockées côté Hestia** (principe du projet :
+     * aucune configuration d'appareil en propre). Best-effort : liste vide si injoignable ou si
+     * aucune coupure configurée. Un seul hook suffit à connaître la liste actuelle : tous les
+     * événements câblés partagent exactement les mêmes URLs (voir [setSmokeCutoffTargets]).
+     */
+    suspend fun getSmokeCutoffTargets(detector: Device): List<SmokeCutoffTarget> {
+        val (_, result) = withIp(detector) { ip -> rpcClient.webhookList(ip) }
+        val hooks = result.getOrNull()?.hooks.orEmpty().filter { it.name == SMOKE_CUTOFF_WEBHOOK_NAME }
+        return hooks.firstOrNull()?.urls.orEmpty().mapNotNull(::parseSwitchSetUrl)
+    }
+
+    /** Décode `http://<ip>/rpc/Switch.Set?id=<n>&on=false` tel qu'écrit par [setSmokeCutoffTargets], ou `null` si autre chose. */
+    private fun parseSwitchSetUrl(url: String): SmokeCutoffTarget? {
+        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return null
+        if (!uri.path.endsWith("/rpc/Switch.Set")) return null
+        val id = (uri.query ?: return null).split("&")
+            .mapNotNull { it.split("=", limit = 2).takeIf { p -> p.size == 2 } }
+            .firstOrNull { it[0] == "id" }
+            ?.get(1)?.toIntOrNull() ?: return null
+        return SmokeCutoffTarget(uri.host ?: return null, id)
+    }
+
+    /**
+     * Remplace la configuration de coupure sur [detector] par exactement [targets] — repart de
+     * zéro (supprime tout webhook `hestia_smoke_cutoff` existant, en recrée un par événement
+     * câblé si [targets] n'est pas vide). Le webhook natif appelle directement `Switch.Set` sur
+     * chaque prise visée, en GET (comme l'exemple officiel Shelly) — **autonome, sans app ni
+     * script**, contrairement au relais ntfy du Lot 4 qui n'avait pas cette option.
+     */
+    suspend fun setSmokeCutoffTargets(detector: Device, targets: List<SmokeCutoffTarget>): RpcResult<Unit> {
+        val (ip, listResult) = withIp(detector) { i -> rpcClient.webhookList(i) }
+        listResult.errorOrNull()?.let { return it }
+        for (hook in listResult.getOrNull()?.hooks.orEmpty().filter { it.name == SMOKE_CUTOFF_WEBHOOK_NAME }) {
+            rpcClient.webhookDelete(ip, hook.id)
+        }
+        if (targets.isEmpty()) return RpcResult.Success(Unit)
+
+        val urls = targets.map { "http://${it.ip}/rpc/Switch.Set?id=${it.switchId}&on=false" }
+        for (event in SMOKE_CUTOFF_EVENTS) {
+            rpcClient.webhookCreate(ip, cid = 0, event = event, name = SMOKE_CUTOFF_WEBHOOK_NAME, urls = urls)
+                .errorOrNull()?.let { return it }
+        }
+        return RpcResult.Success(Unit)
+    }
+
     // --- Mode démo (captures d'écran, build debug uniquement) ---
 
     suspend fun hasDemoDevices(): Boolean = deviceDao.countDemoDevices() > 0
@@ -2295,5 +2347,17 @@ class DeviceRepository @Inject constructor(
         const val MAX_ENABLED_SCRIPTS_PER_DEVICE = 3
         /** Limite du firmware sur le nombre d'URLs d'un même webhook natif (`Webhook.Create`). */
         const val MAX_RELAY_TARGETS = 5
+
+        // --- Coupure de prise en cas d'alarme (Lot 5, voir SMOKE-DETECTOR.md) ---
+        const val SMOKE_CUTOFF_WEBHOOK_NAME = "hestia_smoke_cutoff"
+
+        /**
+         * **Temporaire** (retour David, 2026-09-03) : inclut `smoke.alarm_test` pour valider le
+         * câblage en conditions réelles avec un appui long, sans attendre une vraie alarme —
+         * jamais souhaité en usage normal (couperait une prise à chaque test mensuel de routine,
+         * l'utilisateur croirait à un bug). **À retirer** (ne garder que `smoke.alarm`) une fois
+         * le test confirmé.
+         */
+        val SMOKE_CUTOFF_EVENTS = listOf("smoke.alarm", "smoke.alarm_test")
     }
 }

@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -47,6 +48,15 @@ class DetailViewModel @Inject constructor(
     /** Sans objet hors détecteur de fumée (`device.type == SMOKE_DETECTOR`) — voir SMOKE-DETECTOR.md. */
     private val _sensorStatus = MutableStateFlow<SensorStatus>(SensorStatus.Loading)
     val sensorStatus: StateFlow<SensorStatus> = _sensorStatus.asStateFlow()
+
+    /** Coupure de prise en cas d'alarme (Lot 5) — cibles actuellement configurées sur le détecteur. */
+    private val _cutoffTargets = MutableStateFlow<List<DeviceRepository.SmokeCutoffTarget>>(emptyList())
+    val cutoffTargets: StateFlow<List<DeviceRepository.SmokeCutoffTarget>> = _cutoffTargets.asStateFlow()
+
+    /** Appareils pouvant servir de cible de coupure (canaux avec relais, jamais le détecteur lui-même). */
+    val cutoffCandidates: StateFlow<List<Device>> = repository.observeDevices()
+        .map { devices -> devices.filter { it.supportsSwitch } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     /** IP effectivement utilisée lors du dernier appel réussi (1ᵉʳ ou 2ᵉ emplacement). */
     private val _activeIp = MutableStateFlow<String?>(null)
@@ -274,6 +284,15 @@ class DetailViewModel @Inject constructor(
         }
     }
 
+    /** Remplace la configuration de coupure (Lot 5) par [targets], puis relit l'état réel appliqué. */
+    fun setCutoffTargets(targets: List<DeviceRepository.SmokeCutoffTarget>) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            repository.setSmokeCutoffTargets(dev, targets)
+            _cutoffTargets.value = repository.getSmokeCutoffTargets(dev)
+        }
+    }
+
     private suspend fun fetch() {
         val dev = repository.getDevice(deviceId) ?: return
         // Détecteur de fumée : chemin entièrement séparé, pas de relais ni de script (voir
@@ -281,6 +300,7 @@ class DetailViewModel @Inject constructor(
         if (dev.type == DeviceType.SMOKE_DETECTOR) {
             _sensorStatus.value = repository.getSensorStatus(dev).toSensorStatus()
             _activeIp.value = repository.activeIp(dev)
+            _cutoffTargets.value = repository.getSmokeCutoffTargets(dev)
             return
         }
         val status = repository.getStatus(dev).toTileStatus()
