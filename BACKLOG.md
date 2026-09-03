@@ -251,6 +251,13 @@ dans l'historique git).
   `lastKnownOutput` sur `devices` reste en base (retrait par `DROP COLUMN` jugé trop risqué sur
   les versions de SQLite embarquées par Android 11, minSdk du projet) mais n'est plus utilisée.
 
+- **Bluetooth en repli du Wi-Fi** (idée du 2026-08-14, écartée le 2026-09-03 sur retour David) :
+  la prise aurait exposé ses méthodes RPC en BLE si le Wi-Fi échoue. Chantier réel (nouveau
+  transport, appairage géré par Android, permissions BLE), jamais engagé.
+- **Tags QR code** (idée du 2026-08-14, écartée le 2026-09-03 sur retour David) : coller un QR
+  code sur un appareil pour lancer sa programmation au scan (deep link). Chantier de taille
+  comparable à ntfy en son temps, jamais engagé.
+
 ## Fonctionnalités futures
 
 - Ajout d'un appareil neuf sans sortir de Hestia (provisioning Wi-Fi direct depuis l'appli) : la
@@ -289,251 +296,36 @@ dans l'historique git).
   au présent laissait penser que rien ne s'était passé). Réglages n'a aucun bouton « Enregistrer »
   littéral (ntfy s'enregistre à la perte de focus, Cloud a « Tester »/« Effacer »).
 
-- **Export/import : la présence n'était plus sauvegardée du tout depuis la fusion Planning/
-  Présence du 2026-08-18 — trouvé le 2026-08-24, corrigé le même jour.** `BackupManager` lisait
-  encore `PresenceConfigDao`/l'entité Room `PresenceConfig`, mais plus rien n'écrivait dans cette
-  table depuis la fusion (la présence vit exclusivement dans le script de l'appareil, comme un
-  planning) — tout export produit depuis le 18/08 avait donc une présence vide, silencieusement.
-  Tranché avec David : suppression complète (`PresenceConfig`/`PresenceConfigDao`/
-  `getPresenceConfig`/`presenceConfigs` dans `BackupFile`, migration Room v15→v16 `DROP TABLE`)
-  plutôt qu'une réécriture en lecture RPC — aligne la présence sur le même principe que planning
-  précis et minuteur bouton (jamais sauvegardés non plus, ils vivent sur l'appareil). Un ancien
-  export portant encore ce champ reste lisible (`ignoreUnknownKeys`), simplement ignoré.
+- **Export/import : la présence n'était plus sauvegardée depuis la fusion Planning/Présence —
+  ✅ fait, corrigé le 2026-08-24.** Table `PresenceConfig` (devenue morte) supprimée ; présence
+  alignée sur planning précis/minuteur bouton, jamais sauvegardés non plus (ils vivent sur
+  l'appareil, pas côté Hestia).
 
-- **Bande vide au-dessus de la barre de navigation basse — signalée par David le 2026-08-24,
-  corrigée le même jour.** Cause trouvée après une seconde capture plus précise : Tableau/
-  Réglages/À propos reprenaient tout `innerPadding` de leur propre `Scaffold` (haut ET bas) alors
-  que le bas est déjà réservé une seule fois par `HestiaApp` pour la barre de navigation
-  partagée — `Scaffold` réserve par défaut un espace bas pour les barres système même sans
-  `bottomBar` propre, doublant l'espacement. Les trois écrans ne reprennent plus que le haut.
+- **Bande vide au-dessus de la barre de navigation basse — ✅ fait, confirmé le 2026-09-03.**
+  Double réservation d'espace bas (chaque écran + `HestiaApp` en plus) ; les trois écrans ne
+  reprennent plus que le haut de leur `innerPadding`.
 
-- **Captures d'écran F-Droid à mettre à jour — demandé par David le 2026-08-24.** L'app a
-  visiblement évolué depuis les dernières captures (`fastlane/metadata/`) — refonte des tuiles,
-  nouveaux libellés d'état, etc. Pas commencé.
+- **Captures d'écran F-Droid — ✅ fait, confirmé le 2026-09-03** (mises à jour FR+EN, 5 au lieu de
+  6 ; bannière retouchée deux fois depuis).
 
-- **Build reproductible — Niveau 1 vérifié le 2026-08-22, suite à une issue Codeberg (#2, ouverte
-  par un tiers).** Relecture de la config au regard du guide F-Droid : versions de dépendances
-  toutes figées (`libs.versions.toml`, aucune plage), Gradle/AGP/Kotlin/KSP en versions exactes,
-  aucun asset PNG/raster (tout en vecteur, pas de souci de compression non-déterministe),
-  `versionCode`/`versionName` déjà en littéraux durs — rien à modifier côté code. Confirmé par un
-  vrai test : deux `./gradlew clean assembleDebug` consécutifs, contenu de l'APK comparé
-  (`diff -rq`, hors `META-INF`) — **identique**. Nuance : test sur la même machine, cache Gradle
-  partiellement réutilisé (le second build n'a réexécuté que 16 tâches sur 42) — pas un « à froid »
-  sur deux machines différentes, mais le résultat (contenu identique) reste la preuve qui compte.
-  **Niveau 2 (upload d'un APK auto-signé par David pour publication F-Droid plus rapide) écarté
-  délibérément** : demanderait de gérer une clé de signature (secret à haute valeur, jamais côté
-  Claude) et une étape manuelle à chaque publication — David ne le souhaite pas vu le rythme de
-  publication actuel. Le vrai goulot ressenti (délai de publication F-Droid) ne serait de toute
-  façon résolu que par le Niveau 2, jamais par le Niveau 1 seul — clarifié explicitement avant de
-  trancher, pour ne pas laisser croire à un gain de rapidité qui n'existe pas.
+- **Build reproductible — ✅ fait (Niveau 1 vérifié le 2026-08-22 : deux builds consécutifs,
+  APK identique).** Niveau 2 (upload d'un APK auto-signé pour publication F-Droid plus rapide)
+  écarté délibérément — gestion de clé de signature que David ne souhaite pas côté Claude.
 
-- **Couper une présence « pour aujourd'hui seulement », sans toucher aux jours suivants — bouton
-  de l'app codé et fait le 2026-08-22 ; bouton physique reste au backlog.** Idée de David : le
-  précédent correctif (le bouton ON/OFF arrête la présence en cas d'appui pendant qu'elle tourne)
-  la coupait pour de bon (retire le canal du script, tous les jours programmés) — trop radical
-  pour « je rentre à la maison, j'éteins pour aujourd'hui ». Exemple donné : présence 10h–19h,
-  retour à la maison à 15h, on coupe pour aujourd'hui seulement, demain ça repart de 10h.
-  - **Bouton de l'app — fait.** `hestia_presence` garde en mémoire vive, par canal, l'heure
-    d'extinction **du jour** déjà tirée au sort (`STATE[i].off[j]`, recalculée chaque nouveau jour
-    par `planDay()` à partir de la config permanente `CFG[i].windows`, jamais touchée). Nouvelle
-    fonction `PresenceScriptGenerator.evalStopToday(switchId)` : ramène `STATE[i].off[j]` à
-    l'instant présent pour la fenêtre en cours puis éteint la prise, via un seul `Script.Eval` —
-    aucune mutation de `CFG`, `planDay` repart de lui-même de la config permanente le lendemain.
-    `DeviceRepository.stopPresenceForToday` / `DashboardViewModel.stopPresenceToday` remplacent
-    l'arrêt définitif comme action du bouton ON/OFF ; l'arrêt définitif
-    (`DeviceRepository.stopPresence`) reste disponible ailleurs (suppression explicite depuis
-    l'écran Détail, `DetailViewModel`, non touchée). Boîte de dialogue et libellés mis à jour en
-    conséquence (« Couper pour aujourd'hui », plus « tous les jours programmés »).
-  - **Rendu tuile clarifié — fait le 2026-08-22, révisé deux fois dans la soirée.** D'abord fait
-    en gardant la couleur indigo (juste le texte changeait, « Présence · désactivée
-    aujourd'hui ») ; David a ensuite demandé l'alignement complet sur Planning (voir ci-dessous) :
-    plus aucune couleur de régime une fois désactivée, juste Actif/Éteint selon l'état réel, avec
-    « Présence désactivée aujourd'hui » en texte fixe sur sa propre ligne
-    (`tile_presence_disabled_today`, `thresholdText`, même mécanique que le seuil) — branche
-    dédiée dans `DeviceTile.toVisual`, prioritaire sur la branche « présence » normale. Mémo local
-    `AppPreferences.isPresenceDisabledToday`/`markPresenceDisabledToday` (clé = date du jour,
-    s'efface tout seul le lendemain — ne couvre que le bouton de l'app, pas encore le bouton
-    physique ci-dessous).
-  - **Bug de fiabilité trouvé et corrigé le 2026-08-22 : la coupure du jour ne survivait pas à
-    un redémarrage du script.** `stopPresenceForToday` mutait `STATE` (via `evalStopToday`) sans
-    jamais réaligner la flash (`Script.PutCode`) — exactement le bug de fond corrigé la veille
-    pour les autres mutations de présence (voir plus haut, « chantier persistance des scripts
-    superviseurs »). Vécu en direct par David : la prise se rallumait d'elle-même après une
-    coupure censée tenir jusqu'au lendemain (confirmé par `counts.switch_on` qui avait bien
-    incrémenté entre deux vérifications). Corrigé en appelant `realignPresenceFlash` juste après
-    la mutation, comme les autres chemins de mutation de présence.
-  - **Écran Détail aligné — fait le 2026-08-22, en repassant derrière.** Le badge du haut et le
-    tag « En cours » de la liste des plannings ignoraient ce mémo (calcul purement horaire,
-    `isActiveNow()` seul) — une présence désactivée pour aujourd'hui s'y affichait quand même
-    comme active. Nouveau `DetailViewModel.isPresenceDisabledToday()` (lecture locale, pas de
-    RPC), branché sur **tous** les usages de `isActiveNow()` de l'écran (badge, tag « En cours »,
-    blocage d'édition, blocage de mise en pause, avertissement de suppression) via un helper local
-    `Planning.isReallyActive()`.
-  - **Bouton physique — fait le 2026-08-22, plus léger que le plan initial.** Le script ne
-    regarde jamais la provenance d'un changement (`source`) — contrairement au minuteur bouton,
-    il compare juste « censé être dans une fenêtre » à « la prise est allumée » et **réimpose**
-    l'état voulu à chaque tick, sans distinguer un appui bouton d'une coupure de courant à
-    corriger. Plan initial (réécrire la logique interne du script partagé, `isButtonSource` +
-    `matchedWindowIdx`) écarté après diagnostic en direct sur la Strip4 (appui physique constaté :
-    coupe le courant, mais rien ne bouge côté app et la prise se rallume au tick suivant, comme
-    prévu) — **abandonné pour une solution plus légère**, repérée en discutant avec David : la
-    différence avec Planning n'est pas la détection (identique, `source` du relevé de 5 s) mais
-    l'action. Détecter suffisait pour Planning (rien ne rallume la prise de son côté) ; pour
-    Présence il faut aussi **déclencher réellement** la coupure, pas juste la mémoriser — mais pas
-    besoin de toucher le script pour ça : `DashboardViewModel` appelle directement
-    `DeviceRepository.stopPresenceForToday` (déjà écrit et validé pour le bouton de l'app) dès
-    qu'il détecte un appui bouton pendant une présence active, avec une garde sur le mémo déjà
-    posé pour ne pas rappeler à chaque cycle. Coûte un vrai aller-retour RPC, mais seulement dans
-    ce cas précis et rare, jamais pour tous les canaux. Détection en ≤5 s (cycle du Tableau) au
-    lieu de ≤60 s si on était passé par le script.
+- **Couper une présence/un planning « pour aujourd'hui seulement » (bouton app et bouton
+  physique) — ✅ fait, testé et validé en conditions réelles (2026-08-22).** N'annule que la
+  fenêtre du jour (`hestia_presence` recalcule seul dès le lendemain), plus l'action définitive
+  (suppression) qui reste inchangée par ailleurs. Planning récurrent traité pareil, sans script
+  impliqué (juste un mémo local le jour même) puisqu'un planning ne dépend d'aucun script Hestia.
 
-- **Même principe étendu à Planning — bouton app **et** bouton physique faits le 2026-08-22, dans
-  la foulée de Présence.** Contrairement à la présence, un planning ne dépend d'aucun script
-  Hestia (juste des programmes cron natifs) : couper manuellement pendant sa plage est déjà sans
-  risque (le programme d'extinction, redondant, ne fait rien de plus). Demande de David : ne plus
-  montrer la couleur « Planifié » (violet) une fois coupé pour aujourd'hui — juste Actif/Éteint
-  selon l'état réel, avec un texte fixe l'indiquant — et couvrir aussi le bouton physique, pas
-  seulement l'app (contrairement à Présence, dont le bouton physique reste un chantier à part
-  ci-dessus). Jamais posé pour un planning **Unique** (pas de « lendemain » à distinguer).
-  - **Détection, sans rien changer côté appareil.** Nouveau champ `TileStatus.Online.source`
-    (déjà dans chaque relevé `Switch.GetStatus`, jamais exposé jusqu'ici) — un appui bouton
-    physique se reconnaît directement dans le cycle de 5 s existant : canal éteint, `source`
-    du genre bouton (`button`/`short_push`/…), et un planning récurrent nominalement actif à cet
-    instant → mémorisé (`AppPreferences.isPlanningDisabledToday`/`markPlanningDisabledToday`,
-    même mécanique date-du-jour que côté présence). Pas de dialogue, pas d'action de l'app : la
-    coupure elle-même est déjà faite par l'appui, on ne fait qu'enregistrer.
-  - **Bouton de l'app** : `DashboardViewModel.toggle` pose le même mémo quand on éteint alors
-    qu'un planning récurrent est en cours — pas de boîte de dialogue de confirmation
-    (contrairement à Présence) puisque l'action est déjà sans risque.
-  - **Rendu** : nouvelle branche prioritaire dans `DeviceTile.toVisual` (avant même le minuteur/
-    présence/planning normal) — tant que le mémo est actif pour aujourd'hui, la tuile bascule sur
-    le libellé/couleur Actif ou Éteint (jamais plus « Planifié » violet), avec « Planning désactivé
-    aujourd'hui » en texte fixe, qu'il soit actuellement allumé ou pas — pour que le texte reste
-    stable même si la prise est rallumée manuellement ensuite.
-    **Retouché après premier essai** : le texte était d'abord concaténé au libellé sur une seule
-    ligne (« Éteint · planning désactivé aujourd'hui », lu comme un charabia par David, et assez
-    long pour pousser l'interrupteur en dessous sur la tuile prise seule) — déplacé sur sa propre
-    ligne via `thresholdText` (même mécanique que le seuil), libellé capitalisé
-    (`tile_planning_disabled_today` = « Planning désactivé aujourd'hui »).
-  - **Écran Détail** : même branchement que pour Présence
-    (`DetailViewModel.isPlanningDisabledToday()`, `Planning.isReallyActive()` étendu).
-
-- **Le seuil configuré n'apparaît pas sur la tuile quand il n'y a pas de décompte — repéré le
-  2026-08-22 en listant tous les états textuels de la tuile pour la refonte graphique envisagée
-  par David.** Deux volets distincts, tranchés séparément :
-  - **Formulation du seuil déjà affiché (cas `Planifié` + décompte) — faite.** Le suffixe brut
-    `· 10 W` prêtait à confusion avec la vraie consommation instantanée affichée juste en dessous
-    sur la tuile. Remplacé par le libellé déjà utilisé ailleurs dans l'app pour ce même réglage
-    (`timer_preset_cutoff_detail`, « Coupure à 10 W ») plutôt qu'un nouveau mot inventé (« seuil »
-    aurait rompu la cohérence avec l'écran Détail) — voir
-    [DeviceTile.kt](app/src/main/java/kapoue/hestia/ui/screens/dashboard/DeviceTile.kt).
-  - **Durée du ON en cours affichée sur « Actif » — Lot 1 codé le 2026-08-22, pas encore
-    testé en direct.** En creusant l'idée de David (retenir l'heure de départ localement), trouvé
-    mieux que ce qui avait été envisagé au départ : `Switch.GetStatus` renvoie déjà
-    `counts.on_time`, un compteur natif cumulant les secondes ON côté appareil, indépendant de
-    l'app. On retient sa valeur à chaque extinction observée (`AppPreferences.setOnTimeBaseline`) ;
-    dès que le canal est vu allumé, la durée du ON en cours = valeur actuelle − dernière valeur
-    retenue à l'extinction — exacte même après une app fermée ou hors réseau entre-temps,
-    contrairement à un horodatage pris à la première ouverture qui voit le canal allumé. Pas de
-    nouvel appel RPC : réutilise `Switch.GetStatus`, déjà relu à chaque cycle de 5 s pour tous les
-    canaux. Nouveau champ `SwitchCounts.onTime` ([RpcModels.kt](app/src/main/java/kapoue/hestia/data/rpc/model/RpcModels.kt)),
-    `TileStatus.Online.onTimeSec` (brut) → `TileUiState.onSinceElapsed` (dérivé, calculé dans
-    `DashboardViewModel.fetch`, référentiel `SystemClock.elapsedRealtime` comme
-    `timerEndsAtElapsed` mais pour un point de départ passé). Affiché « depuis 12:34 » (libellé
-    explicite, `tile_on_since`) plutôt qu'un nombre nu — pour ne pas se lire comme un décompte qui
-    descend, alors que celui-ci grimpe. Couvre tuile prise seule **et** modale du bloc (même
-    `toVisual()` partagé).
-    **Bug remonté en test réel le 2026-08-22, corrigé le jour même** : le point de départ était
-    recalculé à **chaque** cycle de 5 s à partir de la dernière valeur de `on_time` — la précision
-    du compteur natif n'étant pas garantie à la seconde près d'un cycle à l'autre, l'affichage
-    dérivait (le compte à rebours semblait revenir en arrière en rouvrant la modale du bloc), et
-    un « kill » de l'app pouvait le faire repartir de zéro. Corrigé en ne calculant le point de
-    départ (`AppPreferences.onSinceEpoch`, en epoch ms) **qu'une seule fois par allumage** — au
-    premier cycle où le canal est vu allumé avec une référence d'extinction connue — puis en le
-    gelant jusqu'à la prochaine extinction observée. Persisté (epoch, pas `elapsedRealtime`, pour
-    survivre correctement à un « kill » de l'app). Limite acceptée, documentée mais pas résolue :
-    si l'app est fermée pendant un cycle **complet** éteint→rallumé (raté en entier, jamais observé),
-    la durée affichée au retour surestimera en comptant aussi l'allumage précédent manqué — cas
-    rare, pas traité dans ce lot. Autre limite acceptée : rien ne s'affiche tant qu'aucune
-    extinction n'a encore été observée par Hestia pour ce canal (première utilisation, ou après
-    réinstallation).
-
-  - **Faux signalement au passage, corrigé quand même : la grâce de 15 min avant surveillance
-    du seuil n'était dite nulle part — corrigé le 2026-08-22.** David a testé un minuteur « sans
-    limite de durée » (seuil 5 W), constaté que la coupure ne se déclenchait pas et l'a d'abord
-    pris pour un bug — en réalité `ChargeScriptGenerator`/`ButtonTimerScriptGenerator` attendent
-    tous deux 15 min après l'allumage avant de commencer à surveiller la consommation (évite une
-    coupure prématurée le temps qu'un appareil branché commence vraiment à tirer du courant),
-    comportement volontaire déjà en place, jamais communiqué à l'écran. Ajouté une note explicative
-    dans [DurationPickerSheet.kt](app/src/main/java/kapoue/hestia/ui/screens/detail/DurationPickerSheet.kt),
-    affichée dès qu'on active « Sans limite de durée » — un seul composant partagé par les 4 usages
-    (Manuel, Perso ×2, minuteur bouton), donc corrigé partout à la fois.
-
-  - **Valeur du seuil sur « Actif » (Lot 2) — Cas A et Cas B codés, validés en direct et testés
-    depuis l'app le 2026-08-22 (retours pris en compte : espacement seuil/décompte).**
-    - **Cas A — déclenché depuis l'app (Perso/Manuel/toggle) : fait.** Un minuteur « sans limite de
-      durée » lancé depuis l'app passe toujours par le script partagé `hestia_charge`, jamais par
-      `hestia_button_timer` (confirmé en direct : `CFG` du script contenait bien
-      `{switchId,thresholdW,...}` du canal armé). Nouvelle lecture ciblée
-      `ChargeScriptGenerator.evalReadConfig()`/`parseEvalResult()` (juste switchId+seuil, pas le
-      reste de `CFG`) et `DeviceRepository.getActiveChargeThreshold(device)`
-      ([DeviceRepository.kt](app/src/main/java/kapoue/hestia/data/repository/DeviceRepository.kt)).
-    - **Cas B — déclenché par un vrai appui sur le bouton physique : fait.** Contrairement au Cas
-      A, `CFG` de `hestia_button_timer` liste **tous** les canaux configurés pour un futur appui,
-      armés ou non (confirmé en direct sur la Strip4 : 4 canaux dans `CFG`, un seul `armed:true`
-      dans `STATE` au même indice) — `evalReadConfig()` existant (config statique) ne suffisait
-      donc pas, nouvelle lecture dédiée `evalReadArmedThresholds()`/`parseArmedThresholds()` qui
-      croise `CFG[i].thresholdW` et `STATE[i].armed` par indice, et
-      `DeviceRepository.getActiveButtonThreshold(device)`.
-    - **Branchement commun** : les deux fonctions ci-dessus sont appelées depuis
-      `DashboardViewModel` **seulement** pour les canaux « Actif » sans planning ni présence ni
-      décompte connu (le seul cas où ce seuil serait sinon invisible), jamais pour tous les canaux
-      à chaque cycle — Cas A essayé en premier, Cas B en repli (les deux ne sont jamais vrais en
-      même temps pour un canal donné). Résultat fusionné dans `TileUiState.pendingThresholdW`
-      (même champ que pour un minuteur avec durée, une seule source pour `DeviceTile`). Affiché
-      sur sa propre ligne, jamais concaténé au décompte — la combinaison sur une seule ligne
-      (« Actif · depuis 12:34 · Coupure à 5 W ») entrait en collision avec l'interrupteur sur la
-      tuile prise seule (retour David, 2026-08-22) :
-      ```
-      Actif · depuis 12:34
-      Coupure à 5 W
-      ```
-    - **Trouvé au passage, fait le 2026-08-22 : un planning avec coupure sur seuil n'affichait
-      que l'horaire sur la tuile.** La donnée était déjà là (`Planning.cutoffThresholdW`, relue
-      systématiquement par `DeviceRepository.getPlannings` via `Script.GetCode` — fiable ici, ce
-      script-là est un one-shot jamais modifié par `Eval` après son premier déploiement,
-      contrairement aux superviseurs partagés) : juste jamais affichée. Pur ajout d'affichage dans
-      la branche `activePlanning != null` de `DeviceTile.toVisual`, aucune nouvelle lecture réseau.
-
-  - **Refonte des couleurs/libellés d'état — faite le 2026-08-22, en discutant de la valeur du
-    seuil ci-dessus.** David a repéré une incohérence en testant : un minuteur natif en cours
-    (bouton avec durée, ou Perso/Manuel) était étiqueté « Planifié » comme un vrai planning —
-    alors que pour lui « Planification » ne veut dire qu'une chose : un début et une fin décidés
-    **à l'avance**, jamais un minuteur lancé maintenant. Ça expliquait aussi une remarque
-    précédente sur la couleur orange, perçue comme une alerte.
-    - **Minuteur natif en cours reclassé « Actif »** (vert), qu'il ait une durée (décompte) ou
-      pas (déjà fait juste avant, seuil sans durée) — les deux se rejoignent enfin sous le même
-      libellé, cohérent avec la définition de David. Seul un vrai planning (`activePlanning`)
-      garde « Planifié ».
-    - **Présence et Planifié, jusque-là même couleur (orange, `timedText`), séparés en deux
-      teintes distinctes** — maquettes comparées en direct avec David (Bleu/Turquoise/Violet/Rose
-      pour Présence, Violet/Rose/Indigo/Ambre pour Planifié) : retenu **indigo pour Présence**
-      (`presenceLed`/`presenceText`, `#378ADD`/`#0C447C` en clair) et **violet pour Planifié**
-      (`plannedLed`/`plannedText`, `#7F77DD`/`#534AB7` en clair) — `StateColors.kt`
-      ([StateColors.kt](app/src/main/java/kapoue/hestia/ui/theme/StateColors.kt)). Valeurs sombres
-      choisies dans la même famille (bleu/violet clairs, cohérents avec le reste de la palette
-      sombre déjà en place) mais pas testées en direct (David est en thème clair). **À vérifier
-      que les deux teintes ne se confondent pas à l'usage réel, sur écran — David a prévenu que
-      c'était son inquiétude principale avant de valider.**
-    - Répercuté sur l'écran Détail (`DetailScreen.PlanningRow`, la mise en avant « En cours »
-      partagée planning/présence choisit maintenant la bonne couleur selon `Planning.isPresence`).
-    - **Effet de bord accepté, pas corrigé ici** : le badge d'état de l'écran Détail
-      (`StatusBadge.kt`, tout en haut de l'écran) a sa propre logique plus simple, un seul état
-      « Minuterie » pour tout minuteur en cours (seuil ou pas, jamais distingué de Planifié à cet
-      endroit) — récupère maintenant la couleur violette de `plannedLed` par simple renommage de
-      champ, sans que ce soit un choix délibéré pour cet endroit précis. Incohérent avec le
-      reclassement « Actif » ci-dessus, mais écran/composant différent, pas demandé, à revoir
-      séparément si ça gêne à l'usage.
+- **Seuil configuré invisible sur la tuile « Actif » sans décompte, durée du ON affichée,
+  couleurs Présence/Planifié distinguées — ✅ fait, testé et validé (2026-08-22).** Deux points
+  laissés ouverts à l'époque, statut à reconfirmer si jamais un doute survient à l'usage :
+  - Les teintes indigo (Présence) / violet (Planifié) ne se sont jamais confondues en usage
+    réel depuis (aucun retour en ce sens en plusieurs semaines d'usage quotidien).
+  - `StatusBadge.kt` (écran Détail, tout en haut) garde un seul état « Minuterie » générique,
+    sans distinguer Actif/Planifié comme le fait la tuile du Tableau — incohérence mineure
+    acceptée à l'époque, jamais gênante depuis, à revoir seulement si ça pose un jour problème.
 
 - **Audit des fonctions RPC de la prise non gérées** par Hestia (mesure d'énergie détaillée,
   métriques cumulées, etc.).
@@ -601,28 +393,6 @@ dans l'historique git).
 - **Lien Liberapay (ou PayPal) dans À propos** (2026-08-14) : un lien de plus à côté de la licence
   GPL, aucun impact vie privée (lien ouvert à la demande de l'utilisateur). Liberapay plutôt que
   PayPal si un seul à choisir — plus dans l'esprit du projet.
-- **Bluetooth en repli du Wi-Fi** (2026-08-14) : la prise expose aussi ses méthodes RPC en Bluetooth
-  Low Energy (trame différente : longueur 4 octets + JSON, découpée par MTU). Le Wi-Fi resterait
-  toujours le chemin par défaut ; en cas d'échec Wi-Fi, message clair « Appareil injoignable en
-  Wi-Fi » avec action explicite « Essayer en Bluetooth » — jamais de bascule automatique invisible
-  (le BLE suppose d'être à portée physique). Chantier réel non trivial : nouveau transport derrière
-  l'abstraction driver existante, appairage BLE géré par Android, connexion avec état (contrairement
-  au Wi-Fi), protocole de trame à écrire et tester, permissions BLE qui varient selon la version
-  Android. **Pas encore testé de bout en bout** — à valider à la main (nRF Connect) avant d'estimer
-  sérieusement l'effort. Priorité modérée : le bouton physique couvre déjà l'essentiel du cas
-  « à portée mais pas de Wi-Fi » pour une prise. Recoupe partiellement le repli cloud (voir « Fait
-  — pour mémoire ») : le cloud couvre déjà le cas « loin de la maison », le Bluetooth couvrirait
-  plutôt « à la maison mais Wi-Fi en panne » — pas le même besoin, garder les deux en tête séparés.
-- **Tags QR code** (2026-08-14) : coller un QR code physique sur un appareil (ex. un Mac) pour
-  lancer directement sa programmation au scan, via un deep link Android (`hestia://tag/<uuid>`).
-  Le tag encode un identifiant opaque, jamais un nom — robuste au renommage. Modèle retenu : des
-  tags pré-générables en lot (utile pour une commande d'impression groupée), associables/
-  réassociables/détachables à une programmation à tout moment sans réimprimer, effaçables
-  définitivement en cas de perte. Génération interne avec logo au centre (bonus, un QR externe doit
-  aussi fonctionner). Chantier de taille comparable à ntfy en son temps — plusieurs lots à prévoir
-  (deep link, cycle de vie des tags, écran de gestion, export PDF pour impression via l'API PDF
-  native Android, pas de nouvelle dépendance nécessaire).
-
 ## Fait — pour mémoire
 
 Points sortis du backlog, avec ce qui a été tranché :
