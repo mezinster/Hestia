@@ -1172,14 +1172,15 @@ private fun AddPlanningDialog(
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                // Coche pendant l'appel réseau (retour David, 2026-08-24) : confirme que le clic a
-                // bien été pris en compte, pendant que le bouton reste désactivé.
+                // Coche + texte au participe passé pendant l'appel réseau (retour David,
+                // 2026-08-24 puis 2026-09-03) : confirme que le clic a bien été pris en compte,
+                // pendant que le bouton reste désactivé.
                 Icon(
                     if (submitting) Icons.Filled.Check else Icons.Filled.Save,
                     contentDescription = null,
                     modifier = Modifier.padding(end = 8.dp),
                 )
-                Text(stringResource(R.string.planning_validate))
+                Text(stringResource(if (submitting) R.string.planning_validate_done else R.string.planning_validate))
             }
         }
     }

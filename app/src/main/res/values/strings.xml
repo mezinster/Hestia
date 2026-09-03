@@ -444,6 +444,7 @@
     <string name="planning_once_day">Day</string>
     <string name="planning_today">Today</string>
     <string name="planning_validate">Save</string>
+    <string name="planning_validate_done">Saved</string>
     <string name="planning_error_range">Start and end must be different.</string>
     <string name="planning_error_no_day">Choose at least one day.</string>
     <string name="planning_error_past">This one-time window is already over. Pick a time in the future.</string>

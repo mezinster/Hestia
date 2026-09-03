@@ -412,6 +412,13 @@ private fun primaryButtonLabel(state: AddEditUiState): String = when {
     else -> stringResource(R.string.add_device_test_and_add)
 }
 
+/**
+ * Types proposés à la création d'un appareil (voir [DeviceTypeDropdown]) — [DeviceType.LAMP] et
+ * [DeviceType.SENSOR] existent dans l'enum mais rien dans Hestia ne les distingue encore d'une
+ * prise classique ; les proposer donnerait l'impression d'un vrai support qui n'existe pas.
+ */
+private val addDeviceSelectableTypes = listOf(DeviceType.PLUG, DeviceType.SMOKE_DETECTOR)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DeviceTypeDropdown(
@@ -437,7 +444,10 @@ private fun DeviceTypeDropdown(
             expanded = expanded,
             onDismissRequest = { expanded = false },
         ) {
-            DeviceType.entries.forEach { type ->
+            // Seuls les types réellement pris en charge par Hestia aujourd'hui (retour David,
+            // 2026-09-03) : LAMP/SENSOR existent dans l'enum mais rien dans l'app ne les distingue
+            // encore d'une prise, autant ne pas les proposer avant qu'ils aient un vrai sens.
+            addDeviceSelectableTypes.forEach { type ->
                 DropdownMenuItem(
                     text = { Text(stringResource(deviceTypeLabel(type))) },
                     onClick = {

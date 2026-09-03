@@ -5,13 +5,13 @@ Dernière mise à jour : 2026-08-22 (correctif d'application immédiate des plan
 ON, seuils et refonte des couleurs d'état publiés en 2.5.0 — republiés en 2.5.1 après un correctif
 de compilation, apostrophe non échappée dans une chaîne anglaise).
 
-## Petits correctifs UI en attente
-
-- **2026-09-01, retour David** : à la création d'un planning, le bouton passe à une coche grisée
-  pour dire « c'est enregistré », mais le texte reste « Enregistrer » — devrait passer à
-  « Enregistré » (accord au participe passé). Pas bloquant, à corriger plus tard.
-
 ## Fait — en cours (à surveiller)
+
+- **Corrigé le 2026-09-03** (retour du 2026-09-01) : à la création d'un planning, le bouton
+  passait à une coche grisée pour dire « c'est enregistré », mais le texte restait « Enregistrer ».
+  Vérifié avant de toucher : le même texte est utilisé à 2 autres endroits (Perso, Modifier
+  l'appareil) mais sans cette transition coche/grisé — seul `planning_validate` avait besoin d'un
+  second texte (`planning_validate_done`, affiché uniquement pendant l'appel réseau).
 
 - **Bug trouvé et corrigé le 2026-08-24, en testant le Lot 3 du conflit bouton/présence (voir plus
   bas) : la détection d'appui bouton se redéclenchait en boucle sur une source périmée, coupant

@@ -867,6 +867,11 @@ class DeviceRepository @Inject constructor(
             existing?.let {
                 rpcClient.scriptStop(ip, it.id)
                 rpcClient.scriptDelete(ip, it.id).errorOrNull()?.let { e -> return e }
+                // Un slot vient de se libérer : le relais peut désormais y avoir sa place (point
+                // laissé en attente le 2026-09-03 — sans ça, il ne revenait que lors du prochain
+                // changement ntfy ou ajout de détecteur, jamais juste parce qu'un réglage a été
+                // retiré ; retour David : « prévoir un retrait aussi à la suppression »).
+                resyncSmokeRelay()
             }
             return RpcResult.Success(Unit)
         }
@@ -968,6 +973,11 @@ class DeviceRepository @Inject constructor(
             existing?.let {
                 rpcClient.scriptStop(ip, it.id)
                 rpcClient.scriptDelete(ip, it.id).errorOrNull()?.let { e -> return e }
+                // Un slot vient de se libérer : le relais peut désormais y avoir sa place (point
+                // laissé en attente le 2026-09-03 — sans ça, il ne revenait que lors du prochain
+                // changement ntfy ou ajout de détecteur, jamais juste parce qu'un réglage a été
+                // retiré ; retour David : « prévoir un retrait aussi à la suppression »).
+                resyncSmokeRelay()
             }
             return RpcResult.Success(Unit)
         }
