@@ -319,16 +319,26 @@ dans l'historique git).
   impliqué (juste un mémo local le jour même) puisqu'un planning ne dépend d'aucun script Hestia.
 
 - **Seuil configuré invisible sur la tuile « Actif » sans décompte, durée du ON affichée,
-  couleurs Présence/Planifié distinguées — ✅ fait, testé et validé (2026-08-22).** Deux points
-  laissés ouverts à l'époque, statut à reconfirmer si jamais un doute survient à l'usage :
-  - Les teintes indigo (Présence) / violet (Planifié) ne se sont jamais confondues en usage
-    réel depuis (aucun retour en ce sens en plusieurs semaines d'usage quotidien).
-  - `StatusBadge.kt` (écran Détail, tout en haut) garde un seul état « Minuterie » générique,
-    sans distinguer Actif/Planifié comme le fait la tuile du Tableau — incohérence mineure
-    acceptée à l'époque, jamais gênante depuis, à revoir seulement si ça pose un jour problème.
+  couleurs Présence/Planifié distinguées — ✅ fait, testé et validé (2026-08-22).** Les deux
+  points laissés ouverts à l'époque sont clos, tous deux confirmés le 2026-09-03 : les teintes
+  indigo/violet ne se sont jamais confondues à l'usage ; `StatusBadge.kt` a en fait été aligné
+  sur `TileStatus.toVisual` (même classification qu'au Tableau) dans un commit ultérieur
+  (`19d74ec`, jamais reflété ici) — l'incohérence n'existe donc plus, code déjà bon.
 
-- **Audit des fonctions RPC de la prise non gérées** par Hestia (mesure d'énergie détaillée,
-  métriques cumulées, etc.).
+- **Audit des fonctions RPC de la prise non gérées par Hestia — première passe faite le
+  2026-09-03, doc officielle `Switch.SetConfig`/`GetConfig` (à confirmer au curl avant de coder,
+  comme toujours).** Piste la plus intéressante trouvée, applicable au matériel possédé (Plug M,
+  Strip4 — champs marqués « shown if applicable », donc pas garanti sur tout modèle) :
+  **protections matérielles natives**, gérées par le firmware lui-même, pas par un script Hestia :
+  - `power_limit` (W) : coupure automatique si dépassement de puissance.
+  - `voltage_limit` / `undervoltage_limit` (V) : coupure si sur/sous-tension.
+  - `current_limit` (A) : coupure si surintensité.
+  - `autorecover_voltage_errors` (bool) : rallume automatiquement une fois l'erreur de tension
+    résorbée, ou reste éteint en attente d'une action manuelle.
+  Différent de la coupure sur seuil actuelle (`hestia_charge`, un script qui surveille et coupe
+  volontairement en usage normal) : ici il s'agirait d'une **protection de sécurité passive**
+  (l'appareil se protège lui-même d'un défaut électrique), pas une automatisation d'usage — deux
+  besoins distincts, pourraient coexister. Rien codé, juste identifié comme piste à creuser.
 - **Historique / graphique de consommation par prise** (2026-08-18) : histogramme ou courbe dans
   le temps, pour repérer visuellement des cycles réguliers (recharge mensuelle d'un scooter
   électrique, d'un Mac...). Pas trivial : l'API RPC classique n'expose qu'un compteur cumulatif
@@ -346,9 +356,10 @@ dans l'historique git).
   2.0.0 ») qui simplifierait le besoin sans qu'Hestia ait à tout stocker lui-même — à vérifier
   avant de partir sur la solution la plus lourde.
 - **Fonctions liées au firmware Shelly 2.0.0 — revue de la doc officielle le 2026-08-21.**
-  Alarmes seuil natives sur EM/EM1/PM1 : toujours en attente (recoupe la coupure sur seuil actuelle,
-  gérée par script maison — à voir si ça la simplifierait ; matériel EM/PM différent d'un Switch
-  classique donc pas garanti applicable).
+  Alarmes seuil natives sur EM/EM1/PM1 : toujours en attente — **David ne possède pas ce matériel**
+  (EM/EM1/PM1 = modèles de mesure d'énergie dédiés, différents d'un Switch/Plug classique comme le
+  Plug M ou la Strip4), idée gardée seulement pour le jour où l'un d'eux entrerait dans le parc.
+  Recouperait la coupure sur seuil actuelle (script maison) — à voir si ça la simplifierait.
   **LED du PowerStrip Gen4 : résolu, confirmé par la doc et par David (Strip4 réellement en Gen4)**
   — le composant `POWERSTRIP_UI` (majuscules) et le schéma `leds.night_mode.{enable,brightness,
   active_between}` sont identiques à ce qui a été validé sur Gen3. Rien à corriger, la LED
