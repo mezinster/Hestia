@@ -1,6 +1,7 @@
 package kapoue.hestia.ui.screens.detail
 
 import android.os.SystemClock
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -99,6 +100,7 @@ fun DetailScreen(
     val sensorStatus by viewModel.sensorStatus.collectAsStateWithLifecycle()
     val cutoffTargets by viewModel.cutoffTargets.collectAsStateWithLifecycle()
     val cutoffCandidates by viewModel.cutoffCandidates.collectAsStateWithLifecycle()
+    val cutoffMessage by viewModel.cutoffMessage.collectAsStateWithLifecycle()
     val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
     val pendingThresholdW by viewModel.pendingThresholdW.collectAsStateWithLifecycle()
     val pendingLabel by viewModel.pendingLabel.collectAsStateWithLifecycle()
@@ -109,6 +111,15 @@ fun DetailScreen(
     val buttonTimerConfig by viewModel.buttonTimerConfig.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Coupure de prise (Lot 5) : la case cochée ne resterait pas cochée si le détecteur est
+    // injoignable au moment du clic, sans ce message on penserait à un bug (retour David, 2026-09-03).
+    LaunchedEffect(cutoffMessage) {
+        cutoffMessage?.let {
+            Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
+            viewModel.consumeCutoffMessage()
+        }
+    }
 
     // Lecture locale pure (pas de RPC), réévaluée à chaque recomposition — donc à jour après
     // chaque relevé, comme les autres États collectés ci-dessus. Une présence désactivée pour

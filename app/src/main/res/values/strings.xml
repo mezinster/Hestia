@@ -254,6 +254,7 @@
     <string name="sensor_cutoff_manual_ip">IP address</string>
     <string name="sensor_cutoff_manual_add">Add</string>
     <string name="sensor_cutoff_dhcp_hint">Reserve a fixed IP for that device from your router (DHCP) rather than a static IP on the device itself.</string>
+    <string name="sensor_cutoff_unreachable">Detector unreachable — wake it up (3 short presses) and try again.</string>
 
     <!-- ntfy relay for smoke detectors (see SMOKE-DETECTOR.md, Lot 4a) — device name is the notification title, these are the body texts, one per native event. -->
     <string name="sensor_relay_body_alarm">Real alarm detected!</string>

@@ -10,10 +10,12 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.navigation.StackedRoutes
 import kapoue.hestia.ui.screens.dashboard.SensorStatus
 import kapoue.hestia.ui.screens.dashboard.TileStatus
@@ -52,6 +54,18 @@ class DetailViewModel @Inject constructor(
     /** Coupure de prise en cas d'alarme (Lot 5) — cibles actuellement configurées sur le détecteur. */
     private val _cutoffTargets = MutableStateFlow<List<DeviceRepository.SmokeCutoffTarget>>(emptyList())
     val cutoffTargets: StateFlow<List<DeviceRepository.SmokeCutoffTarget>> = _cutoffTargets.asStateFlow()
+
+    /**
+     * Message transitoire si la coupure n'a pas pu être enregistrée — quasi toujours parce que le
+     * détecteur dort (contrairement aux prises, jamais en ligne en permanence) : réglage écrit
+     * directement sur ses webhooks natifs, impossible s'il est injoignable à cet instant précis.
+     */
+    private val _cutoffMessage = MutableStateFlow<UserMessage?>(null)
+    val cutoffMessage: StateFlow<UserMessage?> = _cutoffMessage.asStateFlow()
+
+    fun consumeCutoffMessage() {
+        _cutoffMessage.value = null
+    }
 
     /** Appareils pouvant servir de cible de coupure (canaux avec relais, jamais le détecteur lui-même). */
     val cutoffCandidates: StateFlow<List<Device>> = repository.observeDevices()
@@ -284,11 +298,19 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    /** Remplace la configuration de coupure (Lot 5) par [targets], puis relit l'état réel appliqué. */
+    /**
+     * Remplace la configuration de coupure (Lot 5) par [targets], puis relit l'état réel appliqué
+     * (jamais supposé écrit avec succès juste parce que l'appel est parti). Signale un message si
+     * le détecteur n'a pas pu être joint — sinon la case cochée se réinitialiserait sans
+     * explication, comme si le clic n'avait rien fait (retour David, 2026-09-03).
+     */
     fun setCutoffTargets(targets: List<DeviceRepository.SmokeCutoffTarget>) {
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            repository.setSmokeCutoffTargets(dev, targets)
+            val result = repository.setSmokeCutoffTargets(dev, targets)
+            if (result !is RpcResult.Success) {
+                _cutoffMessage.value = UserMessage(R.string.sensor_cutoff_unreachable)
+            }
             _cutoffTargets.value = repository.getSmokeCutoffTargets(dev)
         }
     }
