@@ -1357,6 +1357,28 @@ private fun SmokeCutoffSection(
                     Text("${device.name} — ${device.ipAddress}", style = MaterialTheme.typography.bodyMedium)
                 }
             }
+
+            // Cibles saisies à la main (IP absente de la liste des appareils connus) : sans
+            // ligne dédiée, elles étaient ajoutées mais invisibles — aucun moyen de les voir ni
+            // de les retirer (retour David, 2026-09-03).
+            val knownIps = candidates.map { it.ipAddress to it.switchId }.toSet()
+            val manualTargets = targets.filter { (it.ip to it.switchId) !in knownIps }
+            for (target in manualTargets) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = target.ip,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = { onTargetsChange(targets - target) }) {
+                        Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.sensor_cutoff_manual_remove))
+                    }
+                }
+            }
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = manualIp,

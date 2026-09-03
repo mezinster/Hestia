@@ -249,6 +249,7 @@
     <string name="sensor_cutoff_enable">Activer</string>
     <string name="sensor_cutoff_manual_ip">Adresse IP</string>
     <string name="sensor_cutoff_manual_add">Ajouter</string>
+    <string name="sensor_cutoff_manual_remove">Retirer cette adresse</string>
     <string name="sensor_cutoff_dhcp_hint">Réserve une IP fixe pour cet appareil depuis ta box (DHCP), plutôt qu\'une IP statique sur l\'appareil lui-même.</string>
     <string name="sensor_cutoff_unreachable">Détecteur injoignable — réveille-le (3 appuis brefs) puis réessaie.</string>
 
