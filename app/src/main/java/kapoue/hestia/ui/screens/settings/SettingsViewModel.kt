@@ -259,6 +259,14 @@ class SettingsViewModel @Inject constructor(
                 if (repository.isSmokeRelay(members.first())) relayIds += members.map { it.id }
             }
             _smokeRelayDevices.value = relayIds
+
+            // Recale le bandeau de couverture zéro (Lot 4c) si ce relevé le contredit : un script
+            // relais qui survit à une coupure de courant (enable:true, redémarre seul) peut être
+            // retrouvé ici sans qu'une vraie resynchronisation n'ait eu lieu depuis — sinon le
+            // bandeau resterait affiché à tort (retour David, 2026-09-03). Uniquement dans ce sens
+            // (confirme une couverture retrouvée) : ne fait jamais apparaître le bandeau depuis
+            // cet écran, réservé à la resynchronisation complète (DeviceRepository.resyncSmokeRelay).
+            if (relayIds.isNotEmpty()) repository.confirmSmokeRelayCoverage()
         }
     }
 

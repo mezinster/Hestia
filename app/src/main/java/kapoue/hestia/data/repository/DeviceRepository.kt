@@ -2103,6 +2103,18 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
+     * Corrige directement le bandeau de couverture zéro (Lot 4c) quand un relevé ponctuel (ex.
+     * [isSmokeRelay] depuis Réglages) trouve un relais bien vivant sans passer par une vraie
+     * resynchronisation — un script relais `enable:true` survit à une coupure de courant/réseau
+     * et peut donc être retrouvé alors que le dernier résultat connu datait d'avant (retour David,
+     * 2026-09-03). Ne sert jamais à faire *apparaître* le bandeau, seulement à le faire
+     * disparaître plus tôt qu'attendu.
+     */
+    fun confirmSmokeRelayCoverage() {
+        appPreferences.setSmokeRelayCoverageOk(true)
+    }
+
+    /**
      * Vrai si [device] héberge actuellement le script relais — pour le picto de Réglages (Lot 4b).
      * Relu à chaque fois, jamais mémorisé (peut changer à tout moment par éviction ou
      * redistribution) : un seul `Script.List`, valable pour n'importe quel canal d'un même bloc
