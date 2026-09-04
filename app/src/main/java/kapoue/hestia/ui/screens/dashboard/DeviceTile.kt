@@ -36,7 +36,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -57,8 +59,9 @@ import kapoue.hestia.ui.theme.StateColorSet
 import kapoue.hestia.ui.theme.stateColors
 
 /**
- * Tuile d'un canal sur le Tableau. Cercle inspiré de la vraie prise française (trois trous), teinté selon
- * l'état ; **jamais de couleur seule** : le libellé texte accompagne toujours l'état (SPEC).
+ * Tuile d'un canal sur le Tableau. Cadre carré arrondi + disque intérieur à trois trous, façon
+ * prise française, teinté selon l'état ; **jamais de couleur seule** : le libellé texte
+ * accompagne toujours l'état (SPEC).
  *
  * Deux signaux de couleur distincts, volontairement séparés (2026-08-17) :
  * - l'**anneau** du cercle reflète un fait physique — le courant passe ([TileStatus.Online.output])
@@ -406,42 +409,48 @@ internal data class TileVisual(
 )
 
 /**
- * Cercle inspiré de la vraie prise française (trois trous, comme le picto Material Design Icons
- * "power-socket-fr" — retour David, 2026-09-04, un trou de plus qu'avant en haut du centre) :
- * anneau = fait physique (courant ou non), disque = régime (même couleur que le texte d'état en
- * dessous — Actif vert, Présence indigo, Planifié violet…), lisible même sans lire le texte
- * (retour David, 2026-08-22 : avant ça, le disque suivait aussi le fait physique, aucune
- * distinction visuelle entre les régimes sans lire le texte). Le texte de régime lui-même
- * (« Planifié », compte à rebours…) est affiché par l'appelant sur sa propre ligne, sous le
- * cercle — trop à l'étroit à l'intérieur d'un cercle de 76dp dès qu'il dépassait un mot court
- * (retour de test réel, 2026-08-22).
+ * Cadre carré arrondi + disque intérieur à trois trous, façon prise française — inspiré du picto
+ * Material Design Icons "power-socket-fr" (retour David, 2026-09-04 : la version tout en cercle,
+ * juste 3 trous sans cadre, "n'était pas super belle"). Cadre = fait physique (courant ou non),
+ * disque = régime (même couleur que le texte d'état en dessous — Actif vert, Présence indigo,
+ * Planifié violet…), lisible même sans lire le texte (retour David, 2026-08-22 : avant ça, le
+ * disque suivait aussi le fait physique, aucune distinction visuelle entre les régimes sans lire
+ * le texte). Le texte de régime lui-même (« Planifié », compte à rebours…) est affiché par
+ * l'appelant sur sa propre ligne, sous le cadre — trop à l'étroit à l'intérieur d'un cercle de
+ * 76dp dès qu'il dépassait un mot court (retour de test réel, 2026-08-22).
  */
 @Composable
 private fun PlugCircle(visual: TileVisual) {
     val holeColor = MaterialTheme.colorScheme.surface
     Box(modifier = Modifier.size(76.dp), contentAlignment = Alignment.Center) {
         Canvas(modifier = Modifier.size(76.dp)) {
-            // Anneau doublé quand vert (courant réel) pour rééquilibrer le disque, lui-même
-            // atténué à 70 % d'opacité — sans ça le disque plein paraissait trop présent/appuyé
-            // (retour David, 2026-08-22).
+            // Cadre carré arrondi façon prise française (retour David, 2026-09-04, la version à
+            // 3 trous sans cadre "n'était pas super belle") : l'anneau (fait physique) devient un
+            // rectangle arrondi au lieu d'un cercle, le disque (régime) reste un cercle à
+            // l'intérieur — même principe de double couleur qu'avant, juste une nouvelle forme.
             val strokeWidthPx = (if (visual.ringEmphasis) 4.dp else 2.dp).toPx()
-            val radius = size.minDimension / 2 - strokeWidthPx / 2
-            drawCircle(color = visual.textColor.copy(alpha = 0.7f), radius = radius + strokeWidthPx)
-            drawCircle(
+            val squareSize = size.minDimension - strokeWidthPx
+            val cornerRadiusPx = squareSize * 0.22f
+            val squareTopLeft = Offset((size.width - squareSize) / 2f, (size.height - squareSize) / 2f)
+            val innerCircleRadius = size.minDimension * 0.32f
+            drawCircle(color = visual.textColor.copy(alpha = 0.7f), radius = innerCircleRadius)
+            drawRoundRect(
                 color = visual.ringColor,
-                radius = radius,
+                topLeft = squareTopLeft,
+                size = Size(squareSize, squareSize),
+                cornerRadius = CornerRadius(cornerRadiusPx),
                 style = Stroke(
                     width = strokeWidthPx,
                     pathEffect = if (visual.dashed) PathEffect.dashPathEffect(floatArrayOf(8f, 6f)) else null,
                 ),
             )
             // Un trou au-dessus du centre, deux de part et d'autre à hauteur du centre — même
-            // disposition que le picto de référence, à l'échelle de notre cercle. Toujours
-            // resserrés (pas jusqu'au bord) : les 2 trous d'avant, trop espacés/bas à l'origine,
-            // évoquaient un visage souriant (retour de test réel, 2026-08-17) — la 3ᵉ position en
-            // haut casse cette lecture (plus d'alignement horizontal façon yeux+bouche).
-            val holeRadius = size.minDimension * 0.075f
-            val holeOffset = size.minDimension * 0.22f
+            // disposition que le picto de référence. Toujours resserrés (pas jusqu'au bord) : les
+            // 2 trous d'origine, trop espacés/bas, évoquaient un visage souriant (retour de test
+            // réel, 2026-08-17) — la 3ᵉ position en haut casse cette lecture (plus d'alignement
+            // horizontal façon yeux+bouche).
+            val holeRadius = innerCircleRadius * 0.15f
+            val holeOffset = innerCircleRadius * 0.57f
             drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x, center.y - holeOffset))
             drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x - holeOffset, center.y))
             drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x + holeOffset, center.y))
@@ -678,22 +687,26 @@ private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> U
             .padding(6.dp),
     ) {
         Canvas(modifier = Modifier.size(44.dp)) {
-            // Même équilibrage que PlugCircle : anneau doublé quand vert, disque à 70 % d'opacité.
+            // Même principe que PlugCircle (cadre carré arrondi + disque intérieur, retour David
+            // 2026-09-04), à l'échelle de ce petit cercle.
             val strokeWidthPx = (if (visual.ringEmphasis) 3.dp else 1.5.dp).toPx()
-            val radius = size.minDimension / 2 - strokeWidthPx / 2
-            drawCircle(color = visual.textColor.copy(alpha = 0.7f), radius = radius + strokeWidthPx)
-            drawCircle(
+            val squareSize = size.minDimension - strokeWidthPx
+            val cornerRadiusPx = squareSize * 0.22f
+            val squareTopLeft = Offset((size.width - squareSize) / 2f, (size.height - squareSize) / 2f)
+            val innerCircleRadius = size.minDimension * 0.32f
+            drawCircle(color = visual.textColor.copy(alpha = 0.7f), radius = innerCircleRadius)
+            drawRoundRect(
                 color = visual.ringColor,
-                radius = radius,
+                topLeft = squareTopLeft,
+                size = Size(squareSize, squareSize),
+                cornerRadius = CornerRadius(cornerRadiusPx),
                 style = Stroke(
                     width = strokeWidthPx,
                     pathEffect = if (visual.dashed) PathEffect.dashPathEffect(floatArrayOf(6f, 4f)) else null,
                 ),
             )
-            // Même disposition à 3 trous que PlugCircle (retour David, 2026-09-04), à l'échelle
-            // de ce petit cercle.
-            val holeRadius = size.minDimension * 0.075f
-            val holeOffset = size.minDimension * 0.22f
+            val holeRadius = innerCircleRadius * 0.15f
+            val holeOffset = innerCircleRadius * 0.57f
             drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x, center.y - holeOffset))
             drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x - holeOffset, center.y))
             drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x + holeOffset, center.y))
