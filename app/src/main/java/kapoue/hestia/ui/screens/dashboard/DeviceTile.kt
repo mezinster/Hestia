@@ -57,7 +57,7 @@ import kapoue.hestia.ui.theme.StateColorSet
 import kapoue.hestia.ui.theme.stateColors
 
 /**
- * Tuile d'un canal sur le Tableau. Cercle inspiré de la vraie prise (deux trous), teinté selon
+ * Tuile d'un canal sur le Tableau. Cercle inspiré de la vraie prise française (trois trous), teinté selon
  * l'état ; **jamais de couleur seule** : le libellé texte accompagne toujours l'état (SPEC).
  *
  * Deux signaux de couleur distincts, volontairement séparés (2026-08-17) :
@@ -406,13 +406,15 @@ internal data class TileVisual(
 )
 
 /**
- * Cercle inspiré de la vraie prise (deux trous) : anneau = fait physique (courant ou non),
- * disque = régime (même couleur que le texte d'état en dessous — Actif vert, Présence indigo,
- * Planifié violet…), lisible même sans lire le texte (retour David, 2026-08-22 : avant ça, le
- * disque suivait aussi le fait physique, aucune distinction visuelle entre les régimes sans lire
- * le texte). Le texte de régime lui-même (« Planifié », compte à rebours…) est affiché par
- * l'appelant sur sa propre ligne, sous le cercle — trop à l'étroit à l'intérieur d'un cercle de
- * 76dp dès qu'il dépassait un mot court (retour de test réel, 2026-08-22).
+ * Cercle inspiré de la vraie prise française (trois trous, comme le picto Material Design Icons
+ * "power-socket-fr" — retour David, 2026-09-04, un trou de plus qu'avant en haut du centre) :
+ * anneau = fait physique (courant ou non), disque = régime (même couleur que le texte d'état en
+ * dessous — Actif vert, Présence indigo, Planifié violet…), lisible même sans lire le texte
+ * (retour David, 2026-08-22 : avant ça, le disque suivait aussi le fait physique, aucune
+ * distinction visuelle entre les régimes sans lire le texte). Le texte de régime lui-même
+ * (« Planifié », compte à rebours…) est affiché par l'appelant sur sa propre ligne, sous le
+ * cercle — trop à l'étroit à l'intérieur d'un cercle de 76dp dès qu'il dépassait un mot court
+ * (retour de test réel, 2026-08-22).
  */
 @Composable
 private fun PlugCircle(visual: TileVisual) {
@@ -433,14 +435,16 @@ private fun PlugCircle(visual: TileVisual) {
                     pathEffect = if (visual.dashed) PathEffect.dashPathEffect(floatArrayOf(8f, 6f)) else null,
                 ),
             )
-            // Resserrés et remontés (2026-08-17, retour de test réel) : trop espacés/bas, ils
-            // évoquaient un visage souriant plutôt que les deux trous d'une prise.
-            // Trous à 50 % de la hauteur totale du cercle (= centre vertical) et à ~33 % du
-            // diamètre depuis chaque bord (donc 17 % depuis le centre), comme sur la vraie prise.
+            // Un trou au-dessus du centre, deux de part et d'autre à hauteur du centre — même
+            // disposition que le picto de référence, à l'échelle de notre cercle. Toujours
+            // resserrés (pas jusqu'au bord) : les 2 trous d'avant, trop espacés/bas à l'origine,
+            // évoquaient un visage souriant (retour de test réel, 2026-08-17) — la 3ᵉ position en
+            // haut casse cette lecture (plus d'alignement horizontal façon yeux+bouche).
             val holeRadius = size.minDimension * 0.075f
-            val holeOffsetX = size.minDimension * 0.17f
-            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x - holeOffsetX, center.y))
-            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x + holeOffsetX, center.y))
+            val holeOffset = size.minDimension * 0.22f
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x, center.y - holeOffset))
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x - holeOffset, center.y))
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x + holeOffset, center.y))
         }
         if (visual.loading) {
             CircularProgressIndicator(
@@ -686,12 +690,13 @@ private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> U
                     pathEffect = if (visual.dashed) PathEffect.dashPathEffect(floatArrayOf(6f, 4f)) else null,
                 ),
             )
-            // Trous à 50 % de la hauteur totale du cercle (= centre vertical) et à ~33 % du
-            // diamètre depuis chaque bord (donc 17 % depuis le centre), comme sur la vraie prise.
+            // Même disposition à 3 trous que PlugCircle (retour David, 2026-09-04), à l'échelle
+            // de ce petit cercle.
             val holeRadius = size.minDimension * 0.075f
-            val holeOffsetX = size.minDimension * 0.17f
-            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x - holeOffsetX, center.y))
-            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x + holeOffsetX, center.y))
+            val holeOffset = size.minDimension * 0.22f
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x, center.y - holeOffset))
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x - holeOffset, center.y))
+            drawCircle(color = holeColor, radius = holeRadius, center = Offset(center.x + holeOffset, center.y))
         }
         Spacer(Modifier.height(4.dp))
         Text(
