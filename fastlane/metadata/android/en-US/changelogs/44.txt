@@ -1,0 +1,1 @@
+Version 2.8.0. Dashboard: each outlet's instant power use now also shows on multi-outlet blocks (e.g. Strip 4), not just on a single outlet like before.

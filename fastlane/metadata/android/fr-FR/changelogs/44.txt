@@ -1,0 +1,1 @@
+Version 2.8.0. Tableau : la consommation instantanée de chaque prise s'affiche désormais aussi sur les blocs multi-prises (ex. Strip 4), pas seulement sur une prise seule comme avant.
