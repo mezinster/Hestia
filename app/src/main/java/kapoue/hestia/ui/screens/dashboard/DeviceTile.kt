@@ -661,6 +661,10 @@ private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> U
     val visual = tile.status.toVisual(colors, elapsedNow, tile.presence, activePlanning, tile.pendingThresholdW, tile.onSinceElapsed, tile.presenceDisabledToday, tile.planningDisabledToday)
     // Même logique que PlugCircle : disque = teinte d'état du canal, trous = blanc/surface.
     val holeColor = MaterialTheme.colorScheme.surface
+    // Toujours rendu, même vide (retour David, 2026-09-03) : réserve la même hauteur pour tous
+    // les canaux d'un même bloc, sinon un seul canal actif avec conso déséquilibre visuellement
+    // la ligne (les canaux éteints, sans 3ᵉ ligne, se retrouvent avec un grand vide en dessous).
+    val powerWatts = (tile.status as? TileStatus.Online)?.powerWatts?.takeIf { tile.device.hasPowerMetering }
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -699,6 +703,12 @@ private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> U
         Text(
             text = visual.label,
             color = visual.textColor,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+        )
+        Text(
+            text = powerWatts?.let { formatPower(it) }.orEmpty(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
         )
