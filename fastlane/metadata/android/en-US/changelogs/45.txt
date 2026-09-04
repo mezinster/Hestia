@@ -1,0 +1,1 @@
+Version 2.8.1. Dashboard: each outlet's icon gets a new look — a rounded square frame styled after a real French socket (3 holes), closer to the real thing than before. Purely visual, nothing else changes.

@@ -1,0 +1,1 @@
+Version 2.8.1. Tableau : le picto de chaque prise change d'apparence — cadre carré arrondi façon vraie prise française (3 trous), plus fidèle qu'avant. Purement visuel, rien d'autre ne change.
