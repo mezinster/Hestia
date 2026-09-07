@@ -16,33 +16,58 @@
   <text x="230" y="272" fill="#5A6167" font-size="22" font-family="Helvetica, Arial, sans-serif">Pilotage local, sans cloud ni compte</text>
   <text x="230" y="308" fill="#1B3AAB" font-size="18" font-family="Courier, monospace">GPLv3 · Shelly Gen2+</text>
 
-  <g transform="translate(714,124)">
-    <rect x="0" y="0" width="122" height="106" rx="4" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
-    <circle cx="103" cy="20" r="6" fill="#E8622C"/>
-    <rect x="15" y="43" width="56" height="8" rx="2" fill="#B9B5AB"/>
-    <rect x="15" y="63" width="38" height="8" rx="2" fill="#D2CEC4"/>
-    <rect x="80" y="68" width="27" height="16" rx="3" fill="#E4EFE7"/>
-    <rect x="95" y="70" width="11" height="11" rx="2" fill="#22B04B"/>
+  <!--
+    Tuiles de droite (2026-09-07) : reprend le nouveau picto de prise (cadre carré arrondi + trous,
+    voir DeviceTile.kt/PlugCircle) au lieu de l'ancien cercle plein à 2 points, et ajoute le
+    détecteur de fumée. Disposition en « pyramide » : rangée du haut = 3 états de prise
+    (veille/planifié/actif), rangée du bas = hors-ligne + détecteur, pour montrer d'un coup d'œil
+    la diversité des états sans surcharger la bannière. Couleurs = palette claire de StateColors.kt.
+    Anneau = état physique (allumé/éteint), disque = régime (veille/planifié/actif/hors-ligne),
+    même double codage couleur que dans l'application — pas de couleur seule, cf. la règle CLAUDE.md
+    (ici décoratif, le libellé texte réel est dans l'appli, pas dans cette bannière promotionnelle).
+  -->
+  <g>
+    <!-- Veille (prise éteinte, aucun planning) -->
+    <rect x="596" y="108" width="120" height="104" rx="8" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <rect x="610" y="122" width="48" height="8" rx="2" fill="#C9C5B9"/>
+    <circle cx="656" cy="176" r="17.92" fill="#5A6167" fill-opacity="0.7"/>
+    <rect x="629.3" y="149.3" width="53.4" height="53.4" rx="11.75" fill="none" stroke="#9AA0A8" stroke-width="2.6"/>
+    <circle cx="656" cy="165.79" r="2.69" fill="#FCFBF8"/>
+    <circle cx="645.79" cy="176" r="2.69" fill="#FCFBF8"/>
+    <circle cx="666.21" cy="176" r="2.69" fill="#FCFBF8"/>
 
-    <rect x="140" y="0" width="122" height="106" rx="4" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
-    <circle cx="243" cy="20" r="6" fill="#9AA0A8"/>
-    <rect x="155" y="43" width="48" height="8" rx="2" fill="#B9B5AB"/>
-    <rect x="155" y="63" width="34" height="8" rx="2" fill="#D2CEC4"/>
-    <rect x="220" y="68" width="27" height="16" rx="3" fill="#EDEBE5"/>
-    <rect x="223" y="70" width="11" height="11" rx="2" fill="#9AA0A8"/>
+    <!-- Planifié (éteinte maintenant, anneau gris + disque violet du planning) -->
+    <rect x="730" y="108" width="120" height="104" rx="8" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <rect x="744" y="122" width="48" height="8" rx="2" fill="#C9C5B9"/>
+    <circle cx="790" cy="176" r="17.92" fill="#534AB7" fill-opacity="0.7"/>
+    <rect x="763.3" y="149.3" width="53.4" height="53.4" rx="11.75" fill="none" stroke="#9AA0A8" stroke-width="2.6"/>
+    <circle cx="790" cy="165.79" r="2.69" fill="#FCFBF8"/>
+    <circle cx="779.79" cy="176" r="2.69" fill="#FCFBF8"/>
+    <circle cx="800.21" cy="176" r="2.69" fill="#FCFBF8"/>
 
-    <rect x="0" y="126" width="122" height="106" rx="4" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
-    <circle cx="103" cy="146" r="6" fill="#22B04B"/>
-    <rect x="15" y="169" width="52" height="8" rx="2" fill="#B9B5AB"/>
-    <rect x="15" y="189" width="36" height="8" rx="2" fill="#D2CEC4"/>
-    <rect x="80" y="194" width="27" height="16" rx="3" fill="#E4EFE7"/>
-    <rect x="95" y="196" width="11" height="11" rx="2" fill="#22B04B"/>
+    <!-- Actif (allumée, anneau accentué) -->
+    <rect x="864" y="108" width="120" height="104" rx="8" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <rect x="878" y="122" width="48" height="8" rx="2" fill="#C9C5B9"/>
+    <circle cx="924" cy="176" r="17.92" fill="#178C46" fill-opacity="0.7"/>
+    <rect x="898" y="150" width="52" height="52" rx="11.44" fill="none" stroke="#22B04B" stroke-width="4"/>
+    <circle cx="924" cy="165.79" r="2.69" fill="#FCFBF8"/>
+    <circle cx="913.79" cy="176" r="2.69" fill="#FCFBF8"/>
+    <circle cx="934.21" cy="176" r="2.69" fill="#FCFBF8"/>
 
-    <rect x="140" y="126" width="122" height="106" rx="4" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
-    <circle cx="243" cy="146" r="6" fill="#D8342A"/>
-    <rect x="155" y="169" width="44" height="8" rx="2" fill="#B9B5AB"/>
-    <rect x="155" y="189" width="40" height="8" rx="2" fill="#D2CEC4"/>
-    <rect x="220" y="194" width="27" height="16" rx="3" fill="#EDEBE5"/>
-    <rect x="223" y="196" width="11" height="11" rx="2" fill="#9AA0A8"/>
+    <!-- Hors-ligne (anneau pointillé) -->
+    <rect x="663" y="228" width="120" height="104" rx="8" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <rect x="677" y="242" width="48" height="8" rx="2" fill="#C9C5B9"/>
+    <circle cx="723" cy="296" r="17.92" fill="#C0342B" fill-opacity="0.7"/>
+    <rect x="696.3" y="269.3" width="53.4" height="53.4" rx="11.75" fill="none" stroke="#D8342A" stroke-width="2.6" stroke-dasharray="6,4.5"/>
+    <circle cx="723" cy="285.79" r="2.69" fill="#FCFBF8"/>
+    <circle cx="712.79" cy="296" r="2.69" fill="#FCFBF8"/>
+    <circle cx="733.21" cy="296" r="2.69" fill="#FCFBF8"/>
+
+    <!-- Détecteur de fumée (état normal) — même picto que SmokeDetectorIcon.kt -->
+    <rect x="797" y="228" width="120" height="104" rx="8" fill="#FCFBF8" stroke="#DAD7CE" stroke-width="2"/>
+    <rect x="811" y="242" width="48" height="8" rx="2" fill="#C9C5B9"/>
+    <g transform="translate(834.92,271.92) scale(0.92)" fill="#178C46">
+      <path fill-rule="evenodd" clip-rule="evenodd" d="M25.65 44.6L22.8 43.7L23.5 41.6Q23.9 40.4 23.7 39.05L22.8 36.6Q21.6 34.7 21.33 32.85L21.7 28.8L22.35 26.7L25.2 27.6L24.5 29.7Q24.05 31 24.28 32.3L25.21 34.7Q26.41 36.65 26.66 38.5L26.31 42.5L25.65 44.6ZM16.85 44.6L14 43.7L14.7 41.6Q15.1 40.45 14.9 39.02L14 36.55Q12.8 34.85 12.5 32.83L12.9 28.8L13.55 26.7L16.4 27.6L15.7 29.7Q15.3 31 15.48 32.35L16.41 34.75Q17.61 36.55 17.83 38.52L17.5 42.5L16.85 44.6ZM34.25 44.6L31.4 43.7L32.1 41.6Q32.5 40.45 32.3 39.02L31.4 36.55Q30.2 34.9 29.9 32.83L30.3 28.8L30.95 26.7L33.8 27.6L33.1 29.7Q32.65 31 32.88 32.33L33.8 34.7Q35 36.55 35.25 38.5L34.9 42.5L34.25 44.6ZM9 9V12H39V9H9ZM15.05 15L15.95 18H32.05L32.95 15H15.05ZM15.95 21Q14.95 21 14.17 20.42T13.1 18.9L11.85 15H9Q7.75 15 6.88 14.13T6 12V6H42V12Q42 13.25 41.12 14.13T39 15H36.15L34.65 19.05Q34.3 19.9 33.52 20.45T31.8 21H15.95ZM9 9V12V9Z"/>
+    </g>
   </g>
 </svg>
