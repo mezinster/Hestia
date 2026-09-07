@@ -130,6 +130,30 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
     }
 
     /**
+     * Rattrapage du nom d'un appareil (canal + appareil physique) resté injoignable au moment
+     * d'un renommage ou d'un ajout — un ensemble d'appareils « pas encore confirmés », plutôt
+     * qu'une génération globale comme [isNtfySynced] : le nom d'un appareil n'a aucun lien avec
+     * celui des autres, inutile de tout invalider à chaque renommage. Défaut synchronisé (absent
+     * de l'ensemble) : l'absence d'information ne doit jamais déclencher de requête inutile. Nom
+     * des prises, lot 3, 2026-09-07.
+     */
+    private fun nameUnsyncedSet(): Set<Long> =
+        runCatching { json.decodeFromString<Set<Long>>(prefs.getString(KEY_NAME_UNSYNCED, null) ?: "[]") }
+            .getOrDefault(emptySet())
+
+    fun isNameSynced(deviceId: Long): Boolean = deviceId !in nameUnsyncedSet()
+
+    fun markNameSynced(deviceId: Long) {
+        val updated = nameUnsyncedSet() - deviceId
+        prefs.edit().putString(KEY_NAME_UNSYNCED, json.encodeToString(updated)).apply()
+    }
+
+    fun markNameUnsynced(deviceId: Long) {
+        val updated = nameUnsyncedSet() + deviceId
+        prefs.edit().putString(KEY_NAME_UNSYNCED, json.encodeToString(updated)).apply()
+    }
+
+    /**
      * Dernier résultat connu (best-effort) de [kapoue.hestia.data.repository.DeviceRepository.
      * resyncSmokeRelay] : vrai si au moins un appareil relaie actuellement les détecteurs de
      * fumée vers ntfy. Sert uniquement au bandeau de couverture zéro (Lot 4c) — jamais recalculé
@@ -293,6 +317,7 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_NTFY_GEN = "ntfy_generation"
         const val KEY_NTFY_SYNCED = "ntfy_synced_devices"
         const val KEY_SMOKE_RELAY_SYNCED = "smoke_relay_synced_devices"
+        const val KEY_NAME_UNSYNCED = "name_unsynced_devices"
         const val KEY_SMOKE_RELAY_COVERAGE_OK = "smoke_relay_coverage_ok"
         const val KEY_PENDING_TIMERS = "pending_timers"
         const val KEY_ON_TIME_BASELINE = "on_time_baseline"

@@ -65,6 +65,17 @@ Toute la configuration métier (planifications, `auto_off`, scripts) est stocké
 par le **firmware de l'appareil Shelly lui-même**. Hestia n'est qu'une couche de présentation
 qui envoie des commandes RPC et lit des états.
 
+Exception étroite et volontaire depuis le 2026-09-07 : le **nom** d'un canal et le nom partagé
+de l'appareil physique sont aussi écrits sur l'appareil (`Switch.SetConfig.name` /
+`Sys.SetConfig.device.name`), en plus d'être stockés localement (voir liste ci-dessous) — jamais
+l'inverse. L'appareil reste la source de vérité : Hestia le relit à l'ajout et à chaque passage
+par Réglages, il ne fait qu'y pousser le nom choisi par l'utilisateur, en best-effort silencieux
+si l'appareil est injoignable sur le moment (rattrapé dès qu'il redevient joignable). Objectif :
+que le même nom apparaisse partout — une autre installation d'Hestia, l'appli Shelly officielle,
+le cloud — plutôt qu'un carnet d'adresses isolé par téléphone. Volontairement limité à une pure
+étiquette cosmétique, sans aucun effet sur le comportement de l'appareil : jamais un planning,
+un seuil ou un script.
+
 Conséquences de conception :
 - Une configuration modifiée depuis l'interface web native de l'appareil doit être reflétée
   par Hestia au rafraîchissement suivant. Hestia lit toujours l'état réel de l'appareil,

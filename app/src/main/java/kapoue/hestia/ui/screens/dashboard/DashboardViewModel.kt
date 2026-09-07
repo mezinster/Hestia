@@ -192,6 +192,9 @@ class DashboardViewModel @Inject constructor(
                         // Détaché du cycle de relevé (pas annulé par un tirage manuel suivant).
                         if (tileStatus is TileStatus.Online) {
                             viewModelScope.launch { repository.ntfyCatchUpIfNeeded(device) }
+                            // Rattrapage best-effort du nom (lot 3, nom des prises, 2026-09-07) :
+                            // même principe, détaché du cycle de relevé.
+                            viewModelScope.launch { repository.nameCatchUpIfNeeded(device) }
                         }
                         device.id to tileStatus
                     }
@@ -207,6 +210,8 @@ class DashboardViewModel @Inject constructor(
                             // Détaché du cycle de relevé, même principe que le rattrapage ntfy.
                             if (!sensorResult.viaCloud && sensorResult.result is RpcResult.Success) {
                                 viewModelScope.launch { repository.smokeWebhookCatchUpIfNeeded(device) }
+                                // Rattrapage best-effort du nom (lot 3, nom des prises, 2026-09-07).
+                                viewModelScope.launch { repository.nameCatchUpIfNeeded(device) }
                             }
                             device.id to sensorResult.toSensorStatus()
                         }

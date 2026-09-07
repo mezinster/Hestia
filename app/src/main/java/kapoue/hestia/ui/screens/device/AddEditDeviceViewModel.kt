@@ -392,6 +392,7 @@ class AddEditDeviceViewModel @Inject constructor(
             if (state.isGroupEdit) {
                 // Champs partagés (nom d'appareil, IP, type) appliqués à tous les canaux d'un
                 // coup — jamais le nom de canal individuel, laissé tel quel sur chacun.
+                val deviceNameChanged = state.name.trim() != initialName
                 val outcome = runCatching {
                     repository.updateDeviceGroup(
                         members = groupMembers,
@@ -406,6 +407,10 @@ class AddEditDeviceViewModel @Inject constructor(
                 if (outcome.isFailure) {
                     _uiState.update { it.copy(error = UserMessage(R.string.error_device_exists)) }
                 } else {
+                    // Nom des prises (2026-09-07) : pousse le nouveau nom partagé sur l'appareil
+                    // physique lui-même (Sys.SetConfig), best-effort — jamais le nom de canal
+                    // individuel, laissé tel quel (cf. commentaire ci-dessus).
+                    if (deviceNameChanged) repository.pushPhysicalDeviceName(groupMembers, state.name.trim())
                     _uiState.update { it.copy(done = true) }
                 }
                 return@launch
@@ -429,7 +434,10 @@ class AddEditDeviceViewModel @Inject constructor(
                 // avec le nouveau nom si besoin. Lancé par le dépôt sur sa propre portée (pas
                 // viewModelScope) : l'écran se ferme aussitôt après (voir onDone ci-dessous), ce
                 // qui tuerait la resynchro avant la fin si elle dépendait de ce ViewModel.
-                if (nameChanged) repository.resyncDeviceName(updated)
+                // Appareil mono-canal : nom de canal et nom d'appareil physique sont poussés tous
+                // les deux (ils sont toujours identiques pour ce cas, voir Device.deviceName),
+                // dans le même appel pour n'alimenter qu'un seul indicateur de rattrapage.
+                if (nameChanged) repository.resyncDeviceName(updated, alsoPhysicalName = updated.deviceName)
                 _uiState.update { it.copy(done = true) }
             }
         }

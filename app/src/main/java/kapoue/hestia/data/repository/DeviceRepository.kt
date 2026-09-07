@@ -1778,13 +1778,27 @@ class DeviceRepository @Inject constructor(
     ): Int {
         var basePosition = deviceDao.maxPosition() + 1
         var added = 0
+        // Nom de l'appareil physique : celui déjà configuré sur l'appareil (Sys/Shelly.GetDeviceInfo,
+        // ex. déjà nommé depuis l'appli Shelly ou une autre installation d'Hestia) prime sur le nom
+        // saisi ici, sinon on garde ce dernier — nom des prises, 2026-09-07.
+        val resolvedDeviceName = capabilities.reportedName?.takeIf { it.isNotBlank() } ?: name
+        val needsPhysicalPush = capabilities.reportedName.isNullOrBlank()
+        // (switchId, id, nomDeCanal, fautPousserLeCanal) des canaux effectivement insérés — la
+        // poussée RPC elle-même est différée après la boucle (une seule coroutine séquentielle,
+        // voir plus bas : deux `appScope.launch` concurrents sur le même indicateur de
+        // rattrapage pourraient se marcher dessus et laisser un état « confirmé » trompeur).
+        val insertedChannels = mutableListOf<Triple<Int, Long, String>>()
+        val pushChannel = mutableSetOf<Int>()
         for (switchId in switchIds) {
             if (deviceDao.exists(ip, switchId)) continue
-            val channelName = if (switchIds.size > 1) "$name · ${switchId + 1}" else name
-            deviceDao.insert(
+            // Idem par canal : le nom déjà présent sur l'appareil (Switch.GetConfig.name) prime sur
+            // le générique « <nom saisi> · N », pour ne pas écraser un nom déjà choisi ailleurs.
+            val channelName = capabilities.channelNames[switchId]
+                ?: if (switchIds.size > 1) "$name · ${switchId + 1}" else name
+            val newId = deviceDao.insert(
                 Device(
                     name = channelName,
-                    deviceName = name,
+                    deviceName = resolvedDeviceName,
                     ipAddress = ip,
                     switchId = switchId,
                     type = type,
@@ -1795,11 +1809,86 @@ class DeviceRepository @Inject constructor(
                     position = basePosition,
                 ),
             )
+            insertedChannels += Triple(switchId, newId, channelName)
+            // Nom des prises (2026-09-07) : si ce nom de canal est une nouveauté pour Hestia (pas
+            // déjà lu sur l'appareil ci-dessus), il faudra le pousser dessus.
+            if (capabilities.channelNames[switchId] == null && switchId in capabilities.switchChannels) {
+                pushChannel += switchId
+            }
             basePosition++
             added++
         }
+        if (insertedChannels.isNotEmpty() && (needsPhysicalPush || pushChannel.isNotEmpty())) {
+            appScope.launch {
+                var physicalOk = true
+                if (needsPhysicalPush) {
+                    val anyInserted = Device(
+                        id = insertedChannels.first().second, name = resolvedDeviceName,
+                        deviceName = resolvedDeviceName, ipAddress = ip, switchId = insertedChannels.first().first,
+                        type = type,
+                    )
+                    physicalOk = pushPhysicalName(anyInserted, resolvedDeviceName)
+                }
+                for ((switchId, id, channelName) in insertedChannels) {
+                    val channelOk = if (switchId in pushChannel) {
+                        val inserted = Device(
+                            id = id, name = channelName, deviceName = resolvedDeviceName,
+                            ipAddress = ip, switchId = switchId, type = type, supportsSwitch = true,
+                        )
+                        pushChannelName(inserted)
+                    } else {
+                        true
+                    }
+                    if (physicalOk && channelOk) appPreferences.markNameSynced(id) else appPreferences.markNameUnsynced(id)
+                }
+            }
+        }
         logger.info(DiagnosticLogger.DB, "Ajout appareil $ip : $added canal(aux) sur ${switchIds.size}")
         return added
+    }
+
+    /**
+     * Relit le nom réel de l'appareil physique (Shelly.GetDeviceInfo) et, pour chaque canal
+     * pilotant un relais, son propre nom de canal (Switch.GetConfig) — et resynchronise Room en
+     * silence s'ils diffèrent. **L'appareil fait toujours autorité**, jamais l'inverse : même
+     * principe que pour l'état, jamais de supposition (voir CLAUDE.md). Nom des prises, 2026-09-07.
+     *
+     * [members] doit contenir tous les canaux d'un même appareil physique (même IP) — un seul
+     * appel Shelly.GetDeviceInfo est fait pour le groupe, jamais un par canal. Pour un appareil
+     * mono-canal (détecteur de fumée compris, qui n'a pas de composant Switch), le nom de canal
+     * suit celui de l'appareil physique — cohérent avec [Device.deviceName] « toujours identique
+     * à [Device.name] » pour ce cas.
+     *
+     * Exclut les canaux qui ont un renommage local pas encore confirmé poussé sur l'appareil
+     * (voir [nameCatchUpIfNeeded], lot 3) : sans quoi « l'appareil fait autorité » écraserait à
+     * tort le nom fraîchement choisi par l'utilisateur avant même d'avoir pu le pousser dessus.
+     */
+    suspend fun resyncDeviceNames(members: List<Device>) {
+        val relevant = members.filter { appPreferences.isNameSynced(it.id) }
+        val first = relevant.firstOrNull() ?: return
+        if (first.ipAddress.startsWith(DEMO_IP_PREFIX)) return
+        val (ip, deviceInfoResult) = withIp(first) { candidateIp -> rpcClient.getDeviceInfo(candidateIp) }
+        val physicalName = deviceInfoResult.getOrNull()?.name?.takeIf { it.isNotBlank() }
+        val monoChannel = members.size == 1
+        for (device in relevant) {
+            var updated = device
+            if (physicalName != null && physicalName != updated.deviceName) {
+                updated = updated.copy(deviceName = physicalName)
+            }
+            val channelName = if (device.supportsSwitch) {
+                rpcClient.getSwitchConfig(ip, device.switchId).getOrNull()?.name?.takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+            val resolvedName = channelName ?: physicalName.takeIf { monoChannel }
+            if (resolvedName != null && resolvedName != updated.name) {
+                updated = updated.copy(name = resolvedName)
+            }
+            if (updated != device) {
+                deviceDao.update(updated)
+                logger.info(DiagnosticLogger.DB, "Nom resynchronisé depuis l'appareil : ${device.name} → ${updated.name}")
+            }
+        }
     }
 
     /**
@@ -1813,7 +1902,7 @@ class DeviceRepository @Inject constructor(
      */
     suspend fun addSmokeDetector(name: String, ip: String): Boolean {
         if (deviceDao.exists(ip, 0)) return false
-        deviceDao.insert(
+        val newId = deviceDao.insert(
             Device(
                 name = name,
                 deviceName = name,
@@ -1827,6 +1916,17 @@ class DeviceRepository @Inject constructor(
             ),
         )
         logger.info(DiagnosticLogger.DB, "Ajout détecteur de fumée $ip")
+        // Nom des prises (2026-09-07) : pas de sonde ici, donc pas de nom déjà lu à comparer — on
+        // pousse celui saisi. Best-effort : l'appareil dort la majeure partie du temps, un échec
+        // silencieux ici est normal, rattrapé au prochain réveil ([nameCatchUpIfNeeded], lot 3).
+        appScope.launch {
+            val inserted = Device(id = newId, name = name, deviceName = name, ipAddress = ip, switchId = 0, type = DeviceType.SMOKE_DETECTOR)
+            if (pushPhysicalName(inserted, name)) {
+                appPreferences.markNameSynced(newId)
+            } else {
+                appPreferences.markNameUnsynced(newId)
+            }
+        }
         return true
     }
 
@@ -2039,9 +2139,77 @@ class DeviceRepository @Inject constructor(
      * `viewModelScope.launch` classique se serait fait tuer par la destruction du ViewModel avant
      * la fin, laissant l'ancien nom dans les notifications malgré une attente de plusieurs minutes
      * (bug vécu en direct le 2026-08-19).
+     *
+     * Pousse aussi le nouveau nom sur l'appareil lui-même (Switch.SetConfig.name, nom des prises,
+     * 2026-09-07) — même best-effort silencieux : purement cosmétique, jamais bloquant.
+     *
+     * [alsoPhysicalName] : pour un appareil mono-canal où [Device.name] et [Device.deviceName]
+     * changent ensemble (voir invariant sur [Device.deviceName]), pousse aussi le nom d'appareil
+     * physique (Sys.SetConfig) **dans la même coroutine** que le nom de canal, pour que les deux
+     * réussites/échecs alimentent un seul et même indicateur de rattrapage — deux `appScope.launch`
+     * concurrents sur le même indicateur pourraient se marcher dessus et le laisser à tort
+     * « confirmé ». Laisser à `null` quand seul le nom de canal change (renommage d'un canal au
+     * sein d'un groupe, jamais le nom partagé — voir [SettingsViewModel.renameChannel]).
+     *
+     * En cas d'échec (appareil injoignable au moment du renommage), marque le canal « pas encore
+     * confirmé » : le Tableau le rattrapera de lui-même dès qu'il redeviendra joignable
+     * ([nameCatchUpIfNeeded], lot 3, 2026-09-07) — même principe que [ntfyCatchUpIfNeeded].
      */
-    fun resyncDeviceName(device: Device) {
-        appScope.launch { resyncNtfyForDevice(device) }
+    fun resyncDeviceName(device: Device, alsoPhysicalName: String? = null) {
+        appScope.launch {
+            resyncNtfyForDevice(device)
+            val channelOk = pushChannelName(device)
+            val physicalOk = alsoPhysicalName?.let { pushPhysicalName(device, it) } ?: true
+            if (channelOk && physicalOk) appPreferences.markNameSynced(device.id) else appPreferences.markNameUnsynced(device.id)
+        }
+    }
+
+    /**
+     * Pousse le nom de l'appareil physique (en-tête d'un bloc multi-canaux) sur l'appareil
+     * lui-même (Sys.SetConfig.device.name) — même nom que celui visible depuis l'appli Shelly
+     * officielle ou le cloud. Best-effort et silencieux, même logique que [resyncDeviceName] : un
+     * seul appel RPC pour tout le groupe, jamais un par canal — mais chaque canal du groupe est
+     * marqué (pas seulement le premier), pour que le rattrapage reparte dès que n'importe lequel
+     * d'entre eux redevient joignable. Pour un appareil **mono**-canal, préférer le paramètre
+     * [alsoPhysicalName] de [resyncDeviceName] (une seule coroutine, pas deux concurrentes).
+     */
+    fun pushPhysicalDeviceName(members: List<Device>, name: String) {
+        val first = members.firstOrNull() ?: return
+        if (first.ipAddress.startsWith(DEMO_IP_PREFIX)) return
+        appScope.launch {
+            val ok = pushPhysicalName(first, name)
+            for (member in members) {
+                if (ok) appPreferences.markNameSynced(member.id) else appPreferences.markNameUnsynced(member.id)
+            }
+        }
+    }
+
+    /**
+     * Rattrapage best-effort du nom (canal + appareil physique) resté injoignable au moment d'un
+     * renommage ou d'un ajout : appelé par le Tableau à chaque relevé où l'appareil répond, ne
+     * fait rien s'il est déjà confirmé (évite de le repousser à chaque cycle). Repousse les deux à
+     * la fois plutôt que de retenir lequel avait échoué à l'origine — idempotent, sans effet si
+     * déjà à jour côté appareil. Même principe que [ntfyCatchUpIfNeeded]. Lot 3, 2026-09-07.
+     */
+    suspend fun nameCatchUpIfNeeded(device: Device) {
+        if (appPreferences.isNameSynced(device.id)) return
+        val channelOk = pushChannelName(device)
+        val physicalOk = pushPhysicalName(device, device.deviceName)
+        if (channelOk && physicalOk) appPreferences.markNameSynced(device.id)
+    }
+
+    /** @return vrai si le canal ne pilote pas de relais, ou si le nom a bien été écrit dessus. */
+    private suspend fun pushChannelName(device: Device): Boolean {
+        if (!device.supportsSwitch || device.ipAddress.startsWith(DEMO_IP_PREFIX)) return true
+        val (_, result) = withIp(device) { ip -> rpcClient.switchSetConfigName(ip, device.switchId, device.name) }
+        return result is RpcResult.Success
+    }
+
+    /** @return vrai si le nom de l'appareil physique a bien été écrit dessus. */
+    private suspend fun pushPhysicalName(device: Device, name: String): Boolean {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return true
+        val (_, result) = withIp(device) { ip -> rpcClient.sysSetConfigName(ip, name) }
+        return result is RpcResult.Success
     }
 
     /**

@@ -20,6 +20,7 @@ import kapoue.hestia.data.rpc.model.ScriptPutCodeResult
 import kapoue.hestia.data.rpc.model.ScriptRunResult
 import kapoue.hestia.data.rpc.model.SetConfigResult
 import kapoue.hestia.data.rpc.model.ShellyFullStatus
+import kapoue.hestia.data.rpc.model.SwitchConfigResult
 import kapoue.hestia.data.rpc.model.SwitchSetResult
 import kapoue.hestia.data.rpc.model.SwitchStatusResult
 import kapoue.hestia.data.rpc.model.WebhookCreateResult
@@ -30,9 +31,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -65,6 +68,45 @@ class ShellyRpcClient @Inject constructor(
     /** État complet d'un canal switch. */
     suspend fun getSwitchStatus(ip: String, switchId: Int): RpcResult<SwitchStatusResult> =
         call(ip, "Switch.GetStatus", buildJsonObject { put("id", switchId) }, SwitchStatusResult.serializer())
+
+    /**
+     * Nom du canal tel que configuré sur l'appareil (Switch.GetConfig.name), s'il existe. Appel
+     * ciblé sur un seul canal (léger, comparable à [getSwitchStatus]) — pour resynchroniser le
+     * nom d'un canal déjà connu de Hestia, sans repasser par le plus coûteux Shelly.GetComponents
+     * (réservé à [probe], à l'ajout). Voir SPEC nom des prises, 2026-09-07.
+     */
+    suspend fun getSwitchConfig(ip: String, switchId: Int): RpcResult<SwitchConfigResult> =
+        call(ip, "Switch.GetConfig", buildJsonObject { put("id", switchId) }, SwitchConfigResult.serializer())
+
+    /**
+     * Écrit le nom d'un canal sur l'appareil (Switch.SetConfig.name) — purement cosmétique,
+     * aucun effet sur le comportement du relais. Symétrique de [getSwitchConfig]. Nom des prises,
+     * 2026-09-07.
+     */
+    suspend fun switchSetConfigName(ip: String, switchId: Int, name: String): RpcResult<SetConfigResult> = call(
+        ip,
+        "Switch.SetConfig",
+        buildJsonObject {
+            put("id", switchId)
+            put("config", buildJsonObject { put("name", name) })
+        },
+        SetConfigResult.serializer(),
+    )
+
+    /**
+     * Écrit le nom de l'appareil physique (Sys.SetConfig.device.name) — utilisé pour l'en-tête
+     * d'un bloc multi-canaux et pour les détecteurs de fumée (mono-canal, sans composant Switch).
+     * Même nom que celui visible depuis l'appli Shelly officielle ou le cloud. Nom des prises,
+     * 2026-09-07.
+     */
+    suspend fun sysSetConfigName(ip: String, name: String): RpcResult<SetConfigResult> = call(
+        ip,
+        "Sys.SetConfig",
+        buildJsonObject {
+            put("config", buildJsonObject { put("device", buildJsonObject { put("name", name) }) })
+        },
+        SetConfigResult.serializer(),
+    )
 
     /**
      * Allume ou éteint un canal switch.
@@ -412,6 +454,19 @@ class ShellyRpcClient @Inject constructor(
             .mapNotNull { entry -> SWITCH_KEY.matchEntire(entry.key)?.groupValues?.get(1)?.toIntOrNull() }
             .sorted()
 
+        // Nom déjà configuré sur l'appareil pour chaque canal (Switch.GetConfig.name via le même
+        // Shelly.GetComponents ci-dessus, aucun appel RPC de plus) — sert à proposer le vrai nom
+        // du canal à l'ajout plutôt qu'un générique « <nom saisi> · N » (nom des prises, 2026-09-07).
+        val channelNames = components
+            .mapNotNull { entry ->
+                val switchId = SWITCH_KEY.matchEntire(entry.key)?.groupValues?.get(1)?.toIntOrNull()
+                    ?: return@mapNotNull null
+                val name = (entry.config?.get("name") as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
+                    ?: return@mapNotNull null
+                switchId to name
+            }
+            .toMap()
+
         val hasPowerMetering = components.any { entry ->
             entry.key.startsWith("pm") || entry.key.startsWith("em") ||
                 entry.status?.containsKey("apower") == true
@@ -423,6 +478,7 @@ class ShellyRpcClient @Inject constructor(
                 model = info.model,
                 reportedName = info.name,
                 switchChannels = switchChannels,
+                channelNames = channelNames,
                 // Le moteur de scripts est standard sur Gen2+.
                 hasScripting = generation >= 2,
                 hasPowerMetering = hasPowerMetering,
@@ -440,7 +496,9 @@ class ShellyRpcClient @Inject constructor(
             guard++
             val params = buildJsonObject {
                 put("offset", offset)
-                put("include", buildJsonArray { add("status") })
+                // "config" en plus de "status" : sert à lire le nom déjà configuré sur chaque
+                // canal (nom des prises, 2026-09-07), sans appel RPC dédié.
+                put("include", buildJsonArray { add("status"); add("config") })
             }
             when (val r = call(ip, "Shelly.GetComponents", params, ComponentsResult.serializer())) {
                 is RpcResult.Success -> {

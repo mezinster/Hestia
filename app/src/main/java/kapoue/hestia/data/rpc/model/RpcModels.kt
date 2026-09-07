@@ -96,6 +96,16 @@ data class SetConfigResult(
     @SerialName("restart_required") val restartRequired: Boolean = false,
 )
 
+/**
+ * Réponse de Switch.GetConfig — seul le nom du canal nous intéresse ici (nom des prises, lot
+ * 2026-09-07). Les autres champs (auto_off, power_limit…) ne sont jamais lus par Hestia.
+ */
+@Serializable
+data class SwitchConfigResult(
+    val id: Int = 0,
+    val name: String? = null,
+)
+
 // --- Scripting (simulation de présence, lot 4) ---
 
 /** Réponse de Script.Create. */

@@ -252,6 +252,19 @@ class SettingsViewModel @Inject constructor(
                 _activeIp.value = _activeIp.value + (device.id to repository.activeIp(device))
             }
 
+            // Nom des prises (2026-09-07) : resynchronise le nom de chaque canal (et de l'appareil
+            // physique) depuis l'appareil lui-même, un seul appel par IP — uniquement pour les
+            // appareils physiques dont au moins un canal a répondu, pour ne pas relancer un appel
+            // en pure perte sur un appareil déjà su injoignable. L'appareil fait toujours autorité,
+            // sauf pour un canal qui a un renommage local pas encore confirmé poussé (voir
+            // resyncDeviceNames) : celui-ci est rattrapé dans l'autre sens à la place.
+            for ((_, members) in current.groupBy { it.ipAddress }) {
+                val online = members.filter { _connectivity.value[it.id] == true }
+                if (online.isEmpty()) continue
+                repository.resyncDeviceNames(members)
+                for (device in online) repository.nameCatchUpIfNeeded(device)
+            }
+
             // Picto « relais détecteur de fumée » (Lot 4b) : un seul appel par appareil physique
             // (même IP), jamais par canal individuel — le script relais est partagé par appareil.
             val relayIds = mutableSetOf<Long>()
