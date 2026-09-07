@@ -1,0 +1,1 @@
+Version 2.9.0. Le nom d'une prise (ou d'un bloc multi-prises) est désormais aussi écrit sur l'appareil lui-même, en plus d'être gardé dans Hestia — le même nom apparaît alors sur toutes tes installations d'Hestia, sans avoir à le retaper partout. Purement cosmétique : aucun effet sur le comportement de l'appareil.

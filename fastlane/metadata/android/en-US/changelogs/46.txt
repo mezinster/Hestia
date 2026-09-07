@@ -1,0 +1,1 @@
+Version 2.9.0. An outlet's name (or a multi-outlet block's) is now also written to the device itself, in addition to being kept in Hestia — the same name then shows up across every install of Hestia, instead of retyping it everywhere. Purely cosmetic: no effect on the device's behavior.
