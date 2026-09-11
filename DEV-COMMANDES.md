@@ -6,8 +6,11 @@ Voir aussi `CLAUDE.md` § Compilation et tests pour les commandes de build/lint 
 ## Compiler et récupérer l'APK
 
 ```bash
-cd /Users/david/www/Hestia && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk /tmp/hestia-apk/hestia-$(date +%Y%m%d-%H%M%S).apk && cd /tmp/hestia-apk && ls -t *.apk | head -1
+mkdir -p /tmp/hestia-apk && cd /Users/david/www/Hestia && ./gradlew assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk /tmp/hestia-apk/hestia-$(date +%Y%m%d-%H%M%S).apk && cd /tmp/hestia-apk && ls -t *.apk | head -1
 ```
+
+`mkdir -p` en tête : `/tmp` est vidé au redémarrage du Mac, sans lui la commande échoue avec
+« cd: no such file or directory » (vécu le 2026-09-11).
 
 ## Installer sans câble (David ne branche jamais son téléphone au Mac)
 

@@ -272,7 +272,9 @@ fun DetailScreen(
                         val p = presets.first { it.slot == slot }
                         val label = p.name ?: presetFallbackLabels[slot].orEmpty()
                         if (p.unlimited) {
-                            p.thresholdW?.let { requestStartTimer(null, label, it) }
+                            // p.thresholdW peut être absent (sans aucune limite du tout, retour
+                            // David 2026-09-11) — requestStartTimer sait déjà gérer ce cas.
+                            requestStartTimer(null, label, p.thresholdW)
                         } else {
                             p.durationSeconds?.let { requestStartTimer(it, label, p.thresholdW) }
                         }
@@ -606,8 +608,12 @@ private fun ButtonTimerSection(
                 } else {
                     stringResource(R.string.detail_button_timer_row_label_unlimited)
                 },
-                detail = if (seconds == null) {
-                    stringResource(R.string.timer_preset_unlimited_detail, config.thresholdW ?: 0)
+                detail = if (seconds == null && config.thresholdW != null) {
+                    stringResource(R.string.timer_preset_unlimited_detail, config.thresholdW)
+                } else if (seconds == null) {
+                    // Ni durée ni coupure sur seuil (retour David, 2026-09-11) : l'appui bouton
+                    // allume la prise sans aucune limite automatique.
+                    stringResource(R.string.timer_preset_no_limit_detail)
                 } else if (config.thresholdW != null) {
                     stringResource(R.string.timer_preset_cutoff_detail, config.thresholdW)
                 } else {
@@ -1525,8 +1531,12 @@ private fun TimerSection(
                         } else {
                             stringResource(R.string.timer_preset_row_label, p.name.orEmpty(), durationLabel(p.durationSeconds!!))
                         },
-                        detail = if (p.unlimited) {
-                            stringResource(R.string.timer_preset_unlimited_detail, p.thresholdW ?: 0)
+                        detail = if (p.unlimited && p.thresholdW != null) {
+                            stringResource(R.string.timer_preset_unlimited_detail, p.thresholdW)
+                        } else if (p.unlimited) {
+                            // Ni durée ni coupure sur seuil (retour David, 2026-09-11) : simple
+                            // allumage sans aucune limite automatique.
+                            stringResource(R.string.timer_preset_no_limit_detail)
                         } else if (p.thresholdW != null) {
                             stringResource(R.string.timer_preset_cutoff_detail, p.thresholdW)
                         } else {

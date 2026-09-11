@@ -133,8 +133,10 @@ class DetailViewModel @Inject constructor(
 
     /**
      * Démarre le minuteur (autonome sur l'appareil), puis relit l'état réel. Si [thresholdW] est
-     * fourni, ajoute la coupure sur seuil de consommation. [seconds] null = sans limite de durée
-     * (coupure sur seuil uniquement, [thresholdW] alors obligatoire, imposé côté écran).
+     * fourni, ajoute la coupure sur seuil de consommation. [seconds] null = sans limite de durée.
+     * Les deux peuvent être absents (retour David, 2026-09-11) : la prise s'allume alors sans
+     * aucune limite automatique, ni durée ni coupure — simple allumage, comme la bascule de la
+     * tuile, juste accessible en un tap nommé.
      */
     fun startTimer(seconds: Int?, detail: String, thresholdW: Int? = null) {
         viewModelScope.launch {
@@ -143,7 +145,7 @@ class DetailViewModel @Inject constructor(
                 seconds == null && thresholdW != null -> repository.startUnlimitedChargeTimer(dev, thresholdW)
                 seconds != null && thresholdW != null -> repository.startChargeTimer(dev, seconds, thresholdW, detail)
                 seconds != null -> repository.startTimer(dev, seconds, detail)
-                else -> Unit // sans durée ni seuil : rien à lancer, ne devrait pas arriver (imposé côté écran).
+                else -> repository.userToggle(dev, on = true)
             }
             fetch()
         }
@@ -152,8 +154,8 @@ class DetailViewModel @Inject constructor(
     /**
      * Enregistre (ou remplace) l'un des deux réglages personnalisés du minuteur ([slot] = 1 ou
      * 2) — confort propre à Hestia, jamais envoyé à la prise avant que l'utilisateur ne le lance
-     * via sa puce nommée. [seconds] null = sans limite de durée ([thresholdW] alors obligatoire,
-     * imposé côté écran).
+     * via sa puce nommée. [seconds] null = sans limite de durée ; [thresholdW] null = sans
+     * coupure sur seuil ; les deux peuvent être absents à la fois (retour David, 2026-09-11).
      */
     fun savePreset(slot: Int, name: String, seconds: Int?, thresholdW: Int?) {
         viewModelScope.launch {

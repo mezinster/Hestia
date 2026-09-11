@@ -30,11 +30,13 @@ import kapoue.hestia.ui.components.ValueWheelPicker
 
 /**
  * Sélecteur de durée en bottom sheet : molette heures/minutes, coupure sur seuil optionnelle, et
- * « sans limite de durée » (coupure sur seuil uniquement, alors obligatoire). Réutilisé pour
- * quatre usages distincts (titre/bouton/valeurs initiales fournis par l'appelant) : le minuteur
- * « Manuel » (démarre tout de suite), les deux réglages « Perso » enregistrables (sauvegarde sans
- * rien envoyer à la prise, nommés), et le minuteur du bouton physique. Durée minimale : 1 minute
- * (non applicable en mode sans limite).
+ * « sans limite de durée ». Les deux sont indépendants : durée et seuil peuvent être décochés
+ * ensemble (retour David, 2026-09-11) — la prise s'allume alors sans aucune limite automatique,
+ * ni durée ni coupure, comme un simple allumage depuis la tuile (mais accessible en un tap
+ * nommé). Réutilisé pour quatre usages distincts (titre/bouton/valeurs initiales fournis par
+ * l'appelant) : le minuteur « Manuel » (démarre tout de suite), les deux réglages « Perso »
+ * enregistrables (sauvegarde sans rien envoyer à la prise, nommés), et le minuteur du bouton
+ * physique. Durée minimale : 1 minute (non applicable en mode sans limite).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,7 +60,7 @@ fun DurationPickerSheet(
     var minutes by remember { mutableStateOf(initialMinutes) }
     var showError by remember { mutableStateOf(false) }
     var showNameError by remember { mutableStateOf(false) }
-    var cutoffEnabled by remember { mutableStateOf(initialCutoffEnabled || initialUnlimited) }
+    var cutoffEnabled by remember { mutableStateOf(initialCutoffEnabled) }
     var threshold by remember { mutableStateOf(initialThresholdW) }
     var name by remember { mutableStateOf(initialName) }
     var unlimited by remember { mutableStateOf(initialUnlimited) }
@@ -92,8 +94,9 @@ fun DurationPickerSheet(
                 )
             }
 
-            // Sans limite de durée : seule la coupure sur seuil arrête la prise (uniquement si
-            // l'appareil mesure la puissance — sinon rien ne pourrait jamais l'éteindre).
+            // Sans limite de durée : indépendant de la coupure sur seuil (voir switch suivant) —
+            // les deux peuvent être décochés ensemble, la prise s'allume alors sans aucune limite
+            // automatique (retour David, 2026-09-11).
             if (hasPowerMetering) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -106,12 +109,13 @@ fun DurationPickerSheet(
                     )
                     Switch(
                         checked = unlimited,
-                        onCheckedChange = { unlimited = it; if (it) { cutoffEnabled = true; showError = false } },
+                        onCheckedChange = { unlimited = it; showError = false },
                     )
                 }
                 // Sans ça, le seuil configuré semble ne jamais se déclencher pendant les 15
                 // premières minutes — vécu en test réel, pris pour un bug (retour David, 2026-08-22).
-                if (unlimited) {
+                // Uniquement pertinente si la coupure sur seuil est vraiment active.
+                if (unlimited && cutoffEnabled) {
                     Text(
                         text = stringResource(R.string.duration_picker_unlimited_grace_note),
                         style = MaterialTheme.typography.bodySmall,
@@ -128,7 +132,9 @@ fun DurationPickerSheet(
             }
 
             // Coupure sur seuil de consommation (uniquement si la prise mesure la puissance).
-            // Obligatoire et non désactivable en mode sans limite (voir switch ci-dessus).
+            // Librement combinable avec « sans limite de durée » ci-dessus, décoché y compris :
+            // la prise s'allume alors sans aucune coupure automatique, comme la bascule de la
+            // tuile (retour David, 2026-09-11 — jusque-là imposée en mode sans limite).
             if (hasPowerMetering) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -141,7 +147,6 @@ fun DurationPickerSheet(
                     )
                     Switch(
                         checked = cutoffEnabled,
-                        enabled = !unlimited,
                         onCheckedChange = { cutoffEnabled = it },
                     )
                 }

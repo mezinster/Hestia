@@ -322,6 +322,7 @@
     <string name="timer_preset_cutoff_detail">Cutoff at %1$d W</string>
     <string name="timer_preset_unlimited_detail">Runs until cutoff at %1$d W</string>
     <string name="timer_preset_no_cutoff">No cutoff threshold</string>
+    <string name="timer_preset_no_limit_detail">No limit at all (same as a plain on)</string>
     <string name="timer_preset_delete">Delete preset</string>
     <string name="timer_preset_row_label">%1$s - %2$s</string>
     <string name="timer_preset_delete_confirm_title">Delete this preset?</string>

@@ -76,8 +76,9 @@ data class Device(
     /** Dernier emplacement (1 ou 2) qui a répondu, essayé en premier au prochain appel. Null = 1. */
     val lastWorkingIpSlot: Int? = null,
     /**
-     * Vrai = le 1ᵉʳ réglage Perso n'a pas de limite de durée (coupure sur seuil uniquement,
-     * [presetThresholdW] alors obligatoire). [presetDurationSeconds] reste ignoré dans ce cas.
+     * Vrai = le 1ᵉʳ réglage Perso n'a pas de limite de durée. [presetDurationSeconds] reste
+     * ignoré dans ce cas. [presetThresholdW] peut quand même être absent (retour David,
+     * 2026-09-11) : la prise s'allume alors sans aucune limite automatique, ni durée ni coupure.
      */
     @ColumnInfo(defaultValue = "0")
     val presetUnlimited: Boolean = false,

@@ -1,0 +1,1 @@
+Version 2.10.0. « Active pour » (réglages Perso, minuteur du bouton physique) : « Sans limite de durée » et la coupure sur seuil sont maintenant indépendants — tu peux décocher les deux. La prise s'allume alors sans aucune limite automatique, comme un allumage simple, mais accessible en un tap nommé.

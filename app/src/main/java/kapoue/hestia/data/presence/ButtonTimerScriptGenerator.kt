@@ -49,8 +49,10 @@ object ButtonTimerScriptGenerator {
 
     /**
      * Config d'un canal surveillé par le script. [durationSec] null = sans limite de durée (la
-     * prise reste allumée jusqu'à la coupure sur seuil, [thresholdW] alors obligatoire — imposé
-     * côté appelant). [name] sert uniquement au titre des notifications ntfy de ce canal.
+     * prise reste allumée jusqu'à la coupure sur seuil, si [thresholdW] en pose une). Les deux
+     * peuvent être absents à la fois (retour David, 2026-09-11) : l'appui bouton allume alors la
+     * prise sans aucune limite automatique. [name] sert uniquement au titre des notifications
+     * ntfy de ce canal.
      *
      * [blocked] : plages où un appui bouton ne doit **pas** armer de minuteur (conflit bouton /
      * présence, voir BACKLOG.md § Conflit minuteur bouton / présence, 2026-08-24) — poussées par

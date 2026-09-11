@@ -1,0 +1,1 @@
+Version 2.10.0. "Active for" (personal presets, physical button timer): "No duration limit" and the cutoff threshold are now independent — you can turn both off. The outlet then turns on with no automatic limit at all, same as a plain on, just reachable as a named one-tap shortcut.
