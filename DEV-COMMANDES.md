@@ -19,7 +19,7 @@ le dernier APK arrivé (nom réel conservé au téléchargement) plutôt que la 
 `python3 -m http.server` :
 
 ```bash
-cd /tmp/hestia-apk && python3 ~/.claude/scripts/serve-apk.py 8000 apk Hestia
+cd /tmp/hestia-apk && python3 ~/.claude/scripts/serve-apk.py 8000 apk Hestia /Users/david/www/Hestia/assets/ic_launcher_512.png
 ```
 
 Puis sur le téléphone : `http://192.168.1.140:8000/` (IP du Mac fixée par bail réservé côté box,
