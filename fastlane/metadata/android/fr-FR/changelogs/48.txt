@@ -1,0 +1,1 @@
+Version 2.10.1. Le logo de l'application apparaît maintenant à côté du titre « Hestia » en haut du Tableau. Purement visuel, rien d'autre ne change.

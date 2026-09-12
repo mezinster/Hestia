@@ -1,0 +1,1 @@
+Version 2.10.1. The app's logo now shows next to the "Hestia" title at the top of the Dashboard. Purely visual, nothing else changes.
