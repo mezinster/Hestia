@@ -1,0 +1,1 @@
+Version 2.11.0. Power-threshold cutoff (Active for, schedules, button timer): the notification now shows how long it charged for (e.g. "after 1h32"). Fixed: the quick sheet for an outlet within a multi-outlet block showed a power reading frozen at the moment it opened; it now updates live, same as the tile. Live power draw also now shows on the full Detail screen.

@@ -68,6 +68,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatCountdown
 import kapoue.hestia.core.util.formatDate
+import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.repository.DeviceRepository
@@ -249,6 +250,21 @@ fun DetailScreen(
                 presence = activePresence?.let { PresenceInfo(it.startHour, it.startMinute, it.endHour, it.endMinute) },
                 activePlanning = activePlanning,
             )
+
+            // Consommation instantanée, synchronisée sur le même relevé 5 s que le reste de
+            // l'écran — jusqu'ici absente ici, ce qui donnait l'impression à tort que le seul
+            // nombre visible pendant un minuteur (« Coupure à X W », un seuil fixe, pas une
+            // mesure) était censé varier (retour David, 2026-09-14). Même format que la tuile
+            // du Tableau (formatPower), pour qu'ils affichent toujours la même valeur.
+            if (dev.hasPowerMetering) {
+                (status as? TileStatus.Online)?.powerWatts?.let { watts ->
+                    Text(
+                        text = formatPower(watts),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             if (dev.supportsSwitch) {
                 HorizontalDivider()

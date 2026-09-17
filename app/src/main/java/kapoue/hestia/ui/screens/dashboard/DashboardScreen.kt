@@ -82,7 +82,11 @@ fun DashboardScreen(
     // Bascule demandée sur une prise pilotée par une simulation : en attente de confirmation.
     var pendingToggle by remember { mutableStateOf<PendingToggle?>(null) }
     // Modale rapide d'un canal tapé dans un bloc multi-prises (conso, interrupteur, état).
-    var quickSheetTile by remember { mutableStateOf<TileUiState?>(null) }
+    // Seul l'id est retenu, pas la tuile elle-même (retour David, 2026-09-14) : un TileUiState
+    // figé au moment du tap ne se serait jamais mis à jour ensuite (la conso restait celle du
+    // premier relevé jusqu'à fermer/rouvrir la modale) — on retrouve la tuile à jour dans
+    // uiState.tiles à chaque recomposition à la place, comme pour tout le reste de l'écran.
+    var quickSheetDeviceId by remember { mutableStateOf<Long?>(null) }
 
     // Compteur de secondes pour décrémenter les comptes à rebours localement.
     var elapsedNow by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
@@ -213,7 +217,7 @@ fun DashboardScreen(
                                         groupLabel = tile.groupLabel,
                                         members = members,
                                         elapsedNow = elapsedNow,
-                                        onTapChannel = { quickSheetTile = it },
+                                        onTapChannel = { quickSheetDeviceId = it.device.id },
                                     )
                                 }
                             }
@@ -264,27 +268,33 @@ fun DashboardScreen(
         )
     }
 
-    quickSheetTile?.let { tile ->
-        ChannelQuickSheet(
-            tile = tile,
-            elapsedNow = elapsedNow,
-            onToggle = { turnOn ->
-                // Même règle que la tuile solo : présence active = le bouton coupe la
-                // simulation pour aujourd'hui, jamais un toggle à la place.
-                val running = tile.presence
-                quickSheetTile = null
-                if (running != null) {
-                    pendingToggle = PendingToggle(tile.device, running)
-                } else {
-                    viewModel.toggle(tile.device, turnOn)
-                }
-            },
-            onOpenDetail = {
-                quickSheetTile = null
-                onOpenDetail(tile.device.id)
-            },
-            onDismiss = { quickSheetTile = null },
-        )
+    quickSheetDeviceId?.let { id ->
+        val tile = uiState.tiles.firstOrNull { it.device.id == id }
+        if (tile == null) {
+            // Canal supprimé (ou plus dans la liste) pendant que la modale était ouverte.
+            quickSheetDeviceId = null
+        } else {
+            ChannelQuickSheet(
+                tile = tile,
+                elapsedNow = elapsedNow,
+                onToggle = { turnOn ->
+                    // Même règle que la tuile solo : présence active = le bouton coupe la
+                    // simulation pour aujourd'hui, jamais un toggle à la place.
+                    val running = tile.presence
+                    quickSheetDeviceId = null
+                    if (running != null) {
+                        pendingToggle = PendingToggle(tile.device, running)
+                    } else {
+                        viewModel.toggle(tile.device, turnOn)
+                    }
+                },
+                onOpenDetail = {
+                    quickSheetDeviceId = null
+                    onOpenDetail(tile.device.id)
+                },
+                onDismiss = { quickSheetDeviceId = null },
+            )
+        }
     }
 }
 

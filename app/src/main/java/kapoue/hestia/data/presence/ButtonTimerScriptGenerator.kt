@@ -104,8 +104,10 @@ object ButtonTimerScriptGenerator {
      * [configs] : un élément par canal configuré (les autres canaux de l'appareil, absents de la
      * liste, ne sont pas concernés). [ntfyTopic] non nul = notifie via ntfy à la fin
      * ([ntfyEndBody]) et à une coupure sur seuil ([ntfyCutoffBody]) — texte générique, identique
-     * pour tous les canaux, seul le titre (nom de la prise) varie, résolu à l'exécution. Un appui
-     * bouton qui annule le minuteur en cours (source de nouveau un appui bouton au moment de
+     * pour tous les canaux, seul le titre (nom de la prise) varie, résolu à l'exécution.
+     * [ntfyCutoffBody] n'est qu'un préfixe : la durée de charge écoulée (ex. « 1h32 »), calculée
+     * par le script lui-même à l'exécution (`fmtDur`), y est ajoutée à la suite (2026-09-17). Un
+     * appui bouton qui annule le minuteur en cours (source de nouveau un appui bouton au moment de
      * l'extinction, voir `isButtonSource`) ne notifie jamais — c'est une action manuelle délibérée.
      *
      * Ne sert plus qu'au premier déploiement (aucun script existant, ou existant mais arrêté) ou à
@@ -132,7 +134,12 @@ object ButtonTimerScriptGenerator {
         }
         val cfgArray = configs.joinToString(",\n          ", "[\n          ", "\n        ]") { channelLiteral(it) }
         val notifyEnd = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyEndBody)
-        val notifyCutoff = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyCutoffBody)
+        // Corps dynamique : durationSec (durée de charge écoulée) n'est connu qu'à l'exécution,
+        // passé en paramètre par l'appelant plutôt que recalculé ici (retour David, 2026-09-17) —
+        // voir fmtDur ci-dessous.
+        val notifyCutoff = NtfyScriptSupport.callDynamicTitleAndBody(
+            ntfyTopic, "name", "\"${NtfyScriptSupport.jsString(ntfyCutoffBody)} \" + fmtDur(durationSec)",
+        )
         val stateInit = if (initialStateJson != null) {
             "let STATE = $initialStateJson;"
         } else {
@@ -179,8 +186,17 @@ object ButtonTimerScriptGenerator {
           return false;
         }
 
+        // Durée écoulée depuis l'allumage, format « 1h32 » (≥ 1 h) ou « 45min » (sinon) — pour la
+        // notif de coupure (retour David, 2026-09-17).
+        function fmtDur(sec) {
+          let m = Math.floor(sec / 60);
+          let h = Math.floor(m / 60);
+          m = m % 60;
+          if (h > 0) return h + "h" + (m < 10 ? "0" : "") + m;
+          return m + "min";
+        }
         function notifyEnd(name) { $notifyEnd }
-        function notifyCutoff(name) { $notifyCutoff }
+        function notifyCutoff(name, durationSec) { $notifyCutoff }
 
         Timer.set(1000, true, function () {
           for (let i = 0; i < CFG.length; i++) {
@@ -229,7 +245,7 @@ object ButtonTimerScriptGenerator {
                 if (s.belowSince === null) s.belowSince = now;
                 if (now - s.belowSince >= cfg.belowSec) {
                   Shelly.call("Switch.Set", { id: cfg.switchId, on: false });
-                  notifyCutoff(cfg.name);
+                  notifyCutoff(cfg.name, now - s.onSince);
                   s.armed = false;
                   s.belowSince = null;
                   s.wasOn = false;

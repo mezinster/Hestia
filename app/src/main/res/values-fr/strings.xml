@@ -115,6 +115,10 @@
     <string name="notif_presence_ended">Présence de %1$s à %2$s terminée</string>
     <string name="notif_timer_ended">%1$s terminé</string>
     <string name="notif_cutoff_triggered">Coupure sur seuil de consommation</string>
+    <!-- Préfixe seul : la durée de charge (« 1h32 », « 45min ») est calculée et ajoutée par le
+         script généré lui-même, à l'exécution — jamais connue à la génération. Voir
+         ChargeScriptGenerator/ButtonTimerScriptGenerator. -->
+    <string name="notif_cutoff_triggered_with_duration">Coupure sur seuil de consommation après</string>
     <!-- Variantes ntfy de la présence : plusieurs plages possibles par appareil, la prise ne sait
          pas laquelle a déclenché au moment de la bascule — pas d'horaire, contrairement au planning. -->
     <string name="notif_ntfy_presence_started">Simulation de présence démarrée</string>

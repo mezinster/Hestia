@@ -29,7 +29,9 @@ object ChargeScriptGenerator {
 
     /**
      * [ntfyTopic] non nul = notifie via ntfy quand la coupure se déclenche ([ntfyTitle] = nom de
-     * la prise, [ntfyBody] = texte). Toujours après `Switch.Set`, jamais avant.
+     * la prise, [ntfyBody] = préfixe du texte — la durée de charge écoulée, ex. « 1h32 », est
+     * calculée par le script généré lui-même à l'exécution et ajoutée à la suite, voir `fmtDur`
+     * dans le code généré). Toujours après `Switch.Set`, jamais avant.
      *
      * [ntfyEndBody] non vide = notifie **aussi** quand le minuteur natif arrive à échéance sans
      * que la coupure sur seuil ne se soit jamais déclenchée (cas « allé au bout des X minutes,
@@ -60,7 +62,12 @@ object ChargeScriptGenerator {
         ntfyBody: String = "",
         ntfyEndBody: String = "",
     ): String {
-        val cutoffNtfyStatement = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyBody)
+        // Titre statique (connu à la génération, un script dédié par planning) mais corps
+        // dynamique : la durée de charge n'est calculable qu'à l'exécution, au moment de la
+        // coupure (retour David, 2026-09-17) — voir fmtDur ci-dessous.
+        val cutoffTitleExpr = "\"${NtfyScriptSupport.jsString(ntfyTitle)}\""
+        val cutoffBodyExpr = "\"${NtfyScriptSupport.jsString(ntfyBody)} \" + fmtDur(now - onSince)"
+        val cutoffNtfyStatement = NtfyScriptSupport.callDynamicTitleAndBody(ntfyTopic, cutoffTitleExpr, cutoffBodyExpr)
         val endNtfyStatement = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyEndBody)
         return """
         // Généré par Hestia — coupure sur seuil de consommation
@@ -74,6 +81,15 @@ object ChargeScriptGenerator {
         function stopSelf() {
           Shelly.call("Script.SetConfig", { id: CFG.selfId, config: { enable: false } });
           Shelly.call("Script.Stop", { id: CFG.selfId });
+        }
+        // Durée écoulée depuis l'allumage, format « 1h32 » (≥ 1 h) ou « 45min » (sinon) — pour la
+        // notif de coupure (retour David, 2026-09-17).
+        function fmtDur(sec) {
+          let m = Math.floor(sec / 60);
+          let h = Math.floor(m / 60);
+          m = m % 60;
+          if (h > 0) return h + "h" + (m < 10 ? "0" : "") + m;
+          return m + "min";
         }
 
         Timer.set(1000, true, function () {
@@ -179,6 +195,10 @@ object ChargeScriptGenerator {
      * [configs] contient en pratique un seul canal (celui qui démarre son minuteur). Le script se
      * désactive lui-même dès qu'**aucun** des canaux suivis n'est plus allumé (fin de mission
      * complète) — jamais quand un seul d'entre eux termine.
+     *
+     * [ntfyCutoffBody] : préfixe du texte de la notif de coupure — la durée de charge écoulée
+     * (ex. « 1h32 »), calculée par le script lui-même à l'exécution (`fmtDur`/`notifyCutoff` dans
+     * le code généré), y est ajoutée à la suite (2026-09-17).
      */
     fun generateSupervisor(
         configs: List<ChannelConfig>,
@@ -187,7 +207,11 @@ object ChargeScriptGenerator {
         ntfyCutoffBody: String = "",
     ): String {
         val cfgArray = configs.joinToString(",\n          ", "[\n          ", "\n        ]") { channelLiteral(it) }
-        val notifyCutoffCall = NtfyScriptSupport.callDynamicTitle(ntfyTopic, "name", ntfyCutoffBody)
+        // Corps dynamique : durationSec n'est connu qu'à l'exécution, passé en paramètre par
+        // l'appelant plutôt que recalculé ici (retour David, 2026-09-17) — voir fmtDur ci-dessous.
+        val notifyCutoffCall = NtfyScriptSupport.callDynamicTitleAndBody(
+            ntfyTopic, "name", "\"${NtfyScriptSupport.jsString(ntfyCutoffBody)} \" + fmtDur(durationSec)",
+        )
         val notifyEndCall = NtfyScriptSupport.callDynamicTitleAndBody(ntfyTopic, "name", "body")
         return """
         // Généré par Hestia — coupure sur seuil de consommation (plusieurs canaux)
@@ -202,7 +226,16 @@ object ChargeScriptGenerator {
           Shelly.call("Script.SetConfig", { id: SELF_ID, config: { enable: false } });
           Shelly.call("Script.Stop", { id: SELF_ID });
         }
-        function notifyCutoff(name) { $notifyCutoffCall }
+        // Durée écoulée depuis l'allumage, format « 1h32 » (≥ 1 h) ou « 45min » (sinon) — pour la
+        // notif de coupure (retour David, 2026-09-17).
+        function fmtDur(sec) {
+          let m = Math.floor(sec / 60);
+          let h = Math.floor(m / 60);
+          m = m % 60;
+          if (h > 0) return h + "h" + (m < 10 ? "0" : "") + m;
+          return m + "min";
+        }
+        function notifyCutoff(name, durationSec) { $notifyCutoffCall }
         function notifyEnd(name, body) {
           if (body === "") return;
           $notifyEndCall
@@ -243,7 +276,7 @@ object ChargeScriptGenerator {
               if (s.belowSince === null) s.belowSince = now;
               if (now - s.belowSince >= $BELOW_SEC) {
                 Shelly.call("Switch.Set", { id: cfg.switchId, on: false });
-                notifyCutoff(cfg.name);
+                notifyCutoff(cfg.name, now - s.onSince);
                 s.belowSince = null;
               }
             } else {

@@ -541,7 +541,7 @@ class DeviceRepository @Inject constructor(
         val topic = ntfyTopic()
         val code = ChargeScriptGenerator.generateSupervisor(
             listOf(config), selfId = scriptId, ntfyTopic = topic,
-            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
+            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         // enable=false (2026-08-22) : script transitoire — le minuteur natif qu'il surveille ne
@@ -997,7 +997,7 @@ class DeviceRepository @Inject constructor(
             configs,
             ntfyTopic = topic,
             ntfyEndBody = if (topic != null) context.getString(R.string.notif_button_timer_ended) else "",
-            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
+            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         // enable:true (contrairement au script de coupure d'un planning) : doit redémarrer seul
@@ -1122,7 +1122,7 @@ class DeviceRepository @Inject constructor(
             configs,
             ntfyTopic = topic,
             ntfyEndBody = if (topic != null) context.getString(R.string.notif_button_timer_ended) else "",
-            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
+            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
             initialStateJson = stateJson,
         )
         rpcClient.scriptStop(ip, scriptId).errorOrNull()?.let {
@@ -1406,7 +1406,7 @@ class DeviceRepository @Inject constructor(
         val code = ChargeScriptGenerator.generate(
             switchId, thresholdW, belowSec = 60, selfId = id,
             ntfyTopic = topic, ntfyTitle = ntfyTitle,
-            ntfyBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered) else "",
+            ntfyBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
         )
         rpcClient.scriptPutCode(ip, id, code).errorOrNull()?.let {
             rpcClient.scriptDelete(ip, id)
