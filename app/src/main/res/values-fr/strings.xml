@@ -55,7 +55,7 @@
     <string name="settings_rename_channel">Renommer ce canal</string>
     <string name="settings_rename_channel_title">Renommer ce canal</string>
     <string name="settings_smoke_relay_badge">Relaie les alertes du détecteur de fumée — peut changer automatiquement</string>
-    <string name="settings_smoke_relay_explanation">Cet appareil relaie actuellement les alertes de ton détecteur de fumée.</string>
+    <string name="settings_smoke_relay_explanation">Un détecteur de fumée ne peut pas envoyer ses alertes directement à ntfy : un autre appareil doit les transmettre à sa place. Hestia choisit lui-même lequel, automatiquement — rien à régler. Le picto à côté d\'un nom indique celui qui s\'en charge actuellement ; ça peut changer tout seul si un autre réglage a besoin de la place.</string>
     <string name="delete_group_title">Supprimer cet appareil ?</string>
     <string name="delete_group_message">« %1$s » et ses %2$d canaux seront retirés de Hestia. Ça n\'affecte pas l\'appareil lui-même ni sa configuration.</string>
     <string name="settings_permission_section">Permission réseau local</string>
@@ -156,6 +156,8 @@
     <string name="add_device_ip_location_name_label">Nom (facultatif)</string>
     <string name="add_device_ip_location_edit">Modifier</string>
     <string name="add_device_ip_location_delete">Supprimer</string>
+    <string name="add_device_ip_location_delete_confirm_title">Supprimer cette adresse ?</string>
+    <string name="add_device_ip_location_delete_confirm_message">Elle ne sera vraiment retirée qu\'en tapant Enregistrer en bas de l\'écran.</string>
     <string name="add_device_type_label">Type</string>
     <string name="add_device_led_title">LED</string>
     <string name="add_device_led_hint">Allumée à intensité normale le jour, réduite à 30 % de 22h à 8h. Sur Éteint, elle reste éteinte en permanence.</string>

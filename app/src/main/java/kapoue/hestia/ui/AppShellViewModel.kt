@@ -7,10 +7,13 @@ import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.ui.navigation.SettingsScrollCoordinator
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -26,6 +29,17 @@ class AppShellViewModel @Inject constructor(
 ) : ViewModel() {
 
     /**
+     * Délai de grâce au lancement (retour David, 2026-09-18) : `smokeRelayCoverageOk` est un
+     * dernier résultat **mis en cache**, pas recalculé à l'ouverture — après une coupure réseau
+     * (box éteinte, appareils qui redémarrent…), il peut rester bloqué sur « aucune couverture »
+     * jusqu'à la prochaine resynchronisation réelle (Réglages, ou un appareil qui répond au
+     * Tableau), qui ne s'est peut-être pas encore produite au tout premier affichage. Sans ce
+     * délai, l'utilisateur se prend le bandeau à chaque lancement le temps que ça se corrige tout
+     * seul, même quand la situation réelle est déjà bonne.
+     */
+    private val graceElapsed = MutableStateFlow(false)
+
+    /**
      * Vrai si au moins un détecteur de fumée est présent, ntfy activé, **et** qu'aucun appareil
      * ne peut actuellement relayer ses alertes (dernier résultat connu, voir
      * `AppPreferences.smokeRelayCoverageOk`) — jamais recalculé ici, seulement observé.
@@ -34,12 +48,26 @@ class AppShellViewModel @Inject constructor(
         repository.observeDevices(),
         appPreferences.ntfyEnabled,
         appPreferences.smokeRelayCoverageOk,
-    ) { devices, ntfyEnabled, coverageOk ->
-        ntfyEnabled && !coverageOk && devices.any { it.type == DeviceType.SMOKE_DETECTOR }
+        graceElapsed,
+    ) { devices, ntfyEnabled, coverageOk, grace ->
+        grace && ntfyEnabled && !coverageOk && devices.any { it.type == DeviceType.SMOKE_DETECTOR }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    init {
+        viewModelScope.launch {
+            delay(GRACE_PERIOD_MS)
+            graceElapsed.value = true
+        }
+    }
 
     /** Appelé au clic sur le bandeau, juste avant de naviguer vers Réglages. */
     fun onSmokeRelayBannerClicked() {
         scrollCoordinator.requestScrollToNtfy()
+    }
+
+    private companion object {
+        /** Le temps qu'un premier relevé (Tableau ou Réglages) ait une chance de corriger un
+         * état mis en cache avant la coupure — voir [graceElapsed]. */
+        const val GRACE_PERIOD_MS = 15_000L
     }
 }

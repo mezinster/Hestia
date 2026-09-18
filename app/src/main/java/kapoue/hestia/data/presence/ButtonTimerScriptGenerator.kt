@@ -43,6 +43,25 @@ object ButtonTimerScriptGenerator {
     const val SCRIPT_NAME = "hestia_button_timer"
 
     private const val MARKER = "// hestia_button_timer:"
+
+    /**
+     * Version du format de notification embarqué dans le script (2026-09-17 : ajout de la durée
+     * de charge écoulée). Ce script est **persistant** (`enable:true`, ne se supprime jamais) —
+     * une reconfiguration passe presque toujours par `Script.Eval` sur le script déjà en cours
+     * (voir `DeviceRepository.setButtonTimer`), qui laisse le code déjà chargé strictement intact.
+     * Sans ce marqueur, un script déployé par une version plus ancienne de Hestia garderait son
+     * ancien texte de notif indéfiniment, sans qu'aucune action dans l'appli ne le rattrape jamais
+     * (retour David : « un utilisateur lambda ne va pas redémarrer sa prise pour ça »).
+     * [parseNotifVersion] détecte ce cas pour forcer un vrai redéploiement à la place.
+     */
+    const val NOTIF_VERSION = 1
+    private const val NOTIF_VERSION_MARKER = "// hestia_notif_ver:"
+
+    /** 0 = marqueur absent, donc forcément une version antérieure à son introduction. */
+    fun parseNotifVersion(code: String): Int {
+        val line = code.lineSequence().firstOrNull { it.trimStart().startsWith(NOTIF_VERSION_MARKER) } ?: return 0
+        return line.trim().removePrefix(NOTIF_VERSION_MARKER).trim().toIntOrNull() ?: 0
+    }
     private const val BELOW_SEC = 60
     /** Grâce avant surveillance quand [ChannelConfig.durationSec] est null (sans limite de durée). */
     private const val UNLIMITED_GRACE_SEC = 15 * 60
@@ -148,6 +167,7 @@ object ButtonTimerScriptGenerator {
         return """
         // Généré par Hestia — minuteur déclenché par le bouton physique (plusieurs canaux)
         $MARKER$marker
+        $NOTIF_VERSION_MARKER$NOTIF_VERSION
         let CFG = $cfgArray;
         $stateInit
 

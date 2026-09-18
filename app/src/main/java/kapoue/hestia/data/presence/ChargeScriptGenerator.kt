@@ -2,6 +2,10 @@ package kapoue.hestia.data.presence
 
 import kapoue.hestia.data.notifications.NtfyScriptSupport
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Génère le script de **coupure sur seuil de consommation** (« Active pour … + coupe sous X W »).
@@ -17,6 +21,25 @@ import kotlinx.serialization.json.Json
 object ChargeScriptGenerator {
 
     private const val MARKER = "// hestia_threshold:"
+
+    /**
+     * Version du format de notification embarqué dans le script (2026-09-17 : ajout de la durée
+     * de charge écoulée). Un script superviseur **déjà en cours d'exécution** n'est jamais
+     * réécrit en entier par une simple reconfiguration (`Script.Eval` uniquement, voir
+     * `DeviceRepository.upsertChargeSupervisorChannel`) — sans ce marqueur, un script déployé par
+     * une version plus ancienne de Hestia garderait son ancien texte de notif indéfiniment, sans
+     * qu'aucune action dans l'appli ne le rattrape jamais (retour David : « un utilisateur lambda
+     * ne va pas redémarrer sa prise pour ça »). [parseNotifVersion] détecte ce cas pour forcer un
+     * vrai redéploiement à la place.
+     */
+    const val NOTIF_VERSION = 1
+    private const val NOTIF_VERSION_MARKER = "// hestia_notif_ver:"
+
+    /** 0 = marqueur absent, donc forcément une version antérieure à son introduction. */
+    fun parseNotifVersion(code: String): Int {
+        val line = code.lineSequence().firstOrNull { it.trimStart().startsWith(NOTIF_VERSION_MARKER) } ?: return 0
+        return line.trim().removePrefix(NOTIF_VERSION_MARKER).trim().toIntOrNull() ?: 0
+    }
 
     /**
      * Nom **unique** pour un script de coupure dédié à un planning (jamais partagé, ni entre
@@ -215,6 +238,7 @@ object ChargeScriptGenerator {
         val notifyEndCall = NtfyScriptSupport.callDynamicTitleAndBody(ntfyTopic, "name", "body")
         return """
         // Généré par Hestia — coupure sur seuil de consommation (plusieurs canaux)
+        $NOTIF_VERSION_MARKER$NOTIF_VERSION
         let SELF_ID = $selfId;
         let CFG = $cfgArray;
         let STATE = [];
@@ -344,5 +368,35 @@ object ChargeScriptGenerator {
     fun parseEvalResult(json: String): List<Pair<Int, Int>> {
         val rows = runCatching { Json.decodeFromString<List<List<Int>>>(json) }.getOrNull() ?: return emptyList()
         return rows.mapNotNull { r -> if (r.size < 2) null else r[0] to r[1] }
+    }
+
+    /**
+     * Comme [evalReadConfig], mais lit **tous** les champs de chaque canal suivi — nécessaire pour
+     * reconstruire [ChannelConfig] avant un redéploiement complet (voir [parseFullEvalResult] et
+     * `DeviceRepository.upsertChargeSupervisorChannel`, migration d'un script périmé, 2026-09-17).
+     */
+    fun evalReadFullConfig(): String = """
+        (function () {
+          let r = [];
+          for (let i = 0; i < CFG.length; i++) {
+            r.push([CFG[i].switchId, CFG[i].thresholdW, CFG[i].graceSec, CFG[i].name, CFG[i].endBody]);
+          }
+          return JSON.stringify(r);
+        })();
+    """.trimIndent()
+
+    /** Décode le JSON renvoyé par [evalReadFullConfig] en une liste de [ChannelConfig]. */
+    fun parseFullEvalResult(json: String): List<ChannelConfig> {
+        val rows = runCatching { Json.decodeFromString<JsonArray>(json) }.getOrNull() ?: return emptyList()
+        return rows.mapNotNull { row ->
+            val fields = (row as? JsonArray) ?: return@mapNotNull null
+            if (fields.size < 5) return@mapNotNull null
+            val switchId = fields[0].jsonPrimitive.intOrNull ?: return@mapNotNull null
+            val thresholdW = fields[1].jsonPrimitive.intOrNull ?: return@mapNotNull null
+            val graceSec = fields[2].jsonPrimitive.intOrNull ?: 0
+            val name = fields[3].jsonPrimitive.contentOrNull ?: ""
+            val endBody = fields[4].jsonPrimitive.contentOrNull ?: ""
+            ChannelConfig(switchId, thresholdW, graceSec, name, endBody)
+        }
     }
 }

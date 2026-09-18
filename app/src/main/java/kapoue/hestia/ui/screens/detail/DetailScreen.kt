@@ -199,7 +199,10 @@ fun DetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(device?.name ?: "") },
+                // Pas de titre ici (retour David, 2026-09-17) : DeviceHeader juste en dessous
+                // affiche déjà le nom, en plus visible (icône + IP + modèle) — le répéter ici
+                // faisait doublon pur, sans rien apporter de plus.
+                title = {},
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

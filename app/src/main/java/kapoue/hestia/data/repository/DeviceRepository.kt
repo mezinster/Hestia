@@ -506,26 +506,43 @@ class DeviceRepository @Inject constructor(
     /**
      * Ajoute [config] au script superviseur partagé de coupure sur seuil, ou le remplace s'il
      * suivait déjà ce canal (nouveau minuteur relancé dessus). **Ne touche jamais** aux autres
-     * canaux déjà surveillés : si le script tourne déjà, la mutation passe par `Script.Eval`
-     * (mémoire du script inchangée pour tout le reste, voir [ChargeScriptGenerator]) — seul un
-     * premier déploiement (aucun script, ou existant mais arrêté) réécrit le code en dur, ce qui
-     * est sans risque puisqu'il n'y a alors rien d'autre en cours à préserver.
+     * canaux déjà surveillés : si le script tourne déjà **et** est à jour, la mutation passe par
+     * `Script.Eval` (mémoire du script inchangée pour tout le reste, voir [ChargeScriptGenerator])
+     * — seul un premier déploiement (aucun script, existant mais arrêté, ou périmé — voir
+     * [ChargeScriptGenerator.parseNotifVersion]) réécrit le code en dur.
      */
     private suspend fun upsertChargeSupervisorChannel(ip: String, config: ChargeScriptGenerator.ChannelConfig): RpcResult<Unit> {
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
         val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME }
 
+        // Script périmé (généré par une version de Hestia antérieure à l'ajout de la durée de
+        // charge dans la notif, 2026-09-17) : Script.Eval laisserait l'ancien texte en place
+        // indéfiniment, aucune action dans l'appli ne le rattraperait jamais autrement (retour
+        // David : « un utilisateur lambda ne va pas redémarrer sa prise pour ça »). On relit sa
+        // config complète pendant qu'il tourne encore (Eval fonctionne, PutCode non), pour ne rien
+        // perdre des autres canaux déjà suivis, puis on force un redéploiement complet ci-dessous.
+        var otherChannels = emptyList<ChargeScriptGenerator.ChannelConfig>()
+        var stale = false
         if (existing != null && existing.running) {
-            val eval = rpcClient.scriptEval(ip, existing.id, ChargeScriptGenerator.evalUpsertChannel(config))
-            eval.errorOrNull()?.let { return it }
-            // Rattrapage des scripts déployés avant le 2026-08-22 en enable=true : couper
-            // l'auto-démarrage sans arrêter le script (enable ne joue qu'au boot). Sans ça, un
-            // redémarrage de l'appareil relancerait le script avec la config flash d'origine —
-            // canaux périmés compris, qui couperaient une prise allumée manuellement dès 60 s
-            // sous leur seuil (variante du bug de persistance, trouvée à l'audit du 2026-08-21).
-            rpcClient.scriptSetConfig(ip, existing.id, enable = false)
-            return RpcResult.Success(Unit)
+            val code = rpcClient.scriptGetCode(ip, existing.id).getOrNull()?.data
+            val upToDate = code != null && ChargeScriptGenerator.parseNotifVersion(code) >= ChargeScriptGenerator.NOTIF_VERSION
+            if (upToDate) {
+                val eval = rpcClient.scriptEval(ip, existing.id, ChargeScriptGenerator.evalUpsertChannel(config))
+                eval.errorOrNull()?.let { return it }
+                // Rattrapage des scripts déployés avant le 2026-08-22 en enable=true : couper
+                // l'auto-démarrage sans arrêter le script (enable ne joue qu'au boot). Sans ça, un
+                // redémarrage de l'appareil relancerait le script avec la config flash d'origine —
+                // canaux périmés compris, qui couperaient une prise allumée manuellement dès 60 s
+                // sous leur seuil (variante du bug de persistance, trouvée à l'audit du 2026-08-21).
+                rpcClient.scriptSetConfig(ip, existing.id, enable = false)
+                return RpcResult.Success(Unit)
+            }
+            stale = true
+            otherChannels = rpcClient.scriptEval(ip, existing.id, ChargeScriptGenerator.evalReadFullConfig())
+                .getOrNull()?.result?.let { ChargeScriptGenerator.parseFullEvalResult(it) }
+                ?.filterNot { it.switchId == config.switchId }
+                .orEmpty()
         }
 
         // Pas d'éviction du relais ici, volontairement : ce script reste enable:false en
@@ -537,10 +554,10 @@ class DeviceRepository @Inject constructor(
             create.errorOrNull()?.let { return it }
             create.getOrNull()!!.id
         }
-        if (existing != null) rpcClient.scriptStop(ip, scriptId)
+        if (existing != null || stale) rpcClient.scriptStop(ip, scriptId)
         val topic = ntfyTopic()
         val code = ChargeScriptGenerator.generateSupervisor(
-            listOf(config), selfId = scriptId, ntfyTopic = topic,
+            otherChannels + config, selfId = scriptId, ntfyTopic = topic,
             ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
@@ -1064,17 +1081,34 @@ class DeviceRepository @Inject constructor(
     /**
      * Active/reconfigure ou désactive le minuteur déclenché par le bouton physique **de ce
      * canal**, sans jamais toucher aux autres canaux configurés du même appareil. Si le script
-     * partagé tourne déjà, la modification passe par `Script.Eval` (mémoire des autres canaux
-     * inchangée — voir [ButtonTimerScriptGenerator]) ; sinon (script absent, arrêté, ou reprise
-     * d'anciens scripts par canal), un premier déploiement classique reprend les réglages déjà
-     * connus des autres canaux avant de les réécrire tous ensemble, sans risque puisqu'il n'y a
-     * alors rien de vivant à perdre. [durationSeconds] null = sans limite de durée ([thresholdW]
-     * alors obligatoire, imposé côté appelant).
+     * partagé tourne déjà **et** est à jour, la modification passe par `Script.Eval` (mémoire des
+     * autres canaux inchangée — voir [ButtonTimerScriptGenerator]) ; sinon (script absent, arrêté,
+     * périmé — voir [ButtonTimerScriptGenerator.parseNotifVersion] — ou reprise d'anciens scripts
+     * par canal), un premier déploiement classique reprend les réglages déjà connus des autres
+     * canaux avant de les réécrire tous ensemble. [durationSeconds] null = sans limite de durée ;
+     * [thresholdW] peut aussi être absent (aucune limite du tout, voir lot « Active pour » sans
+     * limite ni coupure, 2026-09-11).
      */
     suspend fun setButtonTimer(device: Device, enabled: Boolean, durationSeconds: Int?, thresholdW: Int?): RpcResult<Unit> {
         val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
         listResult.errorOrNull()?.let { return it }
-        val running = listResult.getOrNull()?.scripts?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME && it.running }
+        var running = listResult.getOrNull()?.scripts?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME && it.running }
+
+        if (running != null) {
+            // Script périmé (généré par une version de Hestia antérieure à l'ajout de la durée de
+            // charge dans la notif, 2026-09-17) : ce script est persistant, jamais redéployé tout
+            // seul — Script.Eval laisserait l'ancien texte en place indéfiniment, sans qu'aucune
+            // action dans l'appli ne le rattrape jamais (retour David : « un utilisateur lambda ne
+            // va pas redémarrer sa prise pour ça »). On l'arrête pour retomber sur le chemin de
+            // premier déploiement ci-dessous, qui relit sa config avant de le remplacer — rien
+            // n'est perdu.
+            val code = rpcClient.scriptGetCode(ip, running.id).getOrNull()?.data
+            val upToDate = code != null && ButtonTimerScriptGenerator.parseNotifVersion(code) >= ButtonTimerScriptGenerator.NOTIF_VERSION
+            if (!upToDate) {
+                rpcClient.scriptStop(ip, running.id)
+                running = null
+            }
+        }
 
         if (running != null) {
             val evalCode = if (enabled) {

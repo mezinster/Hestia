@@ -62,10 +62,14 @@ class SettingsViewModel @Inject constructor(
      * programme (ou annule) le worker périodique. L'autorisation `POST_NOTIFICATIONS` est demandée
      * en amont côté écran ; ici on suppose qu'elle est accordée quand [enabled] vaut vrai.
      */
-    fun setNotificationsEnabled(enabled: Boolean) {
+    fun setNotificationsEnabled(enabled: Boolean, reason: String? = null) {
         appPreferences.setNotificationsEnabled(enabled)
         if (enabled) NotificationScheduler.schedule(appContext) else NotificationScheduler.cancel(appContext)
-        logger.info(DiagnosticLogger.UI, "Notifications de programmation ${if (enabled) "activées" else "désactivées"}")
+        // "de programmation (locales, Android)" et non juste "Notifications" : sans cette
+        // précision, ce log se confond avec celui de ntfy juste en dessous — deux systèmes
+        // distincts, déjà source de confusion en direct (retour David, 2026-09-17).
+        val suffix = reason?.let { " ($it)" }.orEmpty()
+        logger.info(DiagnosticLogger.UI, "Notifications de programmation (locales, Android) ${if (enabled) "activées" else "désactivées"}$suffix")
     }
 
     /**
@@ -91,8 +95,12 @@ class SettingsViewModel @Inject constructor(
      */
     fun setNtfyEnabled(enabled: Boolean) {
         appPreferences.setNtfyEnabled(enabled)
-        if (enabled && notificationsEnabled.value) setNotificationsEnabled(false)
-        logger.info(DiagnosticLogger.UI, "ntfy ${if (enabled) "activé" else "désactivé"}")
+        // ntfy remplace les notifications locales de programmation (les deux à la fois ferait
+        // doublon) — d'où le log "Notifications de programmation désactivées" qui peut apparaître
+        // ici sans action directe dessus, à tort pris pour un désaveu de ntfy lui-même (retour
+        // David, 2026-09-17) : le motif explicite ci-dessous doit lever l'ambiguïté.
+        if (enabled && notificationsEnabled.value) setNotificationsEnabled(false, reason = "remplacées par ntfy")
+        logger.info(DiagnosticLogger.UI, "ntfy (notifications instantanées) ${if (enabled) "activé" else "désactivé"}")
         resyncNtfy()
     }
 
@@ -277,9 +285,16 @@ class SettingsViewModel @Inject constructor(
             // relais qui survit à une coupure de courant (enable:true, redémarre seul) peut être
             // retrouvé ici sans qu'une vraie resynchronisation n'ait eu lieu depuis — sinon le
             // bandeau resterait affiché à tort (retour David, 2026-09-03). Uniquement dans ce sens
-            // (confirme une couverture retrouvée) : ne fait jamais apparaître le bandeau depuis
-            // cet écran, réservé à la resynchronisation complète (DeviceRepository.resyncSmokeRelay).
+            // (confirme une couverture retrouvée), jamais pour la faire apparaître.
             if (relayIds.isNotEmpty()) repository.confirmSmokeRelayCoverage()
+
+            // Tente une vraie resynchronisation à chaque passage ici (pas juste un constat), et
+            // pas seulement quand aucun relais n'est trouvé : la redondance vise jusqu'à
+            // MAX_RELAY_TARGETS appareils, pas un seul qu'on considérerait suffisant dès qu'il
+            // répond (retour David, 2026-09-17 — « pas de raison de n'en avoir qu'un et de s'en
+            // satisfaire »). resyncSmokeRelay ne fait rien si aucun détecteur, et reste léger pour
+            // un appareil déjà couvert (Script.Eval, pas de redéploiement).
+            if (current.any { it.type == DeviceType.SMOKE_DETECTOR }) repository.resyncSmokeRelay()
         }
     }
 

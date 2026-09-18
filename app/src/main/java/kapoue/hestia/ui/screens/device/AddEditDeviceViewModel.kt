@@ -378,6 +378,12 @@ class AddEditDeviceViewModel @Inject constructor(
                 it.copy(isTesting = false, channelSelection = null, error = UserMessage(R.string.error_device_exists))
             }
         } else {
+            // Un nouvel appareil scriptable a peut-être de la place pour relayer les alertes ntfy
+            // des détecteurs de fumée — sans cet appel, rien ne le découvrait avant le prochain
+            // changement de réglage ntfy (retour David, 2026-09-17 : « j'ai ajouté une prise, elle
+            // n'a pas le picto relais, comment l'avoir ? »). Best-effort, silencieux si non
+            // pertinent (pas de détecteur, ou déjà de la place ailleurs — voir resyncSmokeRelay).
+            repository.resyncSmokeRelay()
             _uiState.update { it.copy(isTesting = false, done = true) }
         }
     }

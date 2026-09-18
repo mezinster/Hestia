@@ -59,7 +59,7 @@
     <string name="settings_rename_channel">Rename this channel</string>
     <string name="settings_rename_channel_title">Rename this channel</string>
     <string name="settings_smoke_relay_badge">Relays smoke detector alerts — may change automatically</string>
-    <string name="settings_smoke_relay_explanation">This device is currently relaying your smoke detector\'s alerts.</string>
+    <string name="settings_smoke_relay_explanation">A smoke detector can\'t send its alerts to ntfy directly — another device has to pass them along instead. Hestia picks which one automatically, nothing to set up. The icon next to a name shows which one is handling it right now; that can change on its own if another setting needs the room.</string>
     <string name="delete_group_title">Delete this device?</string>
     <string name="delete_group_message">\"%1$s\" and its %2$d channels will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</string>
     <string name="settings_permission_section">Local network permission</string>
@@ -160,6 +160,8 @@
     <string name="add_device_ip_location_name_label">Name (optional)</string>
     <string name="add_device_ip_location_edit">Edit</string>
     <string name="add_device_ip_location_delete">Delete</string>
+    <string name="add_device_ip_location_delete_confirm_title">Delete this address?</string>
+    <string name="add_device_ip_location_delete_confirm_message">It\'s only actually removed once you tap Save at the bottom of the screen.</string>
     <string name="add_device_type_label">Type</string>
     <string name="add_device_led_title">LED</string>
     <string name="add_device_led_hint">Lit at normal brightness during the day, dimmed to 30% from 10pm to 8am. Off toggles it off permanently.</string>

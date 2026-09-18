@@ -87,6 +87,11 @@ fun AddEditDeviceScreen(
     var editingIpSlot by remember { mutableStateOf<Int?>(null) }
     var showFirmwareInstallConfirm by remember { mutableStateOf(false) }
     var showRebootConfirm by remember { mutableStateOf(false) }
+    // Confirmation avant suppression de la 2ᵉ adresse IP (retour David, 2026-09-17) : le geste
+    // reste sans effet tant qu'Enregistrer n'est pas tapé (comme tout ce formulaire), mais une
+    // suppression appelle une confirmation par habitude d'usage, contrairement à une simple
+    // modification de champ.
+    var showDeleteIp2Confirm by remember { mutableStateOf(false) }
 
     // Se referme lorsque l'opération est terminée (hors composition).
     LaunchedEffect(state.done) {
@@ -202,7 +207,7 @@ fun AddEditDeviceScreen(
                     onEditSlot1 = { editingIpSlot = 1 },
                     onEditSlot2 = { editingIpSlot = 2 },
                     onAddSlot2 = { editingIpSlot = 2 },
-                    onDeleteSlot2 = viewModel::onDeleteIpSlot2,
+                    onDeleteSlot2 = { showDeleteIp2Confirm = true },
                 )
             } else {
                 OutlinedTextField(
@@ -387,6 +392,16 @@ fun AddEditDeviceScreen(
                 viewModel.rebootDevice()
             },
             onDismiss = { showRebootConfirm = false },
+        )
+    }
+
+    if (showDeleteIp2Confirm) {
+        DeleteIp2ConfirmDialog(
+            onConfirm = {
+                showDeleteIp2Confirm = false
+                viewModel.onDeleteIpSlot2()
+            },
+            onDismiss = { showDeleteIp2Confirm = false },
         )
     }
 }
@@ -703,6 +718,27 @@ private fun RebootConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         text = { Text(stringResource(R.string.firmware_reboot_confirm_message)) },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text(stringResource(R.string.firmware_reboot_confirm_ok)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
+}
+
+/**
+ * Purement une confirmation de geste (retour David, 2026-09-17) : la suppression elle-même ne
+ * prend effet qu'au « Enregistrer » de l'écran, comme tout le reste de ce formulaire — ce popup
+ * n'existe que pour éviter un tap malheureux sur la poubelle, pas pour avertir d'un effet
+ * irréversible.
+ */
+@Composable
+private fun DeleteIp2ConfirmDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.add_device_ip_location_delete_confirm_title)) },
+        text = { Text(stringResource(R.string.add_device_ip_location_delete_confirm_message)) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) { Text(stringResource(R.string.timer_preset_delete_confirm_ok)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }

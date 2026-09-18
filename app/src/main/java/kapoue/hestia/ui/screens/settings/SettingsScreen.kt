@@ -76,16 +76,15 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kapoue.hestia.R
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.domain.model.DeviceType
@@ -117,7 +116,6 @@ fun SettingsScreen(
     val cloudTesting by viewModel.cloudTesting.collectAsStateWithLifecycle()
     val cloudTestMessage by viewModel.cloudTestMessage.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     var deviceToDelete by remember { mutableStateOf<Device?>(null) }
     var groupToDelete by remember { mutableStateOf<List<Device>?>(null) }
     var channelToRename by remember { mutableStateOf<Device?>(null) }
@@ -130,12 +128,20 @@ fun SettingsScreen(
         viewModel.scrollToNtfyEvents.collect { ntfyBringIntoViewRequester.bringIntoView() }
     }
 
-    // À chaque reprise, revérifier la connectivité (si la permission le permet) et réconcilier
-    // l'interrupteur Notifications avec l'autorisation système : si elle a été retirée (révocation
-    // à la fermeture, ou désactivation depuis les réglages Android), l'interrupteur repasse à OFF.
-    LaunchedEffectOnResume(lifecycleOwner) {
-        viewModel.checkConnectivity(LocalNetworkPermission.isUsable(context))
-        viewModel.reconcileNotifications(ProgrammationNotifier.canPost(context))
+    // Revérifie la connectivité (si la permission le permet) et réconcilie l'interrupteur
+    // Notifications avec l'autorisation système (révocation à la fermeture, ou désactivation
+    // depuis les réglages Android → repasse à OFF) — au premier affichage, puis toutes les 60 s
+    // tant que l'écran reste affiché. `LaunchedEffect(Unit)` plutôt que « sur reprise » (retour
+    // David, 2026-09-17) : la reprise du cycle de vie associé à cette destination se redéclenche
+    // même en re-tapant l'onglet Réglages déjà actif (simple no-op de navigation), provoquant un
+    // rafraîchissement visible à chaque clic — bloc lié à la composition de l'écran lui-même,
+    // jamais recréé par un re-tap, mais bien annulé/relancé à une vraie sortie/entrée de l'écran.
+    LaunchedEffect(Unit) {
+        while (true) {
+            viewModel.checkConnectivity(LocalNetworkPermission.isUsable(context))
+            viewModel.reconcileNotifications(ProgrammationNotifier.canPost(context))
+            delay(60_000)
+        }
     }
 
     // Sélecteurs de fichier (Storage Access Framework — aucune permission de stockage).
@@ -266,9 +272,11 @@ fun SettingsScreen(
                 }
             }
 
-            // Explication du picto relais (Lot 4b), seulement si au moins un appareil le porte
-            // actuellement — inutile d'expliquer un picto qu'on ne voit jamais.
-            if (smokeRelayDevices.isNotEmpty()) {
+            // Explication du relais (Lot 4b) : affichée dès que ntfy est actif et qu'il y a un
+            // détecteur de fumée à couvrir — plus seulement quand un relais est déjà actif (retour
+            // David, 2026-09-17 : invisible pile quand on cherche à comprendre comment en obtenir
+            // un, ou juste après avoir ajouté un appareil qui pourrait le devenir).
+            if (ntfyEnabled && devices.any { it.type == DeviceType.SMOKE_DETECTOR }) {
                 item {
                     Row(modifier = Modifier.padding(bottom = 8.dp)) {
                         Icon(
@@ -385,16 +393,6 @@ fun SettingsScreen(
 }
 
 @Composable
-private fun LaunchedEffectOnResume(
-    lifecycleOwner: androidx.lifecycle.LifecycleOwner,
-    block: suspend () -> Unit,
-) {
-    androidx.compose.runtime.LaunchedEffect(lifecycleOwner) {
-        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) { block() }
-    }
-}
-
-@Composable
 private fun SectionTitle(text: String) {
     Text(
         text = text,
@@ -443,7 +441,18 @@ private fun DeviceRow(
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(device.name, style = MaterialTheme.typography.titleSmall)
+                    // weight(fill=false) + maxLines=1 (retour David, 2026-09-18) : sans ça, un nom
+                    // assez long pour passer à la ligne prenait toute la largeur et poussait le
+                    // picto relais hors de la zone visible — jamais un vrai problème de détection,
+                    // juste invisible pour certains noms (confirmé : le script tournait bien sur
+                    // les 3 prises, seul l'affichage y était).
+                    Text(
+                        device.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
                     if (isSmokeRelay) SmokeRelayBadge()
                 }
                 Text(
@@ -538,7 +547,10 @@ private fun DeviceGroupHeaderRow(
         null -> stringResource(R.string.settings_connectivity_checking)
     }
 
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+    // Même fond que les lignes solo (retour David, 2026-09-17) : surfaceVariant, plus terne, se
+    // lisait comme « désactivé » en Material Design — l'icône ci-dessous suffit déjà à signaler
+    // qu'il s'agit d'un bloc multi-canaux, pas besoin d'un fond distinct pour ça.
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -554,7 +566,15 @@ private fun DeviceGroupHeaderRow(
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(deviceName, style = MaterialTheme.typography.titleSmall)
+                    // Même correctif que DeviceRow (2026-09-18) : un nom long ne doit jamais
+                    // pousser le picto relais hors de la zone visible.
+                    Text(
+                        deviceName,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
                     if (isSmokeRelay) SmokeRelayBadge()
                 }
                 Text(
