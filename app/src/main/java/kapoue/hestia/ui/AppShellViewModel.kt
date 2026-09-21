@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -52,6 +53,16 @@ class AppShellViewModel @Inject constructor(
     ) { devices, ntfyEnabled, coverageOk, grace ->
         grace && ntfyEnabled && !coverageOk && devices.any { it.type == DeviceType.SMOKE_DETECTOR }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /**
+     * Mode démo actif (retour David, 2026-09-21) : `HestiaApp` force alors la locale anglaise de
+     * toute l'appli, indépendamment de la langue du téléphone — les captures F-Droid doivent
+     * toutes être dans la même langue, jamais un mélange avec la langue système utilisée pour les
+     * prendre.
+     */
+    val demoModeActive: StateFlow<Boolean> = repository.observeDevices()
+        .map { repository.isDemoDeviceList(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     init {
         viewModelScope.launch {

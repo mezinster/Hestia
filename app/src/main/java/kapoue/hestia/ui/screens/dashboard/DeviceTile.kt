@@ -408,6 +408,15 @@ internal data class TileVisual(
     val textColor: Color,
     val label: String,
     val countdown: String?,
+    /**
+     * Vrai seulement quand [countdown] est un vrai compte à rebours qui descend vers zéro (un
+     * minuteur natif en cours) — jamais pour une plage horaire fixe (Présence, Planifié) ni pour
+     * une durée qui grimpe (« depuis », déjà préfixé dans la chaîne elle-même). Sert uniquement à
+     * savoir si le connecteur « pour encore »/« for another » a un sens devant [label] (retour
+     * David, 2026-09-21 : « Planifié pour encore 14:00 - 17:00 » ne voulait rien dire, le
+     * connecteur avait été ajouté pour tout [countdown] non nul sans cette distinction).
+     */
+    val showsRemaining: Boolean = false,
     val dashed: Boolean,
     val loading: Boolean = false,
     /**
@@ -568,6 +577,7 @@ internal fun TileStatus.toVisual(
                 bgColor = physicalBg, ringColor = ringColor, textColor = colors.activeText,
                 label = stringResource(R.string.state_active),
                 countdown = formatCountdown(remaining),
+                showsRemaining = true,
                 dashed = false,
                 // Le seuil réutilise le libellé déjà utilisé pour ce même réglage dans l'écran
                 // Détail (timer_preset_cutoff_detail) — pas de « 10 W » nu, ambigu avec la vraie
@@ -790,10 +800,13 @@ fun ChannelQuickSheet(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // « Actif pour encore » et non juste « Actif » quand un compte à rebours
-                        // suit : les deux collés se lisaient comme une heure plutôt qu'une durée
-                        // restante (retour David, 2026-09-18).
-                        val label = if (visual.countdown != null) {
+                        // « Actif pour encore » et non juste « Actif » quand un vrai compte à
+                        // rebours suit : les deux collés se lisaient comme une heure plutôt qu'une
+                        // durée restante (retour David, 2026-09-18). Seulement pour un minuteur
+                        // natif (showsRemaining) — jamais pour une plage horaire fixe (Présence,
+                        // Planifié : « Planifié pour encore 14:00 - 17:00 » ne voulait rien dire,
+                        // retour David, 2026-09-21).
+                        val label = if (visual.showsRemaining) {
                             "${visual.label} ${stringResource(R.string.timer_countdown_connector)}"
                         } else {
                             visual.label

@@ -47,6 +47,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -59,6 +60,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -144,11 +146,32 @@ class DeviceRepository @Inject constructor(
         return last!!
     }
 
-    fun observeDevices(): Flow<List<Device>> = deviceDao.observeAll()
+    /**
+     * Tant qu'au moins un appareil démo existe, masque tous les vrais appareils — jamais les deux
+     * mélangés (retour David, 2026-09-21 : le mode démo doit remplacer entièrement la liste
+     * réelle pour des captures propres, pas s'y ajouter comme avant). Un seul point de filtrage,
+     * valable pour tous les écrans qui listent les appareils (Tableau, Réglages…) puisqu'ils
+     * passent tous par [observeDevices] ou [getDevicesOnce].
+     */
+    fun observeDevices(): Flow<List<Device>> = deviceDao.observeAll().map { filterForDemo(it) }
+
+    private fun filterForDemo(devices: List<Device>): List<Device> {
+        val demo = devices.filter { it.ipAddress.startsWith(DEMO_IP_PREFIX) }
+        return demo.ifEmpty { devices }
+    }
+
+    /**
+     * Vrai si [devices] (déjà filtrée par [observeDevices]/[getDevicesOnce]) est la liste démo —
+     * sert à `AppShellViewModel.demoModeActive`, pour forcer la locale anglaise de toute l'appli
+     * pendant le mode démo (captures F-Droid), indépendamment de la langue du téléphone.
+     */
+    fun isDemoDeviceList(devices: List<Device>): Boolean =
+        devices.isNotEmpty() && devices.first().ipAddress.startsWith(DEMO_IP_PREFIX)
 
     fun observeDevice(id: Long): Flow<Device?> = deviceDao.observeById(id)
 
-    suspend fun getDevicesOnce(): List<Device> = deviceDao.getAllOnce()
+    /** Même filtrage démo que [observeDevices] — voir sa doc. */
+    suspend fun getDevicesOnce(): List<Device> = filterForDemo(deviceDao.getAllOnce())
 
     suspend fun getDevice(id: Long): Device? = deviceDao.getById(id)
 
@@ -243,6 +266,8 @@ class DeviceRepository @Inject constructor(
     }
 
     private suspend fun getLocalSensorStatus(device: Device): RpcResult<SensorReadingResult> {
+        // Détecteur démo : aucun réseau, un des 3 états visuels factices — voir demoSensorStatus.
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return demoSensorStatus(device)
         val (ip, result) = withIp(device) { i -> rpcClient.getFullStatus(i) }
         // Même raison que getLocalStatus côté prises : remplir Device.cloudId dès qu'on en a
         // l'occasion, jamais garanti avant le moment précis où le repli cloud en a besoin.
@@ -1193,8 +1218,9 @@ class DeviceRepository @Inject constructor(
      * simulation de présence, qui ne peut pas être Unique.
      */
     suspend fun getPlannings(device: Device): RpcResult<List<Planning>> {
-        // Appareils démo : aucun réseau (évite un timeout par tuile fictive à chaque relevé).
-        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(emptyList())
+        // Appareils démo : aucun réseau (évite un timeout par tuile fictive à chaque relevé) —
+        // planning/présence factices pour illustrer ces deux états, voir demoPlannings.
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(demoPlannings(device))
         val (ip, r) = withIp(device) { i -> rpcClient.scheduleList(i) }
         val native = when (r) {
             is RpcResult.Success -> {
@@ -2538,21 +2564,62 @@ class DeviceRepository @Inject constructor(
 
     suspend fun hasDemoDevices(): Boolean = deviceDao.countDemoDevices() > 0
 
+    /**
+     * Une dizaine d'appareils fictifs (retour David, 2026-09-21 — captures F-Droid) couvrant les
+     * cas visuels principaux : prise seule dans chaque état, bloc multi-canaux, détecteur de fumée
+     * dans ses 3 états. Noms toujours en anglais, indépendamment de la langue système du téléphone
+     * (voir [kapoue.hestia.ui.AppShellViewModel.demoModeActive] et `HestiaApp`, qui force la
+     * locale anglaise pendant tout le mode démo) — jamais un mélange de langues sur une capture.
+     * Masque aussi les vrais appareils tant qu'il y en a au moins un (voir [observeDevices]).
+     */
     suspend fun addDemoDevices() {
         if (deviceDao.countDemoDevices() > 0) return
         var position = deviceDao.maxPosition() + 1
-        val demo = listOf(
-            Triple("Prise scooter", "203.0.113.1", DeviceType.PLUG),
-            Triple("Lampe salon", "203.0.113.2", DeviceType.LAMP),
-            Triple("Radiateur", "203.0.113.3", DeviceType.PLUG),
-            Triple("Prise bureau", "203.0.113.4", DeviceType.PLUG),
-            Triple("Prise balcon", "203.0.113.5", DeviceType.PLUG),
+
+        // Prises seules — un scénario visuel distinct chacune, voir demoStatus/demoPlannings.
+        val solo = listOf(
+            Triple("Scooter Charger", "203.0.113.1", DeviceType.PLUG), // active
+            Triple("Living Room Lamp", "203.0.113.2", DeviceType.LAMP), // idle
+            Triple("Space Heater", "203.0.113.3", DeviceType.PLUG), // timed
+            Triple("Garden Plug", "203.0.113.4", DeviceType.PLUG), // offline
+            Triple("Office Plug", "203.0.113.5", DeviceType.PLUG), // schedule in progress
+            Triple("Entrance Light", "203.0.113.6", DeviceType.PLUG), // presence in progress
         )
-        for ((name, ip, type) in demo) {
+        for ((name, ip, type) in solo) {
             deviceDao.insert(
                 Device(
-                    name = name, ipAddress = ip, switchId = 0, type = type, model = "Démo",
+                    name = name, deviceName = name, ipAddress = ip, switchId = 0, type = type, model = "Demo",
                     supportsSwitch = true, hasScripting = true, hasPowerMetering = true, position = position,
+                ),
+            )
+            position++
+        }
+
+        // Bloc multi-canaux (façon vraie multiprise) — mix d'états sur les 4 canaux, voir
+        // demoStripStatus.
+        val stripIp = "203.0.113.10"
+        listOf("Fridge", "TV", "Console", "Router").forEachIndexed { switchId, name ->
+            deviceDao.insert(
+                Device(
+                    name = name, deviceName = "Kitchen Strip", ipAddress = stripIp, switchId = switchId,
+                    type = DeviceType.PLUG, model = "Demo",
+                    supportsSwitch = true, hasScripting = true, hasPowerMetering = true, position = position,
+                ),
+            )
+            position++
+        }
+
+        // Détecteurs de fumée — les 3 états possibles, voir demoSensorStatus.
+        val detectors = listOf(
+            "Kitchen Smoke Detector" to "203.0.113.20", // normal
+            "Garage Smoke Detector" to "203.0.113.21", // alarme
+            "Hallway Smoke Detector" to "203.0.113.22", // batterie faible
+        )
+        for ((name, ip) in detectors) {
+            deviceDao.insert(
+                Device(
+                    name = name, deviceName = name, ipAddress = ip, switchId = 0, type = DeviceType.SMOKE_DETECTOR,
+                    model = "Demo", supportsSwitch = false, hasScripting = false, hasPowerMetering = false, position = position,
                 ),
             )
             position++
@@ -2573,8 +2640,57 @@ class DeviceRepository @Inject constructor(
                 ),
             )
             4 -> RpcResult.Failure(RpcFailure.UNREACHABLE)                                   // Hors ligne
-            else -> RpcResult.Success(                                                       // Actif
+            10 -> demoStripStatus(device.switchId)                                           // Bloc multi-canaux
+            // 1 (actif), 5 (planning en cours) et 6 (présence en cours) partagent le même statut
+            // switch — c'est getPlannings qui distingue planning/présence sur ces deux derniers.
+            else -> RpcResult.Success(
                 SwitchStatusResult(id = device.switchId, output = true, apower = 479.3),
+            )
+        }
+    }
+
+    /** Un état différent par canal du bloc démo, pour illustrer le mélange typique d'une vraie multiprise. */
+    private fun demoStripStatus(switchId: Int): RpcResult<SwitchStatusResult> = when (switchId) {
+        0 -> RpcResult.Success(SwitchStatusResult(id = 0, output = true, apower = 62.0)) // Fridge : toujours actif
+        1 -> RpcResult.Success(SwitchStatusResult(id = 1, output = false)) // TV : éteinte
+        2 -> RpcResult.Success(                                            // Console : minutée
+            SwitchStatusResult(
+                id = 2, output = true, apower = 210.0,
+                timerStartedAt = System.currentTimeMillis() / 1000.0,
+                timerDuration = 3600.0,
+            ),
+        )
+        else -> RpcResult.Success(SwitchStatusResult(id = 3, output = true, apower = 8.5)) // Router : actif en continu
+    }
+
+    /**
+     * Planning/présence factices pour les prises démo .5/.6 — fenêtre toujours calée sur
+     * « maintenant » (±1 h, tous les jours) plutôt qu'un horaire fixe : reste « en cours » quelle
+     * que soit l'heure à laquelle le mode démo est activé, jamais une capture qui tombe à plat en
+     * dehors d'une fenêtre figée.
+     */
+    private fun demoPlannings(device: Device): List<Planning> {
+        val suffix = device.ipAddress.substringAfterLast('.').toIntOrNull()
+        if (suffix != 5 && suffix != 6) return emptyList()
+        val start = LocalTime.now().minusHours(1)
+        val end = LocalTime.now().plusHours(1)
+        val everyDay = (0..6).toSet()
+        val marginMinutes = if (suffix == 6) 30 else null // présence = marge non nulle, voir Planning.isPresence
+        return listOf(Planning(start.hour, start.minute, end.hour, end.minute, everyDay, marginMinutes = marginMinutes))
+    }
+
+    /** Les 3 états visuels d'un détecteur de fumée démo — voir SmokeDetectorTile. */
+    private fun demoSensorStatus(device: Device): RpcResult<SensorReadingResult> {
+        val now = System.currentTimeMillis() / 1000
+        return when (device.ipAddress.substringAfterLast('.').toIntOrNull()) {
+            21 -> RpcResult.Success( // Alarme
+                SensorReadingResult(alarm = true, mute = false, batteryPercent = 91, batteryError = false, temperatureC = 46.0, updatedAtEpochSec = now),
+            )
+            22 -> RpcResult.Success( // Batterie faible
+                SensorReadingResult(alarm = false, mute = false, batteryPercent = 11, batteryError = false, temperatureC = 21.0, updatedAtEpochSec = now),
+            )
+            else -> RpcResult.Success( // Normal
+                SensorReadingResult(alarm = false, mute = false, batteryPercent = 87, batteryError = false, temperatureC = 21.0, updatedAtEpochSec = now),
             )
         }
     }
