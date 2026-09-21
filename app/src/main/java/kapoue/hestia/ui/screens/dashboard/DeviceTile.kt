@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,9 +23,11 @@ import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,6 +59,8 @@ import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.icons.SmokeDetectorIcon
+import kapoue.hestia.ui.screens.detail.PersonalPreset
+import kapoue.hestia.ui.screens.detail.durationLabel
 import kapoue.hestia.ui.theme.StateColorSet
 import kapoue.hestia.ui.theme.stateColors
 
@@ -165,6 +171,7 @@ fun DeviceTile(
                 val checked = (tile.status as? TileStatus.Online)?.output == true
                 RoundToggleButton(
                     enabled = interactive,
+                    checked = checked,
                     onClick = { onToggle(!checked) },
                 )
             }
@@ -355,14 +362,26 @@ private fun ConnectivityBadge(status: TileStatus, modifier: Modifier = Modifier)
     )
 }
 
+/**
+ * [enabled] = le bouton est-il cliquable (état connu/joignable) — n'a jamais représenté l'état
+ * marche/arrêt lui-même, malgré son nom. [checked] = l'état réel de la prise (retour David,
+ * 2026-09-21) : sans lui, le bouton avait toujours le même look qu'elle soit allumée ou éteinte,
+ * seul un simple picto d'alimentation neutre — fond et contour teintés en vert (même couleur
+ * d'état que le reste de l'appli, voir StateColors) quand elle est réellement allumée.
+ */
 @Composable
-private fun RoundToggleButton(enabled: Boolean, onClick: () -> Unit) {
+private fun RoundToggleButton(enabled: Boolean, checked: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.stateColors
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface,
+        color = if (checked) colors.activeBg else MaterialTheme.colorScheme.surface,
         border = BorderStroke(
             1.dp,
-            if (enabled) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.outlineVariant,
+            when {
+                !enabled -> MaterialTheme.colorScheme.outlineVariant
+                checked -> colors.activeLed
+                else -> MaterialTheme.colorScheme.outline
+            },
         ),
         onClick = onClick,
         enabled = enabled,
@@ -372,10 +391,10 @@ private fun RoundToggleButton(enabled: Boolean, onClick: () -> Unit) {
             Icon(
                 Icons.Filled.PowerSettingsNew,
                 contentDescription = stringResource(R.string.tile_toggle),
-                tint = if (enabled) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                tint = when {
+                    !enabled -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    checked -> colors.activeText
+                    else -> MaterialTheme.colorScheme.onSurface
                 },
                 modifier = Modifier.size(18.dp),
             )
@@ -734,16 +753,21 @@ private fun MiniPlugCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> U
 }
 
 /**
- * Modale ouverte au tap d'un canal du bloc multi-prises : consommation, interrupteur, état
- * complet (avec compte à rebours si un programme est en cours) — et un lien vers l'écran détail
- * complet pour tout ce que la modale ne montre pas (plannings, présence, seuils…).
+ * Modale rapide ouverte au tap d'**une prise, seule ou dans un bloc** (retour David, 2026-09-21 —
+ * jusqu'ici réservée aux blocs, une prise seule allait direct sur Configurer, sans raison d'être) :
+ * état, consommation, interrupteur, et le lancement d'un programme (durées fixes, Perso déjà
+ * configurés, Manuel) — un tap pour agir. Un lien vers Configurer pour tout le reste (créer/modifier
+ * un Perso, planning, minuteur bouton, seuils…) — deux taps pour régler.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ChannelQuickSheet(
     tile: TileUiState,
     elapsedNow: Long,
     onToggle: (Boolean) -> Unit,
+    /** (seconds, libellé, seuil W) — null pour seconds = sans limite de durée. */
+    onLaunch: (Int?, String, Int?) -> Unit,
+    onCustom: () -> Unit,
     onOpenDetail: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -766,7 +790,15 @@ fun ChannelQuickSheet(
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = visual.label, color = visual.textColor, style = MaterialTheme.typography.bodyLarge)
+                        // « Actif pour encore » et non juste « Actif » quand un compte à rebours
+                        // suit : les deux collés se lisaient comme une heure plutôt qu'une durée
+                        // restante (retour David, 2026-09-18).
+                        val label = if (visual.countdown != null) {
+                            "${visual.label} ${stringResource(R.string.timer_countdown_connector)}"
+                        } else {
+                            visual.label
+                        }
+                        Text(text = label, color = visual.textColor, style = MaterialTheme.typography.bodyLarge)
                         visual.countdown?.let {
                             Spacer(Modifier.width(8.dp))
                             Text(
@@ -792,12 +824,44 @@ fun ChannelQuickSheet(
                 Spacer(Modifier.weight(1f))
                 RoundToggleButton(
                     enabled = online != null,
+                    checked = online?.output == true,
                     onClick = { onToggle(online?.output != true) },
                 )
             }
 
+            // Lancement d'un programme — seulement si rien n'est déjà en cours (visual.countdown
+            // non nul = un minuteur tourne déjà, le relancer n'aurait pas de sens ; l'interrupteur
+            // ci-dessus permet déjà de couper avant terme si besoin). Séparée visuellement des
+            // infos ci-dessus par un simple espacement (retour David, 2026-09-21).
+            if (tile.device.supportsSwitch && visual.countdown == null) {
+                HorizontalDivider()
+                val presets = listOf(
+                    PersonalPreset(1, tile.device.presetName, tile.device.presetDurationSeconds, tile.device.presetThresholdW, tile.device.presetUnlimited),
+                    PersonalPreset(2, tile.device.preset2Name, tile.device.preset2DurationSeconds, tile.device.preset2ThresholdW, tile.device.preset2Unlimited),
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(3600, 7200, 10800).forEach { seconds ->
+                        val label = durationLabel(seconds)
+                        OutlinedButton(onClick = { onLaunch(seconds, label, null) }) { Text(label) }
+                    }
+                    presets.forEach { p ->
+                        if (p.configured) {
+                            val label = p.name ?: p.durationSeconds?.let { durationLabel(it) }.orEmpty()
+                            OutlinedButton(onClick = {
+                                if (p.unlimited) onLaunch(null, label, p.thresholdW) else p.durationSeconds?.let { onLaunch(it, label, p.thresholdW) }
+                            }) {
+                                Text(p.name ?: stringResource(R.string.timer_preset_chip))
+                            }
+                        }
+                    }
+                    OutlinedButton(onClick = onCustom) {
+                        Text(stringResource(R.string.detail_timer_custom))
+                    }
+                }
+            }
+
             TextButton(onClick = onOpenDetail, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.tile_open_detail))
+                Text(stringResource(R.string.tile_configure))
             }
         }
     }

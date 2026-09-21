@@ -371,7 +371,15 @@ class DeviceRepository @Inject constructor(
         // Extinction manuelle : retirer le script de notif de fin de minuteur AVANT de couper —
         // contrairement au script de coupure, il ne sait pas distinguer une fin naturelle d'une
         // extinction manuelle ; le supprimer avant l'extinction est ce qui l'empêche de se déclencher.
-        if (!on) removeTimerNotifyScript(device)
+        // Retire aussi ce canal du superviseur de seuil s'il y était suivi (retour David,
+        // 2026-09-21 : le bouton On/Off de la modale rapide sert maintenant aussi à « annuler » un
+        // minuteur, plus seulement l'ancien bouton dédié de l'écran Détail — même nettoyage que
+        // DeviceRepository.cancelTimer, pour ne pas laisser une entrée de canal orpheline si
+        // d'autres canaux du même appareil restent surveillés).
+        if (!on) {
+            removeTimerNotifyScript(device)
+            removeChargeSupervisorChannel(device)
+        }
         val (_, local) = withIp(device) { ip -> rpcClient.setSwitch(ip, device.switchId, on) }
         val result = if (local.isConnectivityFailure()) cloudToggleFallback(device, on) ?: local else local
         if (result is RpcResult.Success) {
@@ -387,6 +395,24 @@ class DeviceRepository @Inject constructor(
         val ok = cloudClient.setSwitch(server, authKey, cloudId, device.switchId, on)
         logger.info(DiagnosticLogger.RPC, "Repli cloud ${device.ipAddress}#${device.switchId} → ${if (ok) "réussi" else "échoué"}")
         return if (ok) RpcResult.Success(SwitchSetResult()) else null
+    }
+
+    /**
+     * Choisit et lance le bon mécanisme de minuteur selon les paramètres fournis — seul point
+     * d'entrée pour ce branchement, appelé par le Tableau et l'écran Détail (Configurer). Centralisé
+     * ici depuis le 2026-09-21 : chacun des deux avait sa propre copie du même `when`, et
+     * `stopPresenceThenStartTimer` avait raté le correctif « sans aucune limite » du 2026-09-11
+     * ajouté seulement sur `startTimer`, laissant la prise éteinte après avoir coupé la présence.
+     * [seconds] null = sans limite de durée. Les deux peuvent être absents : simple allumage, sans
+     * aucune limite automatique, comme la bascule de la tuile.
+     */
+    suspend fun dispatchStartTimer(device: Device, seconds: Int?, thresholdW: Int?, detail: String?) {
+        when {
+            seconds == null && thresholdW != null -> startUnlimitedChargeTimer(device, thresholdW)
+            seconds != null && thresholdW != null -> startChargeTimer(device, seconds, thresholdW, detail)
+            seconds != null -> startTimer(device, seconds, detail)
+            else -> userToggle(device, on = true)
+        }
     }
 
     /**
@@ -600,25 +626,6 @@ class DeviceRepository @Inject constructor(
     suspend fun cutoffScriptFired(device: Device): Boolean {
         val (_, result) = withIp(device) { ip -> rpcClient.getSwitchStatus(ip, device.switchId) }
         return result.getOrNull()?.source == "loopback"
-    }
-
-    /**
-     * Annule le minuteur en **éteignant le canal** (ce qui annule le `toggle_after`), et retire ce
-     * canal du script superviseur de coupure sur seuil s'il y figurait — les autres canaux qu'il
-     * suit éventuellement restent inchangés.
-     */
-    suspend fun cancelTimer(device: Device): RpcResult<Unit> {
-        removeChargeSupervisorChannel(device)
-        removeTimerNotifyScript(device)
-        val (_, set) = withIp(device) { i -> rpcClient.setSwitch(i, device.switchId, on = false) }
-        return when (set) {
-            is RpcResult.Success -> {
-                appPreferences.removePendingTimer(device.id)
-                RpcResult.Success(Unit)
-            }
-            is RpcResult.RpcError -> set
-            is RpcResult.Failure -> set
-        }
     }
 
     /** Horloge de l'appareil pour le contrôle de dérive (epoch + heure rapportée). */

@@ -264,6 +264,27 @@ dans l'historique git).
 
 ## Fonctionnalités futures
 
+- **Vérification périodique du firmware via le Cloud — proposée par David le 2026-09-18, à
+  trancher dans son propre lot.** Principe acté : une fois par jour maximum, au lancement de
+  l'appli, uniquement si le Cloud est déjà activé (nouvelle exception explicite à documenter dans
+  `CLAUDE.md`, à côté de ntfy et du Cloud lui-même). Reste à trancher : où et comment prévenir
+  l'utilisateur qu'une mise à jour est disponible (bandeau ? picto sur la tuile ?) — et surtout,
+  si un picto apparaît sur la tuile, quel doit être le comportement d'un tap dessus (le réflexe le
+  plus probable), sans se marcher sur les pieds avec le tap normal (modale rapide, Ergo-1/2). À
+  échanger avant tout code.
+
+- **Durée de charge absente de la notif de coupure sur seuil, malgré le correctif du 2.12.0 —
+  signalé par David le 2026-09-18, mis de côté pour plus tard.** La 2.11.0 a ajouté le calcul de
+  durée (« Coupure sur seuil de consommation après 1h32 ») dans les 3 générateurs de script
+  concernés (planning, superviseur Perso/Manuel, minuteur bouton), et la 2.12.0 a ajouté un
+  marqueur de version pour forcer le redéploiement d'un script déjà en cours d'exécution avant
+  ce correctif. Diagnostic en cours : `curl` sur `.97` (Script.GetCode de `hestia_charge`, id 1)
+  ne montre ni `hestia_notif_ver` ni `fmtDur` — le script tourne encore avec l'ancien code. Pas
+  déterminé si c'est parce que la charge testée datait d'avant l'installation de la 2.12.0 (donc
+  pas de bug, juste pas encore retesté), ou un vrai défaut du redéploiement automatique. Prochaine
+  étape à la reprise : relancer une charge Active pour sur `.97` **après** avoir confirmé la
+  2.12.0 installée, puis reregarder immédiatement le code du script.
+
 - Ajout d'un appareil neuf sans sortir de Hestia (provisioning Wi-Fi direct depuis l'appli) : la
   prise se connecte temporairement à son propre point d'accès, envoie le Wi-Fi cible via
   `WiFi.SetConfig`, puis relit elle-même l'IP obtenue — sans scan réseau ni lecture de MAC (deux

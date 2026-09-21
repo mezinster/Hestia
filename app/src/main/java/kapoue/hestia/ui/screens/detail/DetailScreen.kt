@@ -66,7 +66,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
-import kapoue.hestia.core.util.formatCountdown
 import kapoue.hestia.core.util.formatDate
 import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.data.local.entity.Device
@@ -103,8 +102,6 @@ fun DetailScreen(
     val cutoffCandidates by viewModel.cutoffCandidates.collectAsStateWithLifecycle()
     val cutoffMessage by viewModel.cutoffMessage.collectAsStateWithLifecycle()
     val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
-    val pendingThresholdW by viewModel.pendingThresholdW.collectAsStateWithLifecycle()
-    val pendingLabel by viewModel.pendingLabel.collectAsStateWithLifecycle()
     val plannings by viewModel.plannings.collectAsStateWithLifecycle()
     val addPlanningResult by viewModel.addPlanningResult.collectAsStateWithLifecycle()
     val pausedPlannings by viewModel.pausedPlannings.collectAsStateWithLifecycle()
@@ -134,7 +131,6 @@ fun DetailScreen(
         !(isPresence && presenceDisabledToday) &&
         !(!isPresence && !once && planningDisabledToday)
 
-    var showSheet by remember { mutableStateOf(false) }
     // Emplacement (1 ou 2) du réglage Perso en cours d'ajout/édition/suppression ; null = fermé.
     var editingPresetSlot by remember { mutableStateOf<Int?>(null) }
     var deletingPresetSlot by remember { mutableStateOf<Int?>(null) }
@@ -158,23 +154,6 @@ fun DetailScreen(
             showAddPlanning = false
             editingPlanning = null
             viewModel.clearAddPlanningResult()
-        }
-    }
-    // Minuteur en attente de résolution du conflit avec la simulation de présence.
-    var pendingTimer by remember { mutableStateOf<PendingTimer?>(null) }
-    // Minuteur lancé pendant un planning en cours : simple avertissement (le planning n'est pas
-    // un conflit, il reprendra la main à sa prochaine occurrence).
-    var planningWarning by remember { mutableStateOf<Pair<PendingTimer, Planning>?>(null) }
-
-    fun requestStartTimer(seconds: Int?, label: String, thresholdW: Int? = null) {
-        val activePlanning = plannings.firstOrNull { it.isReallyActive() }
-        when {
-            // Une simulation de présence en cours est un vrai conflit (elle pilote la prise en
-            // continu) : on la traite d'abord. Un planning précis n'est qu'un avertissement.
-            activePlanning?.isPresence == true -> pendingTimer = PendingTimer(seconds, label, thresholdW)
-            activePlanning != null ->
-                planningWarning = PendingTimer(seconds, label, thresholdW) to activePlanning
-            else -> viewModel.startTimer(seconds, label, thresholdW)
         }
     }
 
@@ -275,29 +254,8 @@ fun DetailScreen(
                     PersonalPreset(1, dev.presetName, dev.presetDurationSeconds, dev.presetThresholdW, dev.presetUnlimited),
                     PersonalPreset(2, dev.preset2Name, dev.preset2DurationSeconds, dev.preset2ThresholdW, dev.preset2Unlimited),
                 )
-                // Repli si un réglage existant (migré) n'a pas encore de nom — résolu ici (contexte
-                // composable, stringResource) puis capturé par le callback, qui lui ne l'est pas.
-                val presetFallbackLabels = presets.associate { it.slot to it.durationSeconds?.let { s -> durationLabel(s) } }
                 TimerSection(
-                    status = status,
-                    elapsedNow = elapsedNow,
-                    runningThresholdW = pendingThresholdW,
-                    runningLabel = pendingLabel,
                     presets = presets,
-                    onPreset = { seconds, label -> requestStartTimer(seconds, label) },
-                    onCustom = { showSheet = true },
-                    onCancel = { viewModel.cancelTimer() },
-                    onLaunchPreset = { slot ->
-                        val p = presets.first { it.slot == slot }
-                        val label = p.name ?: presetFallbackLabels[slot].orEmpty()
-                        if (p.unlimited) {
-                            // p.thresholdW peut être absent (sans aucune limite du tout, retour
-                            // David 2026-09-11) — requestStartTimer sait déjà gérer ce cas.
-                            requestStartTimer(null, label, p.thresholdW)
-                        } else {
-                            p.durationSeconds?.let { requestStartTimer(it, label, p.thresholdW) }
-                        }
-                    },
                     onAddPreset = { slot -> editingPresetSlot = slot },
                     onEditPreset = { slot -> editingPresetSlot = slot },
                     onDeletePreset = { slot -> deletingPresetSlot = slot },
@@ -335,20 +293,6 @@ fun DetailScreen(
                 )
             }
         }
-    }
-
-    if (showSheet) {
-        DurationPickerSheet(
-            hasPowerMetering = device?.hasPowerMetering ?: false,
-            title = stringResource(R.string.duration_picker_title),
-            confirmLabel = stringResource(R.string.duration_picker_start),
-            confirmIcon = Icons.Filled.PlayArrow,
-            onDismiss = { showSheet = false },
-            onConfirm = { seconds, label, thresholdW, _ ->
-                showSheet = false
-                requestStartTimer(seconds, label, thresholdW)
-            },
-        )
     }
 
     editingPresetSlot?.let { slot ->
@@ -389,30 +333,6 @@ fun DetailScreen(
         )
     }
 
-    pendingTimer?.let { pt ->
-        ConflictDialog(
-            onCancel = { pendingTimer = null },
-            onLaunchAnyway = {
-                viewModel.startTimer(pt.seconds, pt.label, pt.thresholdW)
-                pendingTimer = null
-            },
-            onStopPresence = {
-                viewModel.stopPresenceThenStartTimer(pt.seconds, pt.label, pt.thresholdW)
-                pendingTimer = null
-            },
-        )
-    }
-
-    planningWarning?.let { (pt, planning) ->
-        PlanningInProgressDialog(
-            planning = planning,
-            onCancel = { planningWarning = null },
-            onConfirm = {
-                viewModel.startTimer(pt.seconds, pt.label, pt.thresholdW)
-                planningWarning = null
-            },
-        )
-    }
 
     if (showAddPlanning || editingPlanning != null) {
         AddPlanningDialog(
@@ -652,10 +572,11 @@ private fun ButtonTimerSection(
 }
 
 /** Minuteur en attente de résolution du conflit présence (durée, libellé, seuil de coupure). */
-private data class PendingTimer(val seconds: Int?, val label: String, val thresholdW: Int?)
+/** internal (pas private) : réutilisée par la modale rapide du Tableau (voir DeviceTile.ChannelQuickSheet). */
+internal data class PendingTimer(val seconds: Int?, val label: String, val thresholdW: Int?)
 
 @Composable
-private fun ConflictDialog(
+internal fun ConflictDialog(
     onCancel: () -> Unit,
     onLaunchAnyway: () -> Unit,
     onStopPresence: () -> Unit,
@@ -690,7 +611,7 @@ private fun ConflictDialog(
  * planning n'est pas modifié et reprendra la main à sa prochaine occurrence.
  */
 @Composable
-private fun PlanningInProgressDialog(
+internal fun PlanningInProgressDialog(
     planning: Planning,
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
@@ -1455,7 +1376,8 @@ private fun SmokeCutoffSection(
  * ni [unlimited]. [unlimited] = sans limite de durée, coupure sur seuil uniquement ([thresholdW]
  * alors toujours non nul) ; [durationSeconds] est alors ignoré (valeur résiduelle possible).
  */
-private data class PersonalPreset(
+/** internal (pas private) : réutilisée par la modale rapide du Tableau (voir DeviceTile.ChannelQuickSheet). */
+internal data class PersonalPreset(
     val slot: Int,
     val name: String?,
     val durationSeconds: Int?,
@@ -1465,18 +1387,16 @@ private data class PersonalPreset(
     val configured: Boolean get() = durationSeconds != null || unlimited
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Gestion des réglages Perso — créer, modifier, supprimer (jamais les lancer : ça, c'est la
+ * modale rapide du Tableau désormais, voir DeviceTile.ChannelQuickSheet). Configurer ne montre
+ * plus l'état d'un minuteur en cours ni de bouton Annuler — les deux vivaient ici avant l'ergonomie
+ * à deux niveaux du 2026-09-21 (un tap = agir, deux taps = régler), désormais redondants avec la
+ * modale.
+ */
 @Composable
 private fun TimerSection(
-    status: TileStatus,
-    elapsedNow: Long,
-    runningThresholdW: Int?,
-    runningLabel: String?,
     presets: List<PersonalPreset>,
-    onPreset: (Int, String) -> Unit,
-    onCustom: () -> Unit,
-    onCancel: () -> Unit,
-    onLaunchPreset: (slot: Int) -> Unit,
     onAddPreset: (slot: Int) -> Unit,
     onEditPreset: (slot: Int) -> Unit,
     onDeletePreset: (slot: Int) -> Unit,
@@ -1487,89 +1407,33 @@ private fun TimerSection(
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
         )
-
-        val online = status as? TileStatus.Online
-        val remaining = online?.timerEndsAtElapsed?.let { ((it - elapsedNow) / 1000).coerceAtLeast(0) }
-
-        if (remaining != null && remaining > 0) {
-            // Nom du réglage qui pilote réellement la prise (préréglage Perso, ou durée choisie
-            // pour un lancement rapide/Manuel) plutôt qu'un texte générique, quand on le connaît
-            // (mémo local posé au démarrage — voir DetailViewModel.pendingLabel, 2026-08-17).
-            Text(
-                text = runningLabel?.let { stringResource(R.string.detail_timer_running_named, it) }
-                    ?: stringResource(R.string.detail_timer_running),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = formatCountdown(remaining),
-                style = MaterialTheme.typography.headlineMedium,
-                fontFamily = FontFamily.Monospace,
-            )
-            if (runningThresholdW != null) {
-                Text(
-                    text = stringResource(R.string.timer_preset_cutoff_detail, runningThresholdW),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        presets.forEach { p ->
+            if (p.configured) {
+                PersonalPresetRow(
+                    label = if (p.unlimited) {
+                        p.name.orEmpty()
+                    } else {
+                        stringResource(R.string.timer_preset_row_label, p.name.orEmpty(), durationLabel(p.durationSeconds!!))
+                    },
+                    detail = if (p.unlimited && p.thresholdW != null) {
+                        stringResource(R.string.timer_preset_unlimited_detail, p.thresholdW)
+                    } else if (p.unlimited) {
+                        // Ni durée ni coupure sur seuil (retour David, 2026-09-11) : simple
+                        // allumage sans aucune limite automatique.
+                        stringResource(R.string.timer_preset_no_limit_detail)
+                    } else if (p.thresholdW != null) {
+                        stringResource(R.string.timer_preset_cutoff_detail, p.thresholdW)
+                    } else {
+                        stringResource(R.string.timer_preset_no_cutoff)
+                    },
+                    onEdit = { onEditPreset(p.slot) },
+                    onDelete = { onDeletePreset(p.slot) },
                 )
-            }
-            Button(onClick = onCancel) {
-                Text(stringResource(R.string.detail_timer_cancel))
-            }
-        } else {
-            if (status is TileStatus.Offline) {
-                Text(
-                    text = stringResource(R.string.detail_offline),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(3600, 7200, 10800).forEach { seconds ->
-                    val label = durationLabel(seconds)
-                    OutlinedButton(onClick = { onPreset(seconds, label) }) { Text(label) }
-                }
-                // Se glissent juste avant "Manuel" : lancement direct, comme 1h/2h/3h.
-                presets.forEach { p ->
-                    if (p.configured) {
-                        OutlinedButton(onClick = { onLaunchPreset(p.slot) }) {
-                            Text(p.name ?: stringResource(R.string.timer_preset_chip))
-                        }
-                    }
-                }
-                OutlinedButton(onClick = onCustom) {
-                    Text(stringResource(R.string.detail_timer_custom))
-                }
-            }
-
-            presets.forEach { p ->
-                if (p.configured) {
-                    PersonalPresetRow(
-                        label = if (p.unlimited) {
-                            p.name.orEmpty()
-                        } else {
-                            stringResource(R.string.timer_preset_row_label, p.name.orEmpty(), durationLabel(p.durationSeconds!!))
-                        },
-                        detail = if (p.unlimited && p.thresholdW != null) {
-                            stringResource(R.string.timer_preset_unlimited_detail, p.thresholdW)
-                        } else if (p.unlimited) {
-                            // Ni durée ni coupure sur seuil (retour David, 2026-09-11) : simple
-                            // allumage sans aucune limite automatique.
-                            stringResource(R.string.timer_preset_no_limit_detail)
-                        } else if (p.thresholdW != null) {
-                            stringResource(R.string.timer_preset_cutoff_detail, p.thresholdW)
-                        } else {
-                            stringResource(R.string.timer_preset_no_cutoff)
-                        },
-                        onEdit = { onEditPreset(p.slot) },
-                        onDelete = { onDeletePreset(p.slot) },
-                    )
-                } else {
-                    OutlinedButton(onClick = { onAddPreset(p.slot) }) {
-                        Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.size(4.dp))
-                        Text(stringResource(R.string.timer_preset_add_slot, p.slot))
-                    }
+            } else {
+                OutlinedButton(onClick = { onAddPreset(p.slot) }) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(4.dp))
+                    Text(stringResource(R.string.timer_preset_add_slot, p.slot))
                 }
             }
         }

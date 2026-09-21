@@ -1,6 +1,5 @@
 package kapoue.hestia.ui.screens.detail
 
-import android.os.SystemClock
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -30,7 +29,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import javax.inject.Inject
-import kotlin.math.abs
 
 @HiltViewModel
 class DetailViewModel @Inject constructor(
@@ -82,23 +80,6 @@ class DetailViewModel @Inject constructor(
     val activeIp: StateFlow<String?> = _activeIp.asStateFlow()
 
     /**
-     * Seuil du minuteur actuellement en attente pour cet appareil, ou null. Lu à chaque relevé ;
-     * l'écran ne l'affiche que si l'appareil confirme lui-même un minuteur en cours (voir
-     * [status]) — ce mémo peut rester en place un moment après la fin réelle du minuteur.
-     */
-    private val _pendingThresholdW = MutableStateFlow<Int?>(null)
-    val pendingThresholdW: StateFlow<Int?> = _pendingThresholdW.asStateFlow()
-
-    /**
-     * Libellé du minuteur en cours (nom du préréglage Perso, ou durée lisible « 2h » pour un
-     * lancement rapide/Manuel) — le même texte que celui choisi au démarrage ([PendingTimer.label]),
-     * pour que l'écran affiche quel réglage pilote réellement la prise plutôt qu'un texte
-     * générique (2026-08-17).
-     */
-    private val _pendingLabel = MutableStateFlow<String?>(null)
-    val pendingLabel: StateFlow<String?> = _pendingLabel.asStateFlow()
-
-    /**
      * Plannings réellement présents sur l'appareil, relus après chaque modification — précis et
      * simulations de présence confondus depuis la fusion du 2026-08-18 ([Planning.isPresence]).
      */
@@ -132,26 +113,6 @@ class DetailViewModel @Inject constructor(
     }
 
     /**
-     * Démarre le minuteur (autonome sur l'appareil), puis relit l'état réel. Si [thresholdW] est
-     * fourni, ajoute la coupure sur seuil de consommation. [seconds] null = sans limite de durée.
-     * Les deux peuvent être absents (retour David, 2026-09-11) : la prise s'allume alors sans
-     * aucune limite automatique, ni durée ni coupure — simple allumage, comme la bascule de la
-     * tuile, juste accessible en un tap nommé.
-     */
-    fun startTimer(seconds: Int?, detail: String, thresholdW: Int? = null) {
-        viewModelScope.launch {
-            val dev = repository.getDevice(deviceId) ?: return@launch
-            when {
-                seconds == null && thresholdW != null -> repository.startUnlimitedChargeTimer(dev, thresholdW)
-                seconds != null && thresholdW != null -> repository.startChargeTimer(dev, seconds, thresholdW, detail)
-                seconds != null -> repository.startTimer(dev, seconds, detail)
-                else -> repository.userToggle(dev, on = true)
-            }
-            fetch()
-        }
-    }
-
-    /**
      * Enregistre (ou remplace) l'un des deux réglages personnalisés du minuteur ([slot] = 1 ou
      * 2) — confort propre à Hestia, jamais envoyé à la prise avant que l'utilisateur ne le lance
      * via sa puce nommée. [seconds] null = sans limite de durée ; [thresholdW] null = sans
@@ -182,14 +143,6 @@ class DetailViewModel @Inject constructor(
         }
     }
 
-    fun cancelTimer() {
-        viewModelScope.launch {
-            val dev = repository.getDevice(deviceId) ?: return@launch
-            repository.cancelTimer(dev)
-            fetch()
-        }
-    }
-
     /**
      * Vrai si ce canal a été désactivé pour aujourd'hui via le bouton ON/OFF du Tableau (voir
      * `AppPreferences.isPresenceDisabledToday`) — lecture locale pure, pas de RPC. Sert à ne pas
@@ -201,21 +154,6 @@ class DetailViewModel @Inject constructor(
     /** Même chose que [isPresenceDisabledToday], côté planning récurrent (voir
      * `AppPreferences.isPlanningDisabledToday`). */
     fun isPlanningDisabledToday(): Boolean = appPreferences.isPlanningDisabledToday(deviceId)
-
-    /** Résolution du conflit : arrête la simulation de présence puis lance le minuteur. */
-    fun stopPresenceThenStartTimer(seconds: Int?, detail: String, thresholdW: Int? = null) {
-        viewModelScope.launch {
-            val dev = repository.getDevice(deviceId) ?: return@launch
-            repository.stopPresence(dev)
-            when {
-                seconds == null && thresholdW != null -> repository.startUnlimitedChargeTimer(dev, thresholdW)
-                seconds != null && thresholdW != null -> repository.startChargeTimer(dev, seconds, thresholdW, detail)
-                seconds != null -> repository.startTimer(dev, seconds, detail)
-                else -> Unit
-            }
-            fetch()
-        }
-    }
 
     /**
      * Ajoute un planning ; le résultat (succès ou conflit) est publié pour l'UI. [date] non nul =
@@ -335,17 +273,10 @@ class DetailViewModel @Inject constructor(
         val status = repository.getStatus(dev).toTileStatus()
         _status.value = status
         _activeIp.value = repository.activeIp(dev)
-        // Souvenir local (Manuel/Perso uniquement, voir DashboardViewModel.fetch) : ne le garder
-        // que s'il correspond au minuteur natif réellement en cours sur l'appareil, sinon un
-        // minuteur bouton (qui ne passe jamais par ce souvenir) afficherait un seuil/libellé
-        // d'une tout autre programmation, périmée — bug vécu en direct le 2026-08-18.
-        val pendingTimer = appPreferences.pendingTimers().firstOrNull { it.deviceId == deviceId }
-        val deviceEndsAtElapsed = (status as? TileStatus.Online)?.timerEndsAtElapsed
-        val matches = pendingTimer != null && deviceEndsAtElapsed != null &&
-            abs(deviceEndsAtElapsed - SystemClock.elapsedRealtime() - (pendingTimer.endMillis - System.currentTimeMillis())) <= STALE_PENDING_TIMER_TOLERANCE_MS
-        if (pendingTimer != null && !matches) appPreferences.removePendingTimer(deviceId)
-        _pendingThresholdW.value = pendingTimer?.thresholdW.takeIf { matches }
-        _pendingLabel.value = pendingTimer?.label.takeIf { matches }
+        // Le souvenir local du minuteur en cours (Manuel/Perso) n'est plus affiché sur cet écran
+        // depuis l'ergonomie à deux niveaux du 2026-09-21 (voir TimerSection) — sa correspondance
+        // avec le minuteur natif réel, et le nettoyage s'il est périmé, restent gérés par
+        // DashboardViewModel.fetch, qui interroge de toute façon déjà chaque appareil en continu.
         if (dev.hasScripting) {
             loadButtonTimer(dev)
         }
@@ -369,11 +300,5 @@ class DetailViewModel @Inject constructor(
             repository.setButtonTimer(dev, enabled, durationSeconds, thresholdW)
             loadButtonTimer(dev)
         }
-    }
-
-    private companion object {
-        /** Tolérance pour considérer qu'un souvenir local de minuteur correspond bien au minuteur
-         * natif actuellement en cours sur l'appareil (voir le calcul dans [fetch]). */
-        const val STALE_PENDING_TIMER_TOLERANCE_MS = 5_000L
     }
 }

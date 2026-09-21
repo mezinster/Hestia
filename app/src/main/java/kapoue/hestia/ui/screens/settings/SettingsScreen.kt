@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Upload
-import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wifi
@@ -306,13 +305,6 @@ fun SettingsScreen(
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { PermissionSection() }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-            item {
-                BackupSection(
-                    onExport = { exportLauncher.launch(exportFilename) },
-                    onImport = { importLauncher.launch(arrayOf("application/json")) },
-                )
-            }
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { AppearanceSection(themeMode, viewModel::setThemeMode) }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item {
@@ -342,6 +334,16 @@ fun SettingsScreen(
                     testing = cloudTesting,
                     onTest = viewModel::testCloudKey,
                     onClear = viewModel::clearCloudCredentials,
+                )
+            }
+            // En bas de page (retour David, 2026-09-18) : plus logique après tous les réglages
+            // eux-mêmes plutôt qu'en tête, la sauvegarde/restauration n'étant pas un réglage
+            // qu'on ajuste au quotidien.
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+            item {
+                BackupSection(
+                    onExport = { exportLauncher.launch(exportFilename) },
+                    onImport = { importLauncher.launch(arrayOf("application/json")) },
                 )
             }
         }
@@ -557,12 +559,11 @@ private fun DeviceGroupHeaderRow(
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(
-                imageVector = Icons.Filled.ViewModule,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
+            // Même picto de connectivité que les lignes solo (retour David, 2026-09-18) : la
+            // grille (Icons.Filled.ViewModule) ne voulait dire qu'une chose, « ceci est un bloc »
+            // — mais prenait la place du Wifi/WifiOff, laissant le bloc sans aucun indicateur de
+            // connexion. Le texte « N canaux » juste en dessous suffit déjà à signaler un bloc.
+            ConnectivityIndicator(online)
             Spacer(Modifier.size(10.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

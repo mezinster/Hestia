@@ -415,6 +415,30 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Lance un minuteur (1h/2h/3h, Perso, ou Manuel) depuis la modale rapide d'un canal — même
+     * dispatcher que l'écran Configurer (voir `DeviceRepository.dispatchStartTimer`), pour que les
+     * deux points d'entrée restent synchronisés (bug du 2026-09-21, `stopPresenceThenStartTimer`
+     * avait raté un correctif fait uniquement sur l'autre écran).
+     */
+    fun startTimer(device: Device, seconds: Int?, label: String, thresholdW: Int? = null) {
+        if (!_permissionUsable.value) return
+        viewModelScope.launch {
+            repository.dispatchStartTimer(device, seconds, thresholdW, label)
+            fetchOne(device)
+        }
+    }
+
+    /** Comme [startTimer], après avoir coupé la présence en cours (résolution du dialogue de conflit). */
+    fun stopPresenceThenStartTimer(device: Device, seconds: Int?, label: String, thresholdW: Int? = null) {
+        if (!_permissionUsable.value) return
+        viewModelScope.launch {
+            repository.stopPresence(device)
+            repository.dispatchStartTimer(device, seconds, thresholdW, label)
+            fetchOne(device)
+        }
+    }
+
     private suspend fun applyToggle(device: Device, turnOn: Boolean) {
         // Éteindre reste toujours un Switch.Set direct, quel que soit ce qui a déclenché
         // l'allumage (bouton physique ou app) — jamais concerné par le minuteur bouton.

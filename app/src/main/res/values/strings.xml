@@ -226,6 +226,10 @@
 
     <!-- États d'une tuile -->
     <string name="state_active">On</string>
+    <!-- Inserted between the state label and the countdown while a timer is running (e.g. "On
+         for another 55:10") — without it the two read glued together and imprecise, as if
+         "55:10" were a clock time rather than a remaining duration (retour David, 2026-09-18). -->
+    <string name="timer_countdown_connector">for another</string>
     <string name="state_idle">Off</string>
     <!-- Encore utilisé par le badge d'état de l'écran Détail (StatusBadge), qui n'a pas besoin
          de distinguer minuteur/présence/planning comme le faisait la tuile du Tableau. -->
@@ -282,7 +286,7 @@
     <string name="tile_via_local">Local network</string>
     <string name="tile_via_cloud">Via Shelly Cloud (remote fallback)</string>
     <!-- Modale rapide d'un canal, dans un bloc multi-prises -->
-    <string name="tile_open_detail">View details</string>
+    <string name="tile_configure">Configure</string>
 
     <!-- Connectivité et ordre dans les Réglages -->
     <string name="settings_connectivity_online">Online</string>
@@ -295,11 +299,6 @@
     <string name="detail_back">Back</string>
     <string name="detail_timer_section">On for</string>
     <string name="detail_timer_custom">Manual</string>
-    <string name="detail_timer_running">Timer running</string>
-    <!-- Nom du réglage qui pilote la prise (préréglage Perso, ou durée choisie), quand connu -->
-    <string name="detail_timer_running_named">Running: %1$s</string>
-    <string name="detail_timer_cancel">Cancel timer</string>
-    <string name="detail_offline">Device unreachable right now.</string>
 
     <!-- Durées -->
     <string name="duration_hours">%1$dh</string>

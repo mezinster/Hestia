@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
@@ -62,7 +63,13 @@ import kapoue.hestia.R
 import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.permission.LocalNetworkPermission
+import kapoue.hestia.ui.screens.detail.ConflictDialog
+import kapoue.hestia.ui.screens.detail.DurationPickerSheet
+import kapoue.hestia.ui.screens.detail.PendingTimer
+import kapoue.hestia.ui.screens.detail.PlanningInProgressDialog
 import kapoue.hestia.ui.theme.stateColors
 import kotlinx.coroutines.delay
 
@@ -87,6 +94,15 @@ fun DashboardScreen(
     // premier relevé jusqu'à fermer/rouvrir la modale) — on retrouve la tuile à jour dans
     // uiState.tiles à chaque recomposition à la place, comme pour tout le reste de l'écran.
     var quickSheetDeviceId by remember { mutableStateOf<Long?>(null) }
+    // Lancement d'un programme depuis la modale rapide (Ergo-1, 2026-09-21) — même logique de
+    // conflit planning/présence que l'écran Configurer (voir DetailScreen.requestStartTimer),
+    // dupliquée ici plutôt que partagée : les deux écrans n'ont pas le même ViewModel. Le Tableau
+    // gère plusieurs appareils à la fois (Détail n'en a qu'un), donc le device concerné est gardé
+    // à côté du minuteur en attente plutôt qu'implicite.
+    var pendingTimer by remember { mutableStateOf<Pair<Device, PendingTimer>?>(null) }
+    var planningWarning by remember { mutableStateOf<Triple<Device, PendingTimer, Planning>?>(null) }
+    // Sélecteur de durée « Manuel » ouvert depuis la modale rapide — id du canal concerné.
+    var customTimerDeviceId by remember { mutableStateOf<Long?>(null) }
 
     // Compteur de secondes pour décrémenter les comptes à rebours localement.
     var elapsedNow by remember { mutableStateOf(SystemClock.elapsedRealtime()) }
@@ -244,7 +260,11 @@ fun DashboardScreen(
                                                     viewModel.toggle(tile.device, turnOn)
                                                 }
                                             },
-                                            onOpenDetail = { onOpenDetail(tile.device.id) },
+                                            // Ergo-2 (2026-09-21) : la modale rapide d'abord, comme
+                                            // pour un canal de bloc — une prise seule n'a plus de
+                                            // raison d'aller direct sur Configurer, un tap doit
+                                            // toujours proposer l'action avant le réglage.
+                                            onOpenDetail = { quickSheetDeviceId = tile.device.id },
                                             onPlanningWindowEnded = { viewModel.refresh(force = true) },
                                         )
                                     }
@@ -268,6 +288,23 @@ fun DashboardScreen(
         )
     }
 
+    // Même filtrage « désactivé aujourd'hui » que DetailScreen.requestStartTimer, mais à partir
+    // des champs déjà portés par la tuile (pas besoin d'appel ViewModel dédié, le Tableau gère
+    // plusieurs appareils à la fois — voir la déclaration de pendingTimer/planningWarning).
+    fun Planning.isReallyActiveFor(tile: TileUiState): Boolean = isActiveNow() &&
+        !(isPresence && tile.presenceDisabledToday) &&
+        !(!isPresence && !once && tile.planningDisabledToday)
+
+    fun requestStartTimer(tile: TileUiState, seconds: Int?, label: String, thresholdW: Int? = null) {
+        val activePlanning = tile.plannings.firstOrNull { it.isReallyActiveFor(tile) }
+        val timer = PendingTimer(seconds, label, thresholdW)
+        when {
+            activePlanning?.isPresence == true -> pendingTimer = tile.device to timer
+            activePlanning != null -> planningWarning = Triple(tile.device, timer, activePlanning)
+            else -> viewModel.startTimer(tile.device, seconds, label, thresholdW)
+        }
+    }
+
     quickSheetDeviceId?.let { id ->
         val tile = uiState.tiles.firstOrNull { it.device.id == id }
         if (tile == null) {
@@ -288,6 +325,14 @@ fun DashboardScreen(
                         viewModel.toggle(tile.device, turnOn)
                     }
                 },
+                onLaunch = { seconds, label, thresholdW ->
+                    quickSheetDeviceId = null
+                    requestStartTimer(tile, seconds, label, thresholdW)
+                },
+                onCustom = {
+                    quickSheetDeviceId = null
+                    customTimerDeviceId = tile.device.id
+                },
                 onOpenDetail = {
                     quickSheetDeviceId = null
                     onOpenDetail(tile.device.id)
@@ -295,6 +340,50 @@ fun DashboardScreen(
                 onDismiss = { quickSheetDeviceId = null },
             )
         }
+    }
+
+    customTimerDeviceId?.let { id ->
+        val tile = uiState.tiles.firstOrNull { it.device.id == id }
+        if (tile == null) {
+            customTimerDeviceId = null
+        } else {
+            DurationPickerSheet(
+                hasPowerMetering = tile.device.hasPowerMetering,
+                title = stringResource(R.string.duration_picker_title),
+                confirmLabel = stringResource(R.string.duration_picker_start),
+                confirmIcon = Icons.Filled.PlayArrow,
+                onDismiss = { customTimerDeviceId = null },
+                onConfirm = { seconds, label, thresholdW, _ ->
+                    customTimerDeviceId = null
+                    requestStartTimer(tile, seconds, label, thresholdW)
+                },
+            )
+        }
+    }
+
+    pendingTimer?.let { (device, pt) ->
+        ConflictDialog(
+            onCancel = { pendingTimer = null },
+            onLaunchAnyway = {
+                viewModel.startTimer(device, pt.seconds, pt.label, pt.thresholdW)
+                pendingTimer = null
+            },
+            onStopPresence = {
+                viewModel.stopPresenceThenStartTimer(device, pt.seconds, pt.label, pt.thresholdW)
+                pendingTimer = null
+            },
+        )
+    }
+
+    planningWarning?.let { (device, pt, planning) ->
+        PlanningInProgressDialog(
+            planning = planning,
+            onCancel = { planningWarning = null },
+            onConfirm = {
+                viewModel.startTimer(device, pt.seconds, pt.label, pt.thresholdW)
+                planningWarning = null
+            },
+        )
     }
 }
 
