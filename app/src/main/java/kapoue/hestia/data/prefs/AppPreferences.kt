@@ -188,6 +188,15 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
 
     fun clearCloudCredentials() = setCloudCredentials(null, null)
 
+    /**
+     * Date (ISO, [LocalDate]) du dernier passage de la vérification automatique du firmware — une
+     * fois par jour maximum, au lancement, uniquement pour les appareils avec le Cloud activé (voir
+     * CLAUDE.md et `DeviceRepository.checkFirmwareUpdatesIfDue`). Chaîne vide = jamais lancée.
+     */
+    var lastFirmwareCheckDate: String
+        get() = prefs.getString(KEY_FIRMWARE_CHECK_LAST_DATE, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_FIRMWARE_CHECK_LAST_DATE, value).apply() }
+
     // --- Minuteurs en attente (mémos pour notifier la fin d'un « Active pour » / coupure seuil) ---
 
     fun pendingTimers(): List<PendingTimer> =
@@ -326,6 +335,7 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_PLANNING_DISABLED_TODAY = "planning_disabled_today"
         const val KEY_CLOUD_AUTH_KEY = "cloud_auth_key"
         const val KEY_CLOUD_SERVER = "cloud_server"
+        const val KEY_FIRMWARE_CHECK_LAST_DATE = "firmware_check_last_date"
         val json = Json { ignoreUnknownKeys = true }
     }
 }

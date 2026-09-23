@@ -2,6 +2,7 @@ package kapoue.hestia.ui.screens.dashboard
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SettingsInputAntenna
 import androidx.compose.material.icons.filled.Wifi
@@ -86,6 +88,7 @@ fun DeviceTile(
     onToggle: (Boolean) -> Unit,
     onOpenDetail: () -> Unit,
     onPlanningWindowEnded: () -> Unit,
+    onOpenFirmware: () -> Unit,
 ) {
     val colors = MaterialTheme.stateColors
     // elapsedNow (rafraîchi à la seconde par le parent) force le recalcul du planning en cours
@@ -109,42 +112,46 @@ fun DeviceTile(
         onClick = onOpenDetail,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = tile.device.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                ConnectivityBadge(tile.status, modifier = Modifier.padding(start = 4.dp))
-            }
-
-            Spacer(Modifier.height(10.dp))
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                PlugCircle(visual = visual)
-            }
-
-            if (!visual.loading) {
-                Spacer(Modifier.height(6.dp))
-                val stateLine = visual.countdown?.let { "${visual.label} · $it" } ?: visual.label
-                Text(
-                    text = stateLine,
-                    color = visual.textColor,
-                    fontWeight = FontWeight.Medium,
-                    style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                // Seuil sur sa propre ligne, jamais concaténé à la ligne ci-dessus : la combinaison
-                // sur une seule ligne entrait en collision avec l'interrupteur (retour David,
-                // 2026-08-22).
-                visual.thresholdText?.let {
+        Column {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = it,
+                        text = tile.device.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    ConnectivityBadge(tile.status, modifier = Modifier.padding(start = 4.dp))
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    PlugCircle(visual = visual)
+                }
+
+                if (!visual.loading) {
+                    Spacer(Modifier.height(6.dp))
+                    val stateLine = visual.countdown?.let { "${visual.label} · $it" } ?: visual.label
+                    Text(
+                        text = stateLine,
+                        color = visual.textColor,
+                        fontWeight = FontWeight.Medium,
+                        style = MaterialTheme.typography.labelSmall,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    // Seuil sur sa propre ligne, jamais concaténé à la ligne ci-dessus : la
+                    // combinaison sur une seule ligne entrait en collision avec l'interrupteur
+                    // (retour David, 2026-08-22). Toujours rendue, même vide (retour David,
+                    // 2026-09-23) : sinon une tuile Actif-avec-seuil a une ligne de plus qu'une
+                    // tuile Indisponible à côté dans la même rangée de la grille à 2 colonnes,
+                    // hauteurs différentes, moche — même principe déjà appliqué au bloc
+                    // multiprises et au détecteur de fumée.
+                    Text(
+                        text = visual.thresholdText.orEmpty(),
                         color = visual.thresholdTextColor ?: visual.textColor,
                         fontWeight = FontWeight.Medium,
                         style = MaterialTheme.typography.labelSmall,
@@ -154,28 +161,66 @@ fun DeviceTile(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-            }
 
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(40.dp)) {
-                val powerWatts = (tile.status as? TileStatus.Online)
-                    ?.powerWatts?.takeIf { tile.device.hasPowerMetering }
-                Text(
-                    text = powerWatts?.let { formatPower(it) }.orEmpty(),
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Spacer(Modifier.weight(1f))
-                val interactive = tile.status is TileStatus.Online
-                val checked = (tile.status as? TileStatus.Online)?.output == true
-                RoundToggleButton(
-                    enabled = interactive,
-                    checked = checked,
-                    onClick = { onToggle(!checked) },
-                )
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(40.dp)) {
+                    val powerWatts = (tile.status as? TileStatus.Online)
+                        ?.powerWatts?.takeIf { tile.device.hasPowerMetering }
+                    Text(
+                        text = powerWatts?.let { formatPower(it) }.orEmpty(),
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Spacer(Modifier.weight(1f))
+                    val interactive = tile.status is TileStatus.Online
+                    val checked = (tile.status as? TileStatus.Online)?.output == true
+                    RoundToggleButton(
+                        enabled = interactive,
+                        checked = checked,
+                        onClick = { onToggle(!checked) },
+                    )
+                }
+            }
+            if (tile.device.firmwareUpdateAvailable) {
+                FirmwareUpdateBanner(onClick = onOpenFirmware)
             }
         }
+    }
+}
+
+/**
+ * Bandeau « Maj dispo » (2026-09-23) — vérification automatique du firmware, une fois par jour,
+ * pour les appareils avec le Cloud activé (voir DeviceRepository.checkFirmwareUpdatesIfDue).
+ * Pleine largeur en bas de la tuile, son propre tap cible (jamais mêlé au tap normal de la
+ * tuile qui ouvre la modale rapide, Ergo-1/2) — direct vers Modifier l'appareil, où vit la
+ * section Firmware. Même bleu que l'état Présence, décliné en fond ([StateColorSet.presenceBg]).
+ */
+@Composable
+private fun FirmwareUpdateBanner(onClick: () -> Unit) {
+    val colors = MaterialTheme.stateColors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(colors.presenceBg)
+            .padding(vertical = 6.dp),
+    ) {
+        Icon(
+            Icons.Filled.CloudDownload,
+            contentDescription = null,
+            tint = colors.presenceText,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = stringResource(R.string.tile_firmware_update_banner),
+            color = colors.presenceText,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 
@@ -188,6 +233,7 @@ fun DeviceTile(
 fun SmokeDetectorTile(
     tile: TileUiState,
     onOpenDetail: () -> Unit,
+    onOpenFirmware: () -> Unit,
 ) {
     val colors = MaterialTheme.stateColors
     val sensor = tile.sensorStatus ?: SensorStatus.Loading
@@ -247,7 +293,8 @@ fun SmokeDetectorTile(
         onClick = onOpenDetail,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column {
+            Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text(
                     text = tile.device.name,
@@ -317,6 +364,10 @@ fun SmokeDetectorTile(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(),
             )
+            }
+            if (tile.device.firmwareUpdateAvailable) {
+                FirmwareUpdateBanner(onClick = onOpenFirmware)
+            }
         }
     }
 }
@@ -656,6 +707,7 @@ fun DeviceStripRow(
     members: List<TileUiState>,
     elapsedNow: Long,
     onTapChannel: (TileUiState) -> Unit,
+    onOpenFirmware: (Long) -> Unit,
 ) {
     val colors = MaterialTheme.stateColors
     Surface(
@@ -663,32 +715,41 @@ fun DeviceStripRow(
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    text = groupLabel,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                // Tous les canaux d'un même bloc partagent la même IP, donc le même chemin
-                // (local/cloud) — un seul picto pour le groupe, pas un par mini-cercle.
-                val groupOnline = members.firstNotNullOfOrNull { it.status as? TileStatus.Online }
-                ConnectivityBadge(groupOnline ?: TileStatus.Offline, modifier = Modifier.padding(start = 4.dp))
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                members.forEach { member ->
-                    MiniPlugCircle(
-                        tile = member,
-                        elapsedNow = elapsedNow,
-                        onClick = { onTapChannel(member) },
+        Column {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = groupLabel,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
                     )
+                    // Tous les canaux d'un même bloc partagent la même IP, donc le même chemin
+                    // (local/cloud) — un seul picto pour le groupe, pas un par mini-cercle.
+                    val groupOnline = members.firstNotNullOfOrNull { it.status as? TileStatus.Online }
+                    ConnectivityBadge(groupOnline ?: TileStatus.Offline, modifier = Modifier.padding(start = 4.dp))
                 }
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    members.forEach { member ->
+                        MiniPlugCircle(
+                            tile = member,
+                            elapsedNow = elapsedNow,
+                            onClick = { onTapChannel(member) },
+                        )
+                    }
+                }
+            }
+            // Firmware partagé par tous les canaux d'un même appareil physique (même IP) : un
+            // seul bandeau pour le bloc entier, jamais répété par mini-cercle (retour David,
+            // 2026-09-23) — vrai si n'importe quel membre porte le drapeau, ils sont tous
+            // identiques en pratique (écrits ensemble par checkFirmwareUpdatesIfDue).
+            if (members.any { it.device.firmwareUpdateAvailable }) {
+                FirmwareUpdateBanner(onClick = { onOpenFirmware(members.first().device.id) })
             }
         }
     }

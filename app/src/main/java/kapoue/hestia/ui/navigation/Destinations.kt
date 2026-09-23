@@ -24,9 +24,14 @@ object StackedRoutes {
     const val ADD_DEVICE = "add_device"
     const val EDIT_DEVICE = "edit_device"
     const val EDIT_DEVICE_ARG_ID = "deviceId"
-    const val EDIT_DEVICE_PATTERN = "$EDIT_DEVICE/{$EDIT_DEVICE_ARG_ID}"
+    /** Défilement ponctuel jusqu'à la section Firmware à l'arrivée — voir le bandeau « Maj
+     * dispo » du Tableau (2026-09-23), seul déclencheur pour l'instant. */
+    const val EDIT_DEVICE_ARG_SCROLL_TO_FIRMWARE = "scrollToFirmware"
+    const val EDIT_DEVICE_PATTERN =
+        "$EDIT_DEVICE/{$EDIT_DEVICE_ARG_ID}?$EDIT_DEVICE_ARG_SCROLL_TO_FIRMWARE={$EDIT_DEVICE_ARG_SCROLL_TO_FIRMWARE}"
 
-    fun editDevice(deviceId: Long) = "$EDIT_DEVICE/$deviceId"
+    fun editDevice(deviceId: Long, scrollToFirmware: Boolean = false) =
+        "$EDIT_DEVICE/$deviceId?$EDIT_DEVICE_ARG_SCROLL_TO_FIRMWARE=$scrollToFirmware"
 
     const val DETAIL = "detail"
     const val DETAIL_ARG_ID = "deviceId"

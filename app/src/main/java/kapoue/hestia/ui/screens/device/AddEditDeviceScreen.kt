@@ -13,22 +13,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,11 +39,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -52,9 +55,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -67,9 +76,11 @@ import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
 import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.LedNightModeState
+import kapoue.hestia.ui.icons.SmokeDetectorIcon
 import kapoue.hestia.ui.permission.LocalNetworkPermission
 import kapoue.hestia.ui.permission.LocalNetworkPermissionStatus
 import kapoue.hestia.ui.permission.PermissionExplanationDialog
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,6 +103,15 @@ fun AddEditDeviceScreen(
     // suppression appelle une confirmation par habitude d'usage, contrairement à une simple
     // modification de champ.
     var showDeleteIp2Confirm by remember { mutableStateOf(false) }
+
+    // Défilement ponctuel jusqu'à la section Firmware à l'arrivée depuis le bandeau « Maj dispo »
+    // du Tableau (2026-09-23) — même mécanisme que le défilement vers ntfy dans Réglages, mais un
+    // simple argument de navigation suffit ici : cet écran empilé est toujours recomposé à neuf,
+    // pas besoin d'un coordinateur partagé pour rattraper une course de navigation.
+    val firmwareBringIntoViewRequester = remember { BringIntoViewRequester() }
+    LaunchedEffect(Unit) {
+        if (viewModel.scrollToFirmwareOnLoad) firmwareBringIntoViewRequester.bringIntoView()
+    }
 
     // Se referme lorsque l'opération est terminée (hors composition).
     LaunchedEffect(state.done) {
@@ -117,7 +137,9 @@ fun AddEditDeviceScreen(
     ) { granted ->
         if (granted) {
             permissionDenied = false
-            viewModel.testAndAdd()
+            // Reprend l'ajout interrompu par la demande de permission — détecteur de fumée
+            // compris depuis ce lot (retour David, 2026-09-23), jamais figé sur testAndAdd.
+            if (state.type == DeviceType.SMOKE_DETECTOR) viewModel.addSmokeDetector() else viewModel.testAndAdd()
         } else {
             permissionDenied = true
         }
@@ -136,16 +158,13 @@ fun AddEditDeviceScreen(
             return
         }
         if (!viewModel.validate()) return
-        // Détecteur de fumée : pas de contact réseau à l'ajout (voir SMOKE-DETECTOR.md), donc
-        // pas besoin de la permission réseau local à ce stade — elle sera demandée au premier
-        // vrai appel RPC, comme pour tout appareil.
-        if (state.type == DeviceType.SMOKE_DETECTOR) {
-            viewModel.addSmokeDetector()
-            return
-        }
+        // Détecteur de fumée : depuis ce lot, l'ajout tente une vraie lecture RPC (nom de
+        // l'appareil, après le réveil manuel demandé à l'écran) — même besoin de la permission
+        // réseau local qu'une prise, jamais de contact sans elle (CLAUDE.md).
+        val addAction = if (state.type == DeviceType.SMOKE_DETECTOR) viewModel::addSmokeDetector else viewModel::testAndAdd
         when (LocalNetworkPermission.status(context)) {
             LocalNetworkPermissionStatus.NOT_REQUIRED,
-            LocalNetworkPermissionStatus.GRANTED -> viewModel.testAndAdd()
+            LocalNetworkPermissionStatus.GRANTED -> addAction()
             LocalNetworkPermissionStatus.DENIED -> showPermissionDialog = true
         }
     }
@@ -176,29 +195,29 @@ fun AddEditDeviceScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            OutlinedTextField(
-                value = state.name,
-                onValueChange = viewModel::onNameChange,
-                label = { Text(stringResource(R.string.add_device_name_label)) },
-                placeholder = { Text(stringResource(R.string.add_device_name_hint)) },
-                isError = state.nameError != null,
-                supportingText = when (val nameError = state.nameError) {
-                    null -> if (state.isGroupEdit) {
-                        { Text(stringResource(R.string.add_device_name_group_hint)) }
-                    } else {
-                        null
-                    }
-                    else -> {
-                        { Text(stringResource(nameError.res)) }
-                    }
-                },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            HorizontalDivider()
-
             if (state.isEditMode) {
+                OutlinedTextField(
+                    value = state.name,
+                    onValueChange = viewModel::onNameChange,
+                    label = { Text(stringResource(R.string.add_device_name_label)) },
+                    placeholder = { Text(stringResource(nameHintFor(state.type))) },
+                    isError = state.nameError != null,
+                    supportingText = when (val nameError = state.nameError) {
+                        null -> if (state.isGroupEdit) {
+                            { Text(stringResource(R.string.add_device_name_group_hint)) }
+                        } else {
+                            null
+                        }
+                        else -> {
+                            { Text(stringResource(nameError.res)) }
+                        }
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                HorizontalDivider()
+
                 IpLocationsSection(
                     slot1Name = state.ipName,
                     slot1Ip = state.ipAddress,
@@ -209,30 +228,14 @@ fun AddEditDeviceScreen(
                     onAddSlot2 = { editingIpSlot = 2 },
                     onDeleteSlot2 = { showDeleteIp2Confirm = true },
                 )
-            } else {
-                OutlinedTextField(
-                    value = state.ipAddress,
-                    onValueChange = viewModel::onIpChange,
-                    label = { Text(stringResource(R.string.add_device_ip_label)) },
-                    placeholder = { Text(stringResource(R.string.add_device_ip_hint)) },
-                    isError = state.ipError != null,
-                    supportingText = state.ipError?.let { { Text(stringResource(it.res)) } },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
 
-            HorizontalDivider()
+                HorizontalDivider()
 
-            // En édition, le type ne se change plus du tout, quel que soit l'appareil — une
-            // prise EST une prise (retour David, 2026-08-31) : le proposer comme un champ
-            // modifiable laissait croire qu'un appareil pouvait changer de nature, et pour un
-            // détecteur de fumée c'était même risqué (les capacités enregistrées à l'ajout,
-            // supportsSwitch = false notamment, ne seraient jamais recalculées). Affiché comme
-            // FirmwareSection ci-dessous (titre + texte), pas comme un champ grisé.
-            if (state.isEditMode) {
+                // Le type ne se change plus du tout en édition, quel que soit l'appareil — une
+                // prise EST une prise (retour David, 2026-08-31) : le proposer comme un champ
+                // modifiable laissait croire qu'un appareil pouvait changer de nature, et pour un
+                // détecteur de fumée c'était même risqué (les capacités enregistrées à l'ajout,
+                // supportsSwitch = false notamment, ne seraient jamais recalculées).
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = stringResource(R.string.add_device_type_label),
@@ -244,25 +247,7 @@ fun AddEditDeviceScreen(
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
-            } else {
-                DeviceTypeDropdown(
-                    selected = state.type,
-                    onSelected = viewModel::onTypeChange,
-                )
-            }
 
-            // Pas de test de connexion possible pour ce type (voir SMOKE-DETECTOR.md) — insiste
-            // sur ntfy et le Cloud à la place, seul moyen réaliste d'être alerté vu que l'appareil
-            // dort la majeure partie du temps.
-            if (!state.isEditMode && state.type == DeviceType.SMOKE_DETECTOR) {
-                Text(
-                    text = stringResource(R.string.add_device_smoke_detector_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            if (state.isEditMode) {
                 // Pas de composant LED sur un détecteur de fumée (réglage propre aux prises/
                 // blocs multi-canaux) — la section était affichée sans rien faire, confusion
                 // repérée en test réel le 2026-08-31.
@@ -272,17 +257,19 @@ fun AddEditDeviceScreen(
                 }
 
                 HorizontalDivider()
-                FirmwareSection(
-                    deviceType = state.type,
-                    driver = state.driver,
-                    result = state.firmwareCheck,
-                    checking = state.firmwareChecking,
-                    installing = state.firmwareInstalling,
-                    rebooting = state.rebooting,
-                    onCheck = viewModel::checkFirmwareUpdate,
-                    onInstall = { showFirmwareInstallConfirm = true },
-                    onReboot = { showRebootConfirm = true },
-                )
+                Column(modifier = Modifier.bringIntoViewRequester(firmwareBringIntoViewRequester)) {
+                    FirmwareSection(
+                        deviceType = state.type,
+                        driver = state.driver,
+                        result = state.firmwareCheck,
+                        checking = state.firmwareChecking,
+                        installing = state.firmwareInstalling,
+                        rebooting = state.rebooting,
+                        onCheck = viewModel::checkFirmwareUpdate,
+                        onInstall = { showFirmwareInstallConfirm = true },
+                        onReboot = { showRebootConfirm = true },
+                    )
+                }
 
                 HorizontalDivider()
                 CloudSection(
@@ -290,51 +277,173 @@ fun AddEditDeviceScreen(
                     toggling = state.cloudToggling,
                     onToggle = viewModel::onToggleCloud,
                 )
-            }
-
-            // Erreur globale (réseau / RPC / doublon) — message actionnable.
-            state.error?.let { message ->
-                val text = message.arg?.let { stringResource(message.res, it) }
-                    ?: stringResource(message.res)
-                Text(text = text, color = MaterialTheme.colorScheme.error)
-            }
-
-            if (permissionDenied) {
-                Text(
-                    text = stringResource(R.string.error_permission_denied_action),
-                    color = MaterialTheme.colorScheme.error,
+            } else {
+                // Toujours visibles (retour David, 2026-09-23) : celle non choisie se grise à 50 %
+                // plutôt que de disparaître, pour pouvoir se raviser sans devoir tout recommencer.
+                DeviceTypeTiles(
+                    selectedType = state.type.takeIf { state.typeChosen },
+                    onSelected = viewModel::onTypeChosen,
                 )
-            }
 
-            // Bloc de sélection des canaux (appareil multi-canaux détecté).
-            state.channelSelection?.let { selection ->
-                ChannelSelectionBlock(
-                    model = selection.model,
-                    channels = selection.channels,
-                    selected = selection.selected,
-                    onToggle = viewModel::toggleChannel,
-                )
-            }
+                if (state.typeChosen) {
+                    HorizontalDivider()
 
-            Button(
-                onClick = { onActionOrConfirm(state, viewModel, ::onPrimaryAction) },
-                enabled = !state.isTesting,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (state.isTesting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 8.dp),
-                        strokeWidth = 2.dp,
+                    // IP avant Nom (retour David, 2026-09-23 : plus logique, et c'est l'IP qui
+                    // déclenche la sonde automatique pour une prise — inutile d'attendre le Nom).
+                    val focusManager = LocalFocusManager.current
+                    OutlinedTextField(
+                        value = state.ipAddress,
+                        onValueChange = viewModel::onIpChange,
+                        label = { Text(stringResource(R.string.add_device_ip_label)) },
+                        placeholder = { Text(stringResource(R.string.add_device_ip_hint)) },
+                        isError = state.ipError != null,
+                        supportingText = state.ipError?.let { { Text(stringResource(it.res)) } },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(
+                            onNext = {
+                                viewModel.onIpImeAction()
+                                focusManager.moveFocus(FocusDirection.Down)
+                            },
+                        ),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(stringResource(R.string.add_device_testing))
-                } else {
-                    // Picto disquette uniquement pour une vraie modification (retour David,
-                    // 2026-08-24) — pas pour « tester et ajouter » ni « ajouter la sélection »,
-                    // qui ne sont pas des enregistrements au même sens.
-                    if (state.isEditMode && state.channelSelection == null) {
-                        Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+
+                    // Sonde automatique (prise uniquement, retour David, 2026-09-23) : débounce
+                    // après la dernière frappe, ou touche Suivant du clavier — jamais besoin de
+                    // quitter le champ (peu fiable, voir échange).
+                    if (state.type == DeviceType.PLUG && state.autoProbing) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.add_device_testing), style = MaterialTheme.typography.bodySmall)
+                        }
                     }
-                    Text(primaryButtonLabel(state))
+
+                    HorizontalDivider()
+
+                    val foundName = state.foundDeviceName
+                    if (state.type == DeviceType.PLUG && foundName != null) {
+                        // Nom déjà trouvé sur la prise par la sonde automatique : plus besoin du
+                        // champ Nom éditable, l'appareil fait autorité (retour David, 2026-09-23).
+                        Text(
+                            text = stringResource(R.string.add_device_found_name, foundName),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = state.name,
+                            onValueChange = viewModel::onNameChange,
+                            label = { Text(stringResource(R.string.add_device_name_label)) },
+                            placeholder = { Text(stringResource(nameHintFor(state.type))) },
+                            isError = state.nameError != null,
+                            supportingText = state.nameError?.let { { Text(stringResource(it.res)) } },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    if (state.type == DeviceType.SMOKE_DETECTOR) {
+                        // Pas de test de connexion complet pour ce type (voir SMOKE-DETECTOR.md) —
+                        // insiste sur ntfy et le Cloud à la place, seul moyen réaliste d'être alerté
+                        // vu que l'appareil dort la majeure partie du temps.
+                        Text(
+                            text = stringResource(R.string.add_device_smoke_detector_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        // Réveil manuel (retour David, 2026-09-23) : seulement une fois IP et Nom
+                        // renseignés, pour ne pas gâcher les 2 minutes de fenêtre pendant que
+                        // l'utilisateur finit de remplir le formulaire.
+                        if (state.ipAddress.isNotBlank() && state.name.isNotBlank()) {
+                            Text(
+                                text = stringResource(R.string.add_device_smoke_wake_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Rien de tout ça tant que le type n'est pas encore choisi (écran des deux tuiles).
+            if (state.isEditMode || state.typeChosen) {
+                // Erreur globale (réseau / RPC / doublon) — message actionnable.
+                state.error?.let { message ->
+                    val text = message.arg?.let { stringResource(message.res, it) }
+                        ?: stringResource(message.res)
+                    Text(text = text, color = MaterialTheme.colorScheme.error)
+                }
+
+                if (permissionDenied) {
+                    Text(
+                        text = stringResource(R.string.error_permission_denied_action),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
+                // Bloc de sélection des canaux (appareil multi-canaux détecté).
+                state.channelSelection?.let { selection ->
+                    ChannelSelectionBlock(
+                        model = selection.model,
+                        channels = selection.channels,
+                        selected = selection.selected,
+                        onToggle = viewModel::toggleChannel,
+                    )
+                }
+
+                val confirmedName = state.confirmedDeviceName
+                if (confirmedName != null) {
+                    // Ajout réussi (prise ou détecteur) : nom réellement retenu affiché quelques
+                    // secondes avant la fermeture automatique de l'écran (retour David,
+                    // 2026-09-23) — rassure que l'appareil a bien été contacté et lu.
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = stringResource(R.string.add_device_confirmed_name, confirmedName),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                } else {
+                    // Détecteur de fumée (ajout) : bouton masqué tant que l'utilisateur n'a pas eu
+                    // le temps de lire le texte de réveil (retour David, 2026-09-23) — jamais pour
+                    // une prise ni en édition.
+                    var smokeSubmitVisible by remember { mutableStateOf(false) }
+                    val smokeWakeHintVisible = !state.isEditMode && state.type == DeviceType.SMOKE_DETECTOR &&
+                        state.ipAddress.isNotBlank() && state.name.isNotBlank()
+                    LaunchedEffect(smokeWakeHintVisible) {
+                        smokeSubmitVisible = false
+                        if (smokeWakeHintVisible) {
+                            delay(3_000)
+                            smokeSubmitVisible = true
+                        }
+                    }
+                    val showButton = state.isEditMode || state.type != DeviceType.SMOKE_DETECTOR || smokeSubmitVisible
+                    if (showButton) {
+                        Button(
+                            onClick = { onActionOrConfirm(state, viewModel, ::onPrimaryAction) },
+                            enabled = !state.isTesting,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (state.isTesting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.padding(end = 8.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                                Text(stringResource(R.string.add_device_testing))
+                            } else {
+                                // Picto disquette uniquement pour une vraie modification (retour David,
+                                // 2026-08-24) — pas pour « tester et ajouter » ni « ajouter la sélection »,
+                                // qui ne sont pas des enregistrements au même sens.
+                                if (state.isEditMode && state.channelSelection == null) {
+                                    Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                                }
+                                Text(primaryButtonLabel(state))
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -428,49 +537,58 @@ private fun primaryButtonLabel(state: AddEditUiState): String = when {
 }
 
 /**
- * Types proposés à la création d'un appareil (voir [DeviceTypeDropdown]) — [DeviceType.LAMP] et
- * [DeviceType.SENSOR] existent dans l'enum mais rien dans Hestia ne les distingue encore d'une
- * prise classique ; les proposer donnerait l'impression d'un vrai support qui n'existe pas.
+ * Choix du type d'appareil à l'ajout, en tuiles plutôt qu'en menu déroulant (retour David,
+ * 2026-09-23) — toujours visibles, y compris après le choix : celle non retenue se grise à 50 %
+ * au lieu de disparaître, pour pouvoir se raviser sans recommencer tout le formulaire (retour
+ * David, même jour). [selectedType] = null tant que rien n'a encore été choisi (aucune des deux
+ * grisée dans ce cas). [DeviceType.LAMP] et [DeviceType.SENSOR] existent dans l'enum mais rien
+ * dans Hestia ne les distingue encore d'une prise classique ; les proposer donnerait l'impression
+ * d'un vrai support qui n'existe pas.
  */
-private val addDeviceSelectableTypes = listOf(DeviceType.PLUG, DeviceType.SMOKE_DETECTOR)
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun DeviceTypeDropdown(
-    selected: DeviceType,
-    onSelected: (DeviceType) -> Unit,
+private fun DeviceTypeTiles(selectedType: DeviceType?, onSelected: (DeviceType) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(stringResource(R.string.add_device_type_prompt), style = MaterialTheme.typography.titleMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            DeviceTypeTile(
+                icon = Icons.Filled.Power,
+                label = stringResource(deviceTypeLabel(DeviceType.PLUG)),
+                dimmed = selectedType != null && selectedType != DeviceType.PLUG,
+                onClick = { onSelected(DeviceType.PLUG) },
+                modifier = Modifier.weight(1f),
+            )
+            DeviceTypeTile(
+                icon = SmokeDetectorIcon,
+                label = stringResource(deviceTypeLabel(DeviceType.SMOKE_DETECTOR)),
+                dimmed = selectedType != null && selectedType != DeviceType.SMOKE_DETECTOR,
+                onClick = { onSelected(DeviceType.SMOKE_DETECTOR) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeviceTypeTile(
+    icon: ImageVector,
+    label: String,
+    dimmed: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = modifier.alpha(if (dimmed) 0.5f else 1f),
     ) {
-        OutlinedTextField(
-            value = stringResource(deviceTypeLabel(selected)),
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.add_device_type_label)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp, horizontal = 12.dp),
         ) {
-            // Seuls les types réellement pris en charge par Hestia aujourd'hui (retour David,
-            // 2026-09-03) : LAMP/SENSOR existent dans l'enum mais rien dans l'app ne les distingue
-            // encore d'une prise, autant ne pas les proposer avant qu'ils aient un vrai sens.
-            addDeviceSelectableTypes.forEach { type ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(deviceTypeLabel(type))) },
-                    onClick = {
-                        onSelected(type)
-                        expanded = false
-                    },
-                )
-            }
+            Icon(icon, contentDescription = null, modifier = Modifier.size(36.dp))
+            Text(label, style = MaterialTheme.typography.labelLarge)
         }
     }
 }
@@ -480,6 +598,13 @@ private fun deviceTypeLabel(type: DeviceType): Int = when (type) {
     DeviceType.LAMP -> R.string.device_type_lamp
     DeviceType.SENSOR -> R.string.device_type_sensor
     DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector
+}
+
+/** Exemple affiché en filigrane du champ Nom — « Prise scooter » n'a aucun sens pour un
+ * détecteur de fumée (retour David, 2026-09-23). */
+private fun nameHintFor(type: DeviceType): Int = when (type) {
+    DeviceType.SMOKE_DETECTOR -> R.string.add_device_name_hint_smoke_detector
+    else -> R.string.add_device_name_hint
 }
 
 @Composable

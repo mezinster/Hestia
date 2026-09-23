@@ -47,6 +47,9 @@ class DashboardViewModel @Inject constructor(
         // Correctif ponctuel, sûr à rappeler à chaque lancement (sans effet une fois les noms
         // déjà au bon format) : voir DeviceRepository.fixLegacyChannelNames.
         viewModelScope.launch { repository.fixLegacyChannelNames() }
+        // Vérification automatique du firmware — une fois par jour maximum, voir
+        // DeviceRepository.checkFirmwareUpdatesIfDue (no-op silencieux si déjà faite aujourd'hui).
+        viewModelScope.launch { repository.checkFirmwareUpdatesIfDue() }
     }
 
     /**

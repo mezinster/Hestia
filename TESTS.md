@@ -32,6 +32,8 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 
 ## 3. Ajout d'un appareil
 
+- [ ] Les deux tuiles (Prise / Détecteur de fumée) s'affichent avant tout autre champ, rien
+      d'autre visible avant ce choix
 - [ ] Adresse IP invalide rejetée avec un message clair (`192.168.1`, `abc`, champ vide)
 - [ ] IP valide mais aucun appareil : message d'erreur explicite, pas de plantage
 - [ ] IP d'un appareil non-Shelly (ex. la box) : rejet propre
@@ -41,6 +43,34 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Modification du nom : prise en compte immédiate sur le Tableau
 - [ ] Suppression : confirmation demandée, tuile retirée
 - [ ] Réordonnancement conservé après redémarrage de l'application
+
+### 3bis. Prise — sonde automatique sur l'IP (lot 2026-09-23)
+
+- [ ] IP valide saisie, puis pause ~1 s sans rien taper : sonde automatique déclenchée (spinner),
+      sans avoir quitté le champ
+- [ ] IP valide saisie, puis touche « Suivant »/« OK » du clavier : sonde déclenchée immédiatement
+- [ ] Prise avec un nom déjà configuré : champ Nom absent, nom trouvé affiché en lecture seule
+- [ ] Prise sans nom (jamais configurée) ou injoignable : champ Nom apparaît normalement
+- [ ] IP corrigée après une sonde réussie : nouvelle sonde relancée, nom trouvé remasqué le temps
+      du nouveau test
+- [ ] Ajout réussi : bouton grisé + spinner, puis nom réel affiché quelques secondes, puis
+      fermeture automatique de l'écran
+- [ ] Appareil multi-canaux (Strip4) : sélection des canaux toujours fonctionnelle, confirmation
+      finale identique
+- [ ] Permission réseau local refusée : la sonde automatique ne se déclenche pas (aucun popup
+      pendant la saisie), seul le tap sur Ajouter déclenche la demande de permission, comme avant
+
+### 3ter. Détecteur de fumée — réveil manuel à l'ajout (lot 2026-09-23)
+
+- [ ] IP et Nom saisis : le texte d'instruction (réveil 3 clics) n'apparaît qu'une fois les deux
+      champs remplis
+- [ ] Bouton Ajouter invisible pendant les 3 s qui suivent l'apparition du texte, puis apparaît
+- [ ] Détecteur réveillé (3 appuis brefs) avant de taper Ajouter : le vrai nom de l'appareil est
+      récupéré et affiché en confirmation (pas le texte saisi)
+- [ ] Détecteur non réveillé / rendormi entre-temps : ajout quand même réussi (jusqu'à ~5 s
+      d'attente), nom saisi poussé sur l'appareil (comportement de repli), confirmation affiche ce
+      nom saisi
+- [ ] Doublon (même IP) refusé avec message, comme pour une prise
 
 ## 4. Tableau et pilotage
 
@@ -61,6 +91,21 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
       mesure : `0.0 W` au repos (point décimal, même en français), valeur réelle en charge,
       mise à jour à chaque relevé
 - [ ] Un appareil **sans mesure** n'affiche aucune puissance ; une prise **hors ligne** non plus
+- [ ] Tuile Actif avec seuil de coupure à côté d'une tuile Indisponible : même hauteur dans la
+      grille, pas de décalage visible entre les deux colonnes
+
+### 4bis. Vérification automatique du firmware (lot 2026-09-23)
+
+- [ ] Mode démo (appui long sur le logo) : bandeau bleu « Maj dispo » visible sur la tuile
+      « Living Room Lamp », absent sur les autres appareils factices
+- [ ] Tap sur le bandeau : ouvre Modifier l'appareil, défile automatiquement jusqu'à la section
+      Firmware, relance une vérification toute seule (spinner bref)
+- [ ] Bandeau affiché **une seule fois** sur un bloc multiprises (pas répété par mini-cercle)
+- [ ] Un appareil réel avec le Cloud désactivé : jamais de vérification automatique, jamais de
+      bandeau, même après plusieurs relances de l'appli
+- [ ] Un appareil réel avec le Cloud activé et déjà à jour : pas de bandeau
+- [ ] Après une installation lancée (bouton Installer) : le bandeau disparaît immédiatement du
+      Tableau, sans attendre la prochaine vérification automatique
 
 ## 5. Minuteur
 

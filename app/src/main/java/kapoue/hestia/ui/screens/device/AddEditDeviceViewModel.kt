@@ -1,9 +1,11 @@
 package kapoue.hestia.ui.screens.device
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.R
 import kapoue.hestia.core.util.isValidIpv4
 import kapoue.hestia.data.local.entity.Device
@@ -18,6 +20,9 @@ import kapoue.hestia.domain.model.LedNightModeState
 import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.common.toUserMessageOrNull
 import kapoue.hestia.ui.navigation.StackedRoutes
+import kapoue.hestia.ui.permission.LocalNetworkPermission
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +50,12 @@ data class AddEditUiState(
     val ip2Address: String? = null,
     val ip2Name: String? = null,
     val type: DeviceType = DeviceType.PLUG,
+    /**
+     * Mode ajout uniquement (toujours vrai en édition) : vrai une fois qu'une des deux tuiles
+     * Prise/Détecteur a été choisie — avant ça, l'écran n'affiche que ce choix, rien d'autre
+     * (retour David, 2026-09-23).
+     */
+    val typeChosen: Boolean = false,
     val isTesting: Boolean = false,
     val nameError: UserMessage? = null,
     val ipError: UserMessage? = null,
@@ -52,6 +63,24 @@ data class AddEditUiState(
     val error: UserMessage? = null,
     /** Non nul lorsque plusieurs canaux ont été détectés et attendent une sélection. */
     val channelSelection: ChannelSelection? = null,
+    /**
+     * Ajout d'une prise uniquement : sonde automatique en cours (débounce après saisie de l'IP,
+     * ou touche Suivant/OK du clavier) — distincte de [isTesting], qui couvre l'ajout final.
+     */
+    val autoProbing: Boolean = false,
+    /**
+     * Ajout d'une prise uniquement : nom déjà trouvé sur l'appareil par la dernière sonde
+     * automatique réussie pour l'IP actuellement saisie. Non nul = le champ Nom disparaît, ce nom
+     * est utilisé tel quel (retour David, 2026-09-23 : « si tu sais lire le nom de la prise,
+     * plus besoin du champ Nom si un nom est trouvé »).
+     */
+    val foundDeviceName: String? = null,
+    /**
+     * Nom réellement retenu après un ajout réussi (prise ou détecteur), affiché quelques secondes
+     * avant la fermeture automatique de l'écran — rassure que l'appareil a bien été contacté et lu,
+     * pas seulement le texte saisi (retour David, 2026-09-23).
+     */
+    val confirmedDeviceName: String? = null,
     /** True quand l'opération est terminée : l'écran peut se refermer. */
     val done: Boolean = false,
     val isDirty: Boolean = false,
@@ -77,13 +106,22 @@ data class AddEditUiState(
 @HiltViewModel
 class AddEditDeviceViewModel @Inject constructor(
     private val repository: DeviceRepository,
+    @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val editingDeviceId: Long? =
         savedStateHandle.get<Long>(StackedRoutes.EDIT_DEVICE_ARG_ID)
 
-    private val _uiState = MutableStateFlow(AddEditUiState(isEditMode = editingDeviceId != null))
+    /** Défilement ponctuel jusqu'à la section Firmware à l'arrivée — voir le bandeau « Maj
+     * dispo » du Tableau (2026-09-23), seul déclencheur pour l'instant. Lu une seule fois : pas
+     * besoin de survivre à une recomposition, juste au tout premier affichage de l'écran. */
+    val scrollToFirmwareOnLoad: Boolean =
+        savedStateHandle.get<Boolean>(StackedRoutes.EDIT_DEVICE_ARG_SCROLL_TO_FIRMWARE) ?: false
+
+    private val _uiState = MutableStateFlow(
+        AddEditUiState(isEditMode = editingDeviceId != null, typeChosen = editingDeviceId != null),
+    )
     val uiState: StateFlow<AddEditUiState> = _uiState.asStateFlow()
 
     // Instantané initial pour détecter les modifications non enregistrées.
@@ -96,6 +134,15 @@ class AddEditDeviceViewModel @Inject constructor(
 
     // Capacités détectées par la dernière sonde réussie, persistées à l'ajout.
     private var capabilities: DeviceCapabilities? = null
+
+    // IP pour laquelle [capabilities]/[AddEditUiState.foundDeviceName] sont valides — invalidés
+    // dès que l'utilisateur retape une IP différente (voir onIpChange).
+    private var probedIp: String? = null
+
+    // Sonde automatique en cours (débounce après saisie de l'IP, ou déclenchée par la touche
+    // Suivant/OK du clavier) — annulée/relancée à chaque frappe, jointe si l'ajout est confirmé
+    // avant qu'elle ait fini (voir testAndAdd).
+    private var probeJob: Job? = null
 
     // Tous les canaux du même appareil physique (même IP), y compris celui édité — un seul élément
     // hors mode groupé. Utilisé pour appliquer nom/IP/type à l'ensemble à l'enregistrement.
@@ -136,6 +183,13 @@ class AddEditDeviceViewModel @Inject constructor(
                     val cloudInfo = repository.getCloudInfo(device)
                     _uiState.update { it.copy(cloudInfo = cloudInfo) }
                     (cloudInfo as? CloudInfo.Available)?.macId?.let { repository.cacheCloudId(groupMembers, it) }
+
+                    // Arrivée depuis le bandeau « Maj dispo » du Tableau (2026-09-23) : le détail
+                    // exact (versions) n'est connu qu'ici, pas au moment de la vérification
+                    // automatique qui a juste posé le drapeau — revérifie tout de suite plutôt que
+                    // de laisser l'utilisateur retaper Vérifier pour une info qu'on vient de lui
+                    // annoncer.
+                    if (scrollToFirmwareOnLoad) checkFirmwareUpdate()
                 }
             }
         }
@@ -234,14 +288,95 @@ class AddEditDeviceViewModel @Inject constructor(
         next.copy(isDirty = isDirty(next))
     }
 
-    fun onIpChange(value: String) = _uiState.update {
-        val next = it.copy(ipAddress = value, ipError = null, error = null)
-        next.copy(isDirty = isDirty(next))
+    fun onIpChange(value: String) {
+        probeJob?.cancel()
+        _uiState.update {
+            val next = it.copy(
+                ipAddress = value, ipError = null, error = null,
+                foundDeviceName = null, autoProbing = false,
+            )
+            next.copy(isDirty = isDirty(next))
+        }
+        // Sonde auto (prise, ajout uniquement) : débounce, jamais sur chaque frappe brute — voir
+        // aussi onIpImeAction pour un déclenchement immédiat via le clavier (retour David,
+        // 2026-09-23 : compter sur la perte de focus n'est pas fiable, rien ne garantit que
+        // l'utilisateur tape ailleurs à l'écran). Purement opportuniste, jamais de demande de
+        // permission ici (CLAUDE.md : jamais de popup surprise pendant une simple saisie) — si la
+        // permission réseau local manque encore, on se tait, le tap explicite sur Ajouter reste le
+        // seul déclencheur de la demande, comme avant ce lot (voir onPrimaryAction côté écran).
+        val state = _uiState.value
+        if (!state.isEditMode && state.type == DeviceType.PLUG && isValidIpv4(value) && LocalNetworkPermission.isUsable(context)) {
+            probeJob = viewModelScope.launch {
+                delay(AUTO_PROBE_DEBOUNCE_MS)
+                runAutoProbe(value)
+            }
+        }
     }
 
-    fun onTypeChange(value: DeviceType) = _uiState.update {
-        val next = it.copy(type = value)
-        next.copy(isDirty = isDirty(next))
+    /** Touche Suivant/OK du clavier sur le champ IP : sonde immédiate, sans attendre le débounce. */
+    fun onIpImeAction() {
+        val state = _uiState.value
+        if (state.isEditMode || state.type != DeviceType.PLUG) return
+        val ip = state.ipAddress
+        if (!isValidIpv4(ip) || !LocalNetworkPermission.isUsable(context)) return
+        probeJob?.cancel()
+        probeJob = viewModelScope.launch { runAutoProbe(ip) }
+    }
+
+    private suspend fun runAutoProbe(ip: String) {
+        _uiState.update { it.copy(autoProbing = true) }
+        when (val result = repository.probe(ip)) {
+            is RpcResult.Success -> {
+                capabilities = result.value
+                probedIp = ip
+                val found = result.value.reportedName?.takeIf { it.isNotBlank() }
+                _uiState.update {
+                    // Le nom trouvé alimente aussi `name` (champ alors masqué à l'écran) : le
+                    // reste du parcours (addChannels, validateFields…) continue de lire ce champ
+                    // sans rien savoir de la sonde automatique.
+                    it.copy(autoProbing = false, foundDeviceName = found, name = found ?: it.name)
+                }
+            }
+            else -> {
+                capabilities = null
+                probedIp = null
+                _uiState.update { it.copy(autoProbing = false, foundDeviceName = null) }
+            }
+        }
+    }
+
+    /**
+     * Mode ajout uniquement : choix (ou changement d'avis) Prise/Détecteur via les deux tuiles,
+     * toujours visibles — celle non retenue se grise plutôt que de disparaître (retour David,
+     * 2026-09-23). Un vrai changement de type efface tout ce que la sonde automatique avait pu
+     * trouver pour l'autre type (n'a plus de sens), et relance tout de suite une sonde fraîche si
+     * on bascule vers Prise avec une IP déjà valide — comme si elle venait d'être tapée.
+     */
+    fun onTypeChosen(value: DeviceType) {
+        val current = _uiState.value
+        val switching = current.typeChosen && current.type != value
+        if (switching) {
+            probeJob?.cancel()
+            capabilities = null
+            probedIp = null
+        }
+        _uiState.update {
+            val next = it.copy(
+                type = value,
+                typeChosen = true,
+                foundDeviceName = if (switching) null else it.foundDeviceName,
+                autoProbing = if (switching) false else it.autoProbing,
+                error = null, nameError = null, ipError = null,
+            )
+            next.copy(isDirty = isDirty(next))
+        }
+        val ip = _uiState.value.ipAddress
+        if (switching && value == DeviceType.PLUG && isValidIpv4(ip) && LocalNetworkPermission.isUsable(context)) {
+            probeJob = viewModelScope.launch {
+                delay(AUTO_PROBE_DEBOUNCE_MS)
+                runAutoProbe(ip)
+            }
+        }
     }
 
     /** Modifie (ou nomme pour la première fois) le 1ᵉʳ emplacement IP. Toujours présent. */
@@ -263,7 +398,14 @@ class AddEditDeviceViewModel @Inject constructor(
     }
 
     private fun isDirty(state: AddEditUiState): Boolean =
-        state.name != initialName || state.ipAddress != initialIp || state.type != initialType ||
+        // Mode ajout uniquement : `initialType` vaut toujours PLUG par défaut (rien à comparer
+        // avant un vrai choix), donc choisir la tuile Prise ne changeait jamais `state.type` par
+        // rapport à ce défaut — contrairement à Détecteur de fumée, dirty immédiatement pour la
+        // même action. Un choix de type fait via les tuiles compte comme une vraie saisie dans les
+        // deux cas (retour David, 2026-09-23 : pas de popup de confirmation en quittant après avoir
+        // choisi Prise, alors qu'il y en avait un pour Détecteur).
+        (!state.isEditMode && state.typeChosen) ||
+            state.name != initialName || state.ipAddress != initialIp || state.type != initialType ||
             state.ipName != initialIpName || state.ip2Address != initialIp2Address || state.ip2Name != initialIp2Name
 
     /** Valide les champs (public pour gater la demande de permission avant tout contact réseau). */
@@ -286,58 +428,80 @@ class AddEditDeviceViewModel @Inject constructor(
      * Mode ajout : teste la connexion (Shelly.GetDeviceInfo + GetComponents), rejette les Gen1,
      * puis ajoute directement si un seul canal, ou propose la sélection si plusieurs.
      * L'appelant doit s'être assuré que la permission réseau local est utilisable.
+     *
+     * Réutilise le résultat de la sonde automatique déjà lancée pour cette IP si elle est encore
+     * valide ([probedIp]) — jamais un second appel RPC redondant juste parce que l'utilisateur a
+     * tapé Ajouter (retour David, 2026-09-23, lot « sonde auto sur l'IP »). Si une sonde est
+     * encore en vol (débounce pas encore écoulé), on l'attend plutôt que d'en lancer une autre.
      */
     fun testAndAdd() {
         if (!validateFields()) return
-        val state = _uiState.value
-        _uiState.update { it.copy(isTesting = true, error = null) }
+        val ip = _uiState.value.ipAddress.trim()
         viewModelScope.launch {
-            when (val result = repository.probe(state.ipAddress.trim())) {
-                is RpcResult.Success -> {
-                    val caps = result.value
-                    capabilities = caps
-                    // Repli : si aucun canal switch n'est remonté, supposer le canal 0.
-                    val channels = caps.switchChannels.ifEmpty { listOf(0) }
-                    if (channels.size == 1) {
-                        addChannels(channels)
-                    } else {
-                        _uiState.update {
-                            it.copy(
-                                isTesting = false,
-                                channelSelection = ChannelSelection(
-                                    model = caps.model,
-                                    channels = channels,
-                                    selected = channels.toSet(),
-                                ),
-                            )
-                        }
+            probeJob?.join()
+            val caps = capabilities.takeIf { probedIp == ip } ?: run {
+                _uiState.update { it.copy(isTesting = true, error = null) }
+                when (val result = repository.probe(ip)) {
+                    is RpcResult.Success -> result.value.also { capabilities = it; probedIp = ip }
+                    else -> {
+                        _uiState.update { it.copy(isTesting = false, error = result.toUserMessageOrNull()) }
+                        return@launch
                     }
                 }
-                else -> _uiState.update {
-                    it.copy(isTesting = false, error = result.toUserMessageOrNull())
+            }
+            _uiState.update { it.copy(isTesting = true, error = null) }
+            // Repli : si aucun canal switch n'est remonté, supposer le canal 0.
+            val channels = caps.switchChannels.ifEmpty { listOf(0) }
+            if (channels.size == 1) {
+                addChannels(channels)
+            } else {
+                _uiState.update {
+                    it.copy(
+                        isTesting = false,
+                        channelSelection = ChannelSelection(
+                            model = caps.model,
+                            channels = channels,
+                            selected = channels.toSet(),
+                        ),
+                    )
                 }
             }
         }
     }
 
     /**
-     * Mode ajout d'un détecteur de fumée : pas de sonde, contrairement à [testAndAdd] — voir
-     * SMOKE-DETECTOR.md. L'IP saisie est prise telle quelle, jamais vérifiée à ce stade.
+     * Mode ajout d'un détecteur de fumée : pas de sonde complète, contrairement à [testAndAdd] —
+     * voir SMOKE-DETECTOR.md et [DeviceRepository.addSmokeDetector]. L'écran a demandé à
+     * l'utilisateur de réveiller l'appareil juste avant (3 appuis brefs) : cet appel est
+     * synchrone et peut prendre jusqu'à quelques secondes (timeout RPC), d'où le spinner
+     * ([AddEditUiState.isTesting], comme pour une prise).
      */
     fun addSmokeDetector() {
         if (!validateFields()) return
         val state = _uiState.value
+        _uiState.update { it.copy(isTesting = true, error = null) }
         viewModelScope.launch {
-            val added = repository.addSmokeDetector(state.name.trim(), state.ipAddress.trim())
-            if (added) {
+            val resolvedName = repository.addSmokeDetector(state.name.trim(), state.ipAddress.trim())
+            if (resolvedName != null) {
                 // Un appareil scriptable a peut-être de la place pour relayer ses alertes ntfy
                 // dès maintenant (voir SMOKE-DETECTOR.md § Lot 4a) — best-effort, silencieux.
                 repository.resyncSmokeRelay()
-                _uiState.update { it.copy(done = true) }
+                confirmThenClose(resolvedName)
             } else {
-                _uiState.update { it.copy(error = UserMessage(R.string.error_device_exists)) }
+                _uiState.update { it.copy(isTesting = false, error = UserMessage(R.string.error_device_exists)) }
             }
         }
+    }
+
+    /**
+     * Affiche le nom réellement retenu quelques secondes avant de fermer l'écran (retour David,
+     * 2026-09-23) — rassure que l'appareil a bien été contacté et lu, pas seulement le texte tapé.
+     * Partagé par [addSmokeDetector] et [addChannels] (prise, seule ou multi-canaux).
+     */
+    private suspend fun confirmThenClose(name: String) {
+        _uiState.update { it.copy(isTesting = false, confirmedDeviceName = name) }
+        delay(CONFIRMATION_DELAY_MS)
+        _uiState.update { it.copy(done = true) }
     }
 
     fun toggleChannel(channelId: Int) = _uiState.update { state ->
@@ -384,7 +548,8 @@ class AddEditDeviceViewModel @Inject constructor(
             // n'a pas le picto relais, comment l'avoir ? »). Best-effort, silencieux si non
             // pertinent (pas de détecteur, ou déjà de la place ailleurs — voir resyncSmokeRelay).
             repository.resyncSmokeRelay()
-            _uiState.update { it.copy(isTesting = false, done = true) }
+            val resolvedName = caps.reportedName?.takeIf { it.isNotBlank() } ?: state.name.trim()
+            confirmThenClose(resolvedName)
         }
     }
 
@@ -447,5 +612,16 @@ class AddEditDeviceViewModel @Inject constructor(
                 _uiState.update { it.copy(done = true) }
             }
         }
+    }
+
+    private companion object {
+        /** Pause avant de relancer la sonde après la dernière frappe dans le champ IP — voir
+         * [onIpChange]. Assez court pour rester réactif, assez long pour ne pas sonder à chaque
+         * caractère tapé. */
+        const val AUTO_PROBE_DEBOUNCE_MS = 800L
+
+        /** Durée d'affichage du nom retenu avant fermeture automatique de l'écran, voir
+         * [confirmThenClose]. */
+        const val CONFIRMATION_DELAY_MS = 3_000L
     }
 }

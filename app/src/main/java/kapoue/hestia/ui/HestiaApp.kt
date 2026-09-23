@@ -154,6 +154,10 @@ fun HestiaApp() {
                     DashboardScreen(
                         onAddDevice = { navController.navigate(StackedRoutes.ADD_DEVICE) },
                         onOpenDetail = { id -> navController.navigate(StackedRoutes.detail(id)) },
+                        // Bandeau « Maj dispo » (2026-09-23) : direct vers Modifier l'appareil (où
+                        // vit la section Firmware), pas vers Configurer — jamais mélangé avec le
+                        // tap normal de la tuile (modale rapide, Ergo-1/2).
+                        onOpenFirmware = { id -> navController.navigate(StackedRoutes.editDevice(id, scrollToFirmware = true)) },
                         onOpenDiagnostic = { navController.navigate(StackedRoutes.DIAGNOSTIC) },
                     )
                 }
@@ -178,6 +182,10 @@ fun HestiaApp() {
                     route = StackedRoutes.EDIT_DEVICE_PATTERN,
                     arguments = listOf(
                         navArgument(StackedRoutes.EDIT_DEVICE_ARG_ID) { type = NavType.LongType },
+                        navArgument(StackedRoutes.EDIT_DEVICE_ARG_SCROLL_TO_FIRMWARE) {
+                            type = NavType.BoolType
+                            defaultValue = false
+                        },
                     ),
                 ) {
                     AddEditDeviceScreen(onDone = { navController.popBackStack() })

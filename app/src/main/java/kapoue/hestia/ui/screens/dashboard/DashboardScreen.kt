@@ -78,6 +78,7 @@ import kotlinx.coroutines.delay
 fun DashboardScreen(
     onAddDevice: () -> Unit,
     onOpenDetail: (Long) -> Unit,
+    onOpenFirmware: (Long) -> Unit,
     onOpenDiagnostic: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
@@ -234,6 +235,7 @@ fun DashboardScreen(
                                         members = members,
                                         elapsedNow = elapsedNow,
                                         onTapChannel = { quickSheetDeviceId = it.device.id },
+                                        onOpenFirmware = onOpenFirmware,
                                     )
                                 }
                             }
@@ -243,6 +245,7 @@ fun DashboardScreen(
                                         SmokeDetectorTile(
                                             tile = tile,
                                             onOpenDetail = { onOpenDetail(tile.device.id) },
+                                            onOpenFirmware = { onOpenFirmware(tile.device.id) },
                                         )
                                     } else {
                                         DeviceTile(
@@ -266,6 +269,7 @@ fun DashboardScreen(
                                             // toujours proposer l'action avant le réglage.
                                             onOpenDetail = { quickSheetDeviceId = tile.device.id },
                                             onPlanningWindowEnded = { viewModel.refresh(force = true) },
+                                            onOpenFirmware = { onOpenFirmware(tile.device.id) },
                                         )
                                     }
                                 }

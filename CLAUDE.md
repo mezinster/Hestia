@@ -6,7 +6,7 @@
 Aucun cloud, aucun compte, aucune télémétrie **par défaut**. L'application communique
 principalement en HTTP sur le réseau local avec les appareils, via leur API RPC embarquée.
 
-Deux exceptions à ce jour, toutes deux explicites et désactivées par défaut :
+Trois exceptions à ce jour, toutes explicites et désactivées par défaut :
 - les **notifications instantanées via ntfy** (ajoutées le 2026-07-29). Si l'utilisateur
   l'active dans les Réglages, ce sont les **appareils eux-mêmes** (pas Hestia) qui envoient le
   texte de leurs notifications à `ntfy.sh`, un service tiers de son choix. Cas particulier des
@@ -23,6 +23,14 @@ Deux exceptions à ce jour, toutes deux explicites et désactivées par défaut 
   (alarme, pile) pour un détecteur de fumée, jamais plus : planning, présence, seuils, scripts,
   LED, firmware, ou la coupure de l'alarme (`Smoke.Mute`, strictement locale, aucun équivalent
   cloud), qui restent strictement locaux, cloud activé ou non.
+- la **vérification automatique du firmware** (ajoutée le 2026-09-23) : au lancement de l'appli,
+  une fois par jour maximum, Hestia demande à chaque appareil ayant le Cloud Shelly activé (voir
+  ci-dessus — le réglage sert ici de simple consentement, pas de canal de communication) de
+  vérifier lui-même s'il existe une mise à jour. C'est toujours l'**appareil** qui contacte les
+  serveurs Shelly, jamais Hestia ni son Cloud Control API — exactement le même appel RPC local
+  (`Shelly.CheckForUpdate`) que le bouton Vérifier manuel de l'écran Modifier, juste déclenché
+  tout seul au lieu d'attendre un tap. Résultat signalé par un bandeau sur la tuile du Tableau ;
+  l'installation reste toujours un geste explicite (bouton Installer), jamais automatique.
 
 Toujours opt-in, jamais activé sans action explicite, toujours réversible. Toute nouvelle
 fonctionnalité qui ferait sortir des données du réseau local doit suivre le même principe :

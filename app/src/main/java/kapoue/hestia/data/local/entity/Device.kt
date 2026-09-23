@@ -100,4 +100,13 @@ data class Device(
      * jamais lu.
      */
     val cloudId: String? = null,
+    /**
+     * Résultat de la dernière vérification automatique du firmware (une fois par jour maximum,
+     * au lancement, uniquement si le Cloud Shelly est activé pour cet appareil — voir CLAUDE.md et
+     * `DeviceRepository.checkFirmwareUpdatesIfDue`). Faux tant que jamais vérifié, ou à jour, ou
+     * après une installation réussie. N'affecte jamais le comportement de l'appareil, purement
+     * informatif (bandeau sur la tuile).
+     */
+    @ColumnInfo(defaultValue = "0")
+    val firmwareUpdateAvailable: Boolean = false,
 )

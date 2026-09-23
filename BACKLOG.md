@@ -262,7 +262,32 @@ dans l'historique git).
   en auditant la doc RPC, **écartées le même jour** (retour David : pas intéressant). Jamais
   vérifiées au curl, jamais codées.
 
+- **LED qui clignote la nuit en l'absence de réseau (box/routeur éteint) — écarté le 2026-09-23,
+  aucun moyen d'agir depuis Hestia.** Demande initiale de David : éviter ce clignotement gênant la
+  nuit. Pistes `led_wifi_disable`/`led_power_disable` (vues dans une autre conversation)
+  vérifiées contre la doc officielle Gen2+ (`Sys`, `PLUGS_UI`) : **n'existent pas** sur ce
+  firmware, uniquement sur Gen1 (HTTP API). Seul réglage réel disponible : `night_mode`
+  (luminosité de la LED, dont brightness=0 sur une plage horaire — fonctionnalité déjà présente
+  dans Hestia). **Testé en direct par David le 2026-09-23** : la LED s'allume quand même en
+  l'absence de réseau, même avec ce réglage sur « Off » pendant la plage configurée — preuve que
+  ce clignotement précis (signal de détresse réseau) est **câblé dans le firmware**,
+  indépendamment de `night_mode`, sans réglage RPC exposé pour le désactiver. Rien à faire côté
+  Hestia ; à reconsidérer seulement si Shelly expose un jour un vrai réglage dans une future
+  version de firmware.
+
 ## Fonctionnalités futures
+
+- **Stocker aussi les réglages Perso sur l'appareil (comme le nom) — question de David le
+  2026-09-23, simple piste pour plus tard, rien à trancher pour l'instant.** Après le nom des
+  prises (2026-09-07) et sa correction pour les détecteurs de fumée (2026-09-23), David demande ce
+  qu'on pourrait encore synchroniser. À part le nom (déjà fait) et les scripts (déjà résidents sur
+  l'appareil par nature — présence, planning, minuteur bouton), le seul candidat réel qui reste
+  purement local à Hestia aujourd'hui : les 2 réglages Perso par canal (nom + durée + seuil de
+  coupure, voir `Device.presetName`/`presetDurationSeconds`/`presetThresholdW` et leurs variantes
+  2). Piste technique repérée mais jamais explorée : le composant `KVS` (`KVS.Set`/`KVS.Get`) de
+  l'API RPC Shelly, un petit stockage clé-valeur natif sur l'appareil, fait pour ce genre de
+  besoin — éviterait de détourner un script pour y glisser cette donnée. Permettrait à une
+  deuxième installation d'Hestia de retrouver aussi les Perso, pas seulement le nom.
 
 - **Vérification périodique du firmware via le Cloud — proposée par David le 2026-09-18, à
   trancher dans son propre lot.** Principe acté : une fois par jour maximum, au lancement de
@@ -273,17 +298,12 @@ dans l'historique git).
   plus probable), sans se marcher sur les pieds avec le tap normal (modale rapide, Ergo-1/2). À
   échanger avant tout code.
 
-- **Durée de charge absente de la notif de coupure sur seuil, malgré le correctif du 2.12.0 —
-  signalé par David le 2026-09-18, mis de côté pour plus tard.** La 2.11.0 a ajouté le calcul de
-  durée (« Coupure sur seuil de consommation après 1h32 ») dans les 3 générateurs de script
-  concernés (planning, superviseur Perso/Manuel, minuteur bouton), et la 2.12.0 a ajouté un
-  marqueur de version pour forcer le redéploiement d'un script déjà en cours d'exécution avant
-  ce correctif. Diagnostic en cours : `curl` sur `.97` (Script.GetCode de `hestia_charge`, id 1)
-  ne montre ni `hestia_notif_ver` ni `fmtDur` — le script tourne encore avec l'ancien code. Pas
-  déterminé si c'est parce que la charge testée datait d'avant l'installation de la 2.12.0 (donc
-  pas de bug, juste pas encore retesté), ou un vrai défaut du redéploiement automatique. Prochaine
-  étape à la reprise : relancer une charge Active pour sur `.97` **après** avoir confirmé la
-  2.12.0 installée, puis reregarder immédiatement le code du script.
+- **Durée de charge absente de la notif de coupure sur seuil — ✅ confirmé résolu le 2026-09-23.**
+  Signalé le 2026-09-18 : ni `hestia_notif_ver` ni `fmtDur` dans le script en cours sur `.97`, pas
+  déterminé alors si c'était juste une charge antérieure à la 2.12.0 (script pas encore
+  redéployé) ou un vrai défaut. Retesté par David le 2026-09-23 avec une charge fraîche : notif
+  reçue avec la durée (« Coupure sur seuil de consommation après 2h30 » ou proche) — c'était bien
+  le premier cas, rien à corriger. Le marqueur de version du 2.12.0 fait son travail.
 
 - Ajout d'un appareil neuf sans sortir de Hestia (provisioning Wi-Fi direct depuis l'appli) : la
   prise se connecte temporairement à son propre point d'accès, envoie le Wi-Fi cible via

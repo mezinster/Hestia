@@ -42,6 +42,10 @@ data class StateColorSet(
      * d'[offlineText] (rouge, plus grave qu'une simple alerte). Premier passage de couleur, à
      * affiner à l'usage (voir SMOKE-DETECTOR.md, David : « on doit faire joli »). */
     val warningText: Color,
+    /** Fond du bandeau « Maj dispo » (2026-09-23) — même bleu que [presenceText]/[presenceLed],
+     * décliné en fond pâle/assombri comme [activeBg]/[offlineBg], pour porter un texte lisible
+     * dessus (contrairement à [presenceText], jamais pensé pour un fond coloré propre). */
+    val presenceBg: Color,
 )
 
 private val DarkStateColors = StateColorSet(
@@ -51,6 +55,7 @@ private val DarkStateColors = StateColorSet(
     plannedLed = Color(0xFFAFA9EC), plannedText = Color(0xFFAFA9EC),
     offlineLed = Color(0xFFF0716E), offlineText = Color(0xFFF0716E), offlineBg = Color(0xFF2E1918),
     warningText = Color(0xFFF0A560),
+    presenceBg = Color(0xFF1B2836),
 )
 
 private val LightStateColors = StateColorSet(
@@ -60,6 +65,7 @@ private val LightStateColors = StateColorSet(
     plannedLed = Color(0xFF7F77DD), plannedText = Color(0xFF534AB7),
     offlineLed = Color(0xFFD8342A), offlineText = Color(0xFFC0342B), offlineBg = Color(0xFFFCEBEB),
     warningText = Color(0xFF9A5300),
+    presenceBg = Color(0xFFE3EFFB),
 )
 
 /** Jeu de couleurs d'état adapté au thème courant. */

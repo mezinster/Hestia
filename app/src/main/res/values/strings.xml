@@ -149,6 +149,7 @@
     <string name="edit_device_title">Edit device</string>
     <string name="add_device_name_label">Name</string>
     <string name="add_device_name_hint">E.g.: Scooter outlet</string>
+    <string name="add_device_name_hint_smoke_detector">E.g.: Kitchen detector</string>
     <string name="add_device_name_group_hint">Applies to all channels of this device. Rename a specific channel from Settings.</string>
     <string name="add_device_ip_label">IP address</string>
     <string name="add_device_ip_hint">E.g.: 192.168.1.96</string>
@@ -163,6 +164,10 @@
     <string name="add_device_ip_location_delete_confirm_title">Delete this address?</string>
     <string name="add_device_ip_location_delete_confirm_message">It\'s only actually removed once you tap Save at the bottom of the screen.</string>
     <string name="add_device_type_label">Type</string>
+    <string name="add_device_type_prompt">What kind of device?</string>
+    <string name="add_device_found_name">Name found on the outlet: %1$s</string>
+    <string name="add_device_smoke_wake_hint">Press the detector\'s button 3 times briefly to wake it up (setup mode, 2 minutes), then confirm below.</string>
+    <string name="add_device_confirmed_name">Added: %1$s</string>
     <string name="add_device_led_title">LED</string>
     <string name="add_device_led_hint">Lit at normal brightness during the day, dimmed to 30% from 10pm to 8am. Off toggles it off permanently.</string>
     <string name="add_device_led_loading">Checking…</string>
@@ -173,7 +178,7 @@
     <string name="device_type_smoke_detector">Smoke detector</string>
     <string name="add_device_test_and_add">Test connection and add</string>
     <string name="add_device_add_smoke_detector">Add</string>
-    <string name="add_device_smoke_detector_hint">This device runs on battery and spends most of its time asleep: Hestia can\'t check the connection right now, the IP you enter will be used as-is. Consider enabling ntfy notifications and Shelly Cloud for this detector — that\'s what lets you get an alert even while it\'s asleep.</string>
+    <string name="add_device_smoke_detector_hint">This device runs on battery and spends most of its time asleep. Consider enabling ntfy notifications and Shelly Cloud for this detector — that\'s what lets you get an alert even while it\'s asleep.</string>
     <string name="add_device_testing">Testing connection…</string>
     <string name="add_device_save">Save</string>
     <string name="add_device_cancel">Cancel</string>
@@ -334,7 +339,8 @@
     <string name="timer_preset_delete_confirm_message">The preset will be deleted. You can create a new one anytime.</string>
     <string name="timer_preset_delete_confirm_ok">Delete</string>
 
-    <!-- Mise à jour du firmware (vérification manuelle uniquement) -->
+    <!-- Mise à jour du firmware (bouton = vérification manuelle ; une vérification automatique
+         tourne aussi une fois par jour au lancement, pour les appareils avec le Cloud activé) -->
     <string name="firmware_section">Firmware update</string>
     <string name="firmware_check_button">Check for updates</string>
     <string name="firmware_check_hint">Queries Shelly\'s servers — only when you ask.</string>
@@ -342,6 +348,7 @@
     <string name="firmware_update_available">%1$s: update available. Installed version: %2$s. Available version: %3$s.</string>
     <string name="firmware_beta_only">%1$s: up to date (version %2$s). A beta version (%3$s) is available — Hestia only offers stable updates.</string>
     <string name="firmware_check_error">Check failed. Make sure the device is reachable.</string>
+    <string name="tile_firmware_update_banner">Update available</string>
     <string name="firmware_install_button">Install update</string>
     <string name="firmware_install_confirm_title">Install the update?</string>
     <string name="firmware_install_confirm_message">The device will restart to apply the update: whatever it powers will be cut for a few seconds. Don\'t unplug it during the operation.</string>

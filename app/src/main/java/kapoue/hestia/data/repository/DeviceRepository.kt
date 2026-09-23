@@ -1746,6 +1746,10 @@ class DeviceRepository @Inject constructor(
     }
 
     suspend fun checkFirmwareUpdate(device: Device): FirmwareCheckResult {
+        // « Living Room Lamp » (.2) simule une maj disponible en mode démo — sert à prévisualiser
+        // le bandeau du Tableau et le bouton Installer sans attendre une vraie maj (retour David,
+        // 2026-09-23). Tous les autres appareils démo restent « à jour ».
+        if (device.ipAddress == "${DEMO_IP_PREFIX}2") return FirmwareCheckResult.UpdateAvailable("1.0.0", "1.1.0")
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return FirmwareCheckResult.UpToDate("démo")
         val (ip, infoResult) = withIp(device) { i -> rpcClient.getDeviceInfo(i) }
         val installed = infoResult.getOrNull()?.ver ?: return FirmwareCheckResult.Error
@@ -1758,17 +1762,59 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
+     * Vérification automatique du firmware — une fois par jour maximum, au lancement de l'appli,
+     * **uniquement** pour les appareils avec le Cloud Shelly déjà activé (le consentement à un
+     * contact du firmware Shelly est déjà donné pour ceux-là — voir CLAUDE.md, nouvelle exception
+     * documentée à côté de ntfy et du Cloud). Réutilise [checkFirmwareUpdate] telle quelle (même
+     * appel RPC local que le bouton Vérifier manuel de Configurer) : un appareil injoignable à cet
+     * instant (détecteur de fumée endormi, coupure réseau…) est silencieusement ignoré pour
+     * aujourd'hui, rattrapé le lendemain — jamais de tâche de fond dédiée, juste ce passage unique
+     * au lancement (voir DashboardViewModel.init).
+     */
+    suspend fun checkFirmwareUpdatesIfDue() {
+        val today = LocalDate.now().toString()
+        if (appPreferences.lastFirmwareCheckDate == today) return
+        val byIp = getDevicesOnce().groupBy { it.ipAddress }
+        for (members in byIp.values) {
+            val first = members.first()
+            if (first.ipAddress.startsWith(DEMO_IP_PREFIX)) continue
+            val cloudEnabled = (getCloudInfo(first) as? CloudInfo.Available)?.enabled == true
+            if (!cloudEnabled) continue
+            val result = checkFirmwareUpdate(first)
+            val available = result is FirmwareCheckResult.UpdateAvailable
+            for (member in members) {
+                if (member.firmwareUpdateAvailable != available) {
+                    deviceDao.update(member.copy(firmwareUpdateAvailable = available))
+                }
+            }
+        }
+        appPreferences.lastFirmwareCheckDate = today
+    }
+
+    /**
      * Lance l'installation de la mise à jour stable. Asynchrone côté appareil : ce retour signale
      * seulement que l'installation a **démarré**, pas qu'elle a abouti — l'appareil redémarre pour
-     * l'appliquer et devient temporairement injoignable.
+     * l'appliquer et devient temporairement injoignable. Bandeau « Maj dispo » du Tableau effacé
+     * tout de suite sur tous les canaux du groupe, plutôt que d'attendre la prochaine vérification
+     * automatique (jusqu'à un jour) — il n'a plus rien à annoncer une fois l'installation lancée.
      */
     suspend fun installFirmwareUpdate(device: Device): RpcResult<Unit> {
-        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return RpcResult.Success(Unit)
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) {
+            clearFirmwareUpdateAvailable(device)
+            return RpcResult.Success(Unit)
+        }
         val (_, r) = withIp(device) { ip -> rpcClient.updateFirmware(ip) }
+        if (r is RpcResult.Success) clearFirmwareUpdateAvailable(device)
         return when (r) {
             is RpcResult.Success -> RpcResult.Success(Unit)
             is RpcResult.RpcError -> r
             is RpcResult.Failure -> r
+        }
+    }
+
+    private suspend fun clearFirmwareUpdateAvailable(device: Device) {
+        for (member in listOf(device) + siblingsSharingIp(device)) {
+            if (member.firmwareUpdateAvailable) deviceDao.update(member.copy(firmwareUpdateAvailable = false))
         }
     }
 
@@ -1959,20 +2005,30 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
-     * Ajoute un détecteur de fumée — sans sonde préalable, contrairement à [addChannels] : cet
-     * appareil dort la majeure partie du temps (voir SMOKE-DETECTOR.md), un test de connexion à
-     * l'ajout échouerait presque toujours pour rien. L'IP saisie par l'utilisateur est prise
-     * telle quelle, vérifiée au premier contact réel (comme pour toute autre RPC). Pas de relais
-     * (`supportsSwitch = false`), pas de script (`hasScripting = false` — présence/planning/
-     * minuteur bouton ne s'appliquent pas à ce type), pas de mesure de puissance.
-     * @return false si ce canal (IP, switchId 0) existe déjà.
+     * Ajoute un détecteur de fumée. Contrairement à [addChannels], pas de sonde complète
+     * (`Shelly.GetComponents`, coûteuse et de toute façon inutile ici — pas de canal à détecter) :
+     * juste une lecture légère du nom déjà présent sur l'appareil (`Shelly.GetDeviceInfo`),
+     * **synchrone**, bornée par le timeout HTTP existant (5 s max, voir NetworkModule). Corrigé le
+     * 2026-09-23 : l'écran d'ajout demande maintenant explicitement à l'utilisateur de réveiller le
+     * détecteur (3 appuis brefs, mode config 2 min) juste avant de valider, ce qui donne à cette
+     * lecture une vraie chance d'aboutir tout de suite plutôt que d'écraser aveuglément un nom déjà
+     * choisi ailleurs (autre installation d'Hestia, appli Shelly officielle) avec le texte saisi —
+     * bug vécu en direct par David le 2026-09-23 (« 123 » saisi comme texte temporaire, resté
+     * affiché après ajout, alors que les prises du même lot avaient bien récupéré leur vrai nom).
+     * Si l'appareil ne répond pas malgré tout (oubli du réveil, rendormi entre-temps), on retombe
+     * sur l'ancien comportement : le texte saisi est poussé en tâche de fond, best-effort, rattrapé
+     * au prochain réveil sinon ([nameCatchUpIfNeeded], lot 3).
+     * @return le nom finalement retenu (celui de l'appareil si trouvé, sinon celui saisi), ou null
+     * si ce canal (IP, switchId 0) existe déjà.
      */
-    suspend fun addSmokeDetector(name: String, ip: String): Boolean {
-        if (deviceDao.exists(ip, 0)) return false
+    suspend fun addSmokeDetector(name: String, ip: String): String? {
+        if (deviceDao.exists(ip, 0)) return null
+        val reportedName = rpcClient.getDeviceInfo(ip).getOrNull()?.name?.takeIf { it.isNotBlank() }
+        val resolvedName = reportedName ?: name
         val newId = deviceDao.insert(
             Device(
-                name = name,
-                deviceName = name,
+                name = resolvedName,
+                deviceName = resolvedName,
                 ipAddress = ip,
                 switchId = 0,
                 type = DeviceType.SMOKE_DETECTOR,
@@ -1983,18 +2039,28 @@ class DeviceRepository @Inject constructor(
             ),
         )
         logger.info(DiagnosticLogger.DB, "Ajout détecteur de fumée $ip")
-        // Nom des prises (2026-09-07) : pas de sonde ici, donc pas de nom déjà lu à comparer — on
-        // pousse celui saisi. Best-effort : l'appareil dort la majeure partie du temps, un échec
-        // silencieux ici est normal, rattrapé au prochain réveil ([nameCatchUpIfNeeded], lot 3).
-        appScope.launch {
-            val inserted = Device(id = newId, name = name, deviceName = name, ipAddress = ip, switchId = 0, type = DeviceType.SMOKE_DETECTOR)
-            if (pushPhysicalName(inserted, name)) {
-                appPreferences.markNameSynced(newId)
-            } else {
-                appPreferences.markNameUnsynced(newId)
+        if (reportedName != null) {
+            // Diagnostic exploitable après coup (voir CLAUDE.md § 7) : sans cette trace, impossible
+            // de distinguer a posteriori « l'appareil n'avait vraiment aucun nom » de « la lecture
+            // a échoué, le texte saisi a écrasé un nom déjà présent » — question posée en direct
+            // par David le 2026-09-23.
+            logger.info(DiagnosticLogger.RPC, "Nom lu sur le détecteur $ip à l'ajout : « $reportedName »")
+            appPreferences.markNameSynced(newId)
+        } else {
+            logger.warn(
+                DiagnosticLogger.RPC,
+                "Détecteur $ip injoignable (ou sans nom) à l'ajout : texte saisi « $name » poussé à la place",
+            )
+            appScope.launch {
+                val inserted = Device(id = newId, name = name, deviceName = name, ipAddress = ip, switchId = 0, type = DeviceType.SMOKE_DETECTOR)
+                if (pushPhysicalName(inserted, name)) {
+                    appPreferences.markNameSynced(newId)
+                } else {
+                    appPreferences.markNameUnsynced(newId)
+                }
             }
         }
-        return true
+        return resolvedName
     }
 
     suspend fun updateDevice(device: Device) = deviceDao.update(device)
@@ -2417,7 +2483,21 @@ class DeviceRepository @Inject constructor(
         }
         // Bandeau de couverture zéro (Lot 4c) : dernier résultat connu, pas recalculé à l'ouverture
         // de l'app — seulement à chaque resynchronisation réelle comme celle-ci.
-        appPreferences.setSmokeRelayCoverageOk(relayTargets.isNotEmpty())
+        //
+        // Ne jamais dégrader directement sur `relayTargets.isEmpty()` (bug vécu en direct par
+        // David le 2026-09-23 : bandeau rouge affiché en pleine page Réglages alors que le picto
+        // du relais était bien vert) — `deploySmokeRelay` fait un `Script.List` PUIS plusieurs
+        // appels d'écriture par candidat ; un simple aléa réseau sur l'un d'eux suffit à faire
+        // échouer toute la tentative pour ce passage-ci, sans que le relais déjà en place ait
+        // réellement disparu. Avant d'afficher le rouge, on retente une simple lecture (même
+        // vérification que le picto de Réglages, [isSmokeRelay], bien plus fiable qu'un
+        // redéploiement complet) — seulement si elle aussi ne trouve rien, la couverture est
+        // vraiment tombée à zéro.
+        if (relayTargets.isNotEmpty()) {
+            appPreferences.setSmokeRelayCoverageOk(true)
+        } else if (candidates.none { isSmokeRelay(it) }) {
+            appPreferences.setSmokeRelayCoverageOk(false)
+        }
 
         val reached = mutableSetOf<Long>()
         for (detector in detectors) {
@@ -2590,6 +2670,10 @@ class DeviceRepository @Inject constructor(
                 Device(
                     name = name, deviceName = name, ipAddress = ip, switchId = 0, type = type, model = "Demo",
                     supportsSwitch = true, hasScripting = true, hasPowerMetering = true, position = position,
+                    // Bandeau « Maj dispo » du Tableau : réplique en base ce que checkFirmwareUpdate
+                    // simule déjà pour ce même appareil démo, pour le prévisualiser sans attendre un
+                    // vrai passage de la vérification automatique (retour David, 2026-09-23).
+                    firmwareUpdateAvailable = ip == "203.0.113.2",
                 ),
             )
             position++

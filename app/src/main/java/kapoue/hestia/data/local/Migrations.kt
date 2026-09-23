@@ -187,3 +187,15 @@ val MIGRATION_15_16 = object : Migration(15, 16) {
         db.execSQL("DROP TABLE IF EXISTS presence_configs")
     }
 }
+
+/**
+ * v16 → v17 : vérification périodique du firmware via le Cloud (2026-09-23) — résultat de la
+ * dernière vérification automatique (une fois par jour maximum, au lancement, uniquement pour un
+ * appareil avec le Cloud Shelly déjà activé, voir CLAUDE.md). Colonne booléenne, absence =
+ * jamais vérifié ou à jour, comportement inchangé (pas de bandeau).
+ */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN firmwareUpdateAvailable INTEGER NOT NULL DEFAULT 0")
+    }
+}
