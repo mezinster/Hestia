@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -731,15 +732,21 @@ private fun FirmwareSection(
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onCheck, enabled = !checking && !installing) {
+        // Un seul bouton à la fois (retour David, 2026-09-25) : une maj disponible est déjà
+        // annoncée en toutes lettres juste au-dessus (versions installée/disponible) — Vérifier
+        // n'apporte plus rien à ce stade, et les deux boutons côte à côte poussaient Installer
+        // sur 2 lignes, trop à l'étroit. Vérifier ne réapparaît qu'après une installation (le
+        // résultat devient alors obsolète, voir installFirmwareUpdate) ou tant qu'aucune maj
+        // n'est connue.
+        if (result is FirmwareCheckResult.UpdateAvailable) {
+            Button(onClick = onInstall, enabled = !installing, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Filled.SystemUpdate, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.firmware_install_button))
+            }
+        } else {
+            OutlinedButton(onClick = onCheck, enabled = !checking) {
                 Icon(Icons.Filled.CloudDownload, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                 Text(stringResource(R.string.firmware_check_button))
-            }
-            if (result is FirmwareCheckResult.UpdateAvailable) {
-                Button(onClick = onInstall, enabled = !installing) {
-                    Text(stringResource(R.string.firmware_install_button))
-                }
             }
         }
 

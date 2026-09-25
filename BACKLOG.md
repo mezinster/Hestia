@@ -277,6 +277,18 @@ dans l'historique git).
 
 ## Fonctionnalités futures
 
+- **Réglages : le bloc multiprises ne se lit pas comme un groupe — retour de David le
+  2026-09-23, solution actée, à coder plus tard.** L'en-tête (`DeviceGroupHeaderRow`) a sa propre
+  carte avec fond ; chaque ligne de canal (`ChannelSubRow`) n'en a aucune, juste une indentation.
+  Comme la `LazyColumn` applique un espacement uniforme entre tous les éléments (en-tête, canaux,
+  en-tête suivant), rien ne distingue visuellement « ces canaux appartiennent à cet en-tête » —
+  ils flottent pareil entre leur propre en-tête et le bloc suivant. **Solution retenue** : une
+  seule carte partagée englobant l'en-tête et tous ses canaux, même principe que le bloc
+  multiprises déjà en place sur le Tableau (`DeviceStripRow`, voir DeviceTile.kt) — réutiliser ce
+  langage visuel déjà validé plutôt que d'en inventer un nouveau. Implique de fusionner l'`item`
+  d'en-tête et les `items` de canaux en un seul `item` LazyColumn par groupe (perte mineure de
+  l'identité par canal pour l'animation, sans conséquence vu le nombre réduit de canaux par bloc).
+
 - **Stocker aussi les réglages Perso sur l'appareil (comme le nom) — question de David le
   2026-09-23, simple piste pour plus tard, rien à trancher pour l'instant.** Après le nom des
   prises (2026-09-07) et sa correction pour les détecteurs de fumée (2026-09-23), David demande ce
@@ -686,3 +698,9 @@ Points sortis du backlog, avec ce qui a été tranché :
   automatisée en place (jetons API dans `~/.hestia-social.env`, hors dépôt), toujours avec
   confirmation explicite avant chaque envoi réel — jamais silencieux. Changelogs F-Droid par
   version rédigés en parallèle (`fastlane/metadata/android/*/changelogs/<versionCode>.txt`).
+  **Précision du 2026-09-23** : le fichier de jetons existait toujours, mais aucun script
+  n'était resté dans le dépôt pour s'en servir (recherché, jamais trouvé) — la publication de la
+  2.15.0 a servi à en réécrire un (appel direct aux API Mastodon/Telegram, `~/.hestia-social.env`
+  en variables d'environnement), jamais commité nulle part (contient la logique d'appel, pas les
+  jetons eux-mêmes, mais autant rester prudent). À reconstruire de la même façon à la prochaine
+  publication, ou à en garder une copie côté David hors du dépôt si le mécanisme doit durer.

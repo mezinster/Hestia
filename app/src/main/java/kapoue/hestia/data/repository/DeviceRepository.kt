@@ -1754,11 +1754,24 @@ class DeviceRepository @Inject constructor(
         val (ip, infoResult) = withIp(device) { i -> rpcClient.getDeviceInfo(i) }
         val installed = infoResult.getOrNull()?.ver ?: return FirmwareCheckResult.Error
         val update = rpcClient.checkForUpdate(ip).getOrNull() ?: return FirmwareCheckResult.Error
-        return when {
+        val checkResult = when {
             update.stable != null -> FirmwareCheckResult.UpdateAvailable(installed, update.stable.version)
             update.beta != null -> FirmwareCheckResult.BetaOnly(installed, update.beta.version)
             else -> FirmwareCheckResult.UpToDate(installed)
         }
+        // Numéros de version en toutes lettres dans le journal (retour David, 2026-09-25) : sans
+        // ça, un échec d'installation qui a en fait réussi côté appareil (voir le bug corrigé le
+        // même jour sur Shelly.Update) était indiscernable d'un vrai échec sans aller vérifier la
+        // version installée à la main.
+        logger.info(DiagnosticLogger.RPC, "Firmware $ip : version installée $installed, ${checkResult.describeForLog()}")
+        return checkResult
+    }
+
+    private fun FirmwareCheckResult.describeForLog(): String = when (this) {
+        is FirmwareCheckResult.UpToDate -> "à jour"
+        is FirmwareCheckResult.UpdateAvailable -> "maj stable $newVersion disponible"
+        is FirmwareCheckResult.BetaOnly -> "seule une bêta ($betaVersion) est disponible"
+        FirmwareCheckResult.Error -> "vérification échouée"
     }
 
     /**

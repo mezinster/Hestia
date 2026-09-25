@@ -30,6 +30,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -544,9 +545,14 @@ class ShellyRpcClient @Inject constructor(
                     return@withContext RpcResult.RpcError(err.code, err.message)
                 }
 
-                // Certaines méthodes d'action (Script.Delete, etc.) renvoient un résultat null :
-                // on le traite comme un objet vide, décodé vers les valeurs par défaut du type.
-                val result = envelope.result ?: JsonObject(emptyMap())
+                // Certaines méthodes d'action (Shelly.Update, Shelly.Reboot, Script.Delete…)
+                // renvoient un résultat null en cas de succès (confirmé par David le 2026-09-25 :
+                // Shelly.Update rapportait un échec dans Hestia alors que la prise avait bel et
+                // bien été mise à jour) : traité comme un objet vide, décodé vers les valeurs par
+                // défaut du type. `envelope.result` seul ne suffisait pas — un littéral JSON
+                // `null` explicite (pas juste la clé absente) se décode en `JsonNull`, une
+                // instance bien réelle de JsonElement, jamais interceptée par un simple `?:`.
+                val result = envelope.result?.takeUnless { it == JsonNull } ?: JsonObject(emptyMap())
 
                 val decoded = runCatching { json.decodeFromJsonElement(serializer, result) }
                     .getOrElse {
