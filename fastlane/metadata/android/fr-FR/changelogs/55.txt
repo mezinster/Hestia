@@ -1,0 +1,1 @@
+Version 2.16.1. Les heures s'affichent maintenant de façon cohérente partout, selon la langue de l'appareil : les plannings restaient toujours en format 24 h alors que la présence suivait la langue. En format 12 h, la plage horaire d'une tuile n'est plus tronquée. Le mode Démo reste entièrement dans une seule langue. Captures d'écran de la fiche F-Droid refaites.

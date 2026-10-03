@@ -1,0 +1,1 @@
+Version 2.16.1. Times are now displayed consistently everywhere, following the device language: plannings always used the 24-hour format while presence followed the language. In 12-hour format, a tile's time range is no longer truncated. Demo mode now stays entirely in a single language. F-Droid listing screenshots redone.

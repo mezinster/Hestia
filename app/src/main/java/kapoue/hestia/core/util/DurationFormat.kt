@@ -25,9 +25,9 @@ fun formatClockTime(totalMinutes: Int): String = formatClockTime(totalMinutes / 
 /** Formate une date selon la locale de l'appareil (« 30/07/26 » en français, « 7/30/26 » en anglais). */
 fun formatDate(date: LocalDate): String = date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.SHORT))
 
-/** Formate une plage horaire pour l'affichage : « 9:00 AM - 11:00 AM » (selon la locale). */
+/** Formate une plage horaire pour l'affichage : « 9:00 AM – 11:00 AM » (selon la locale). */
 fun formatTimeRange(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int): String =
-    "${formatClockTime(startHour, startMinute)} - ${formatClockTime(endHour, endMinute)}"
+    "${formatClockTime(startHour, startMinute)} – ${formatClockTime(endHour, endMinute)}"
 
 /** Formate une durée en secondes pour un compte à rebours : « M:SS » ou « H:MM:SS ». */
 fun formatCountdown(totalSeconds: Long): String {

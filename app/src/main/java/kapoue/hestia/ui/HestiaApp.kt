@@ -94,6 +94,13 @@ fun HestiaApp() {
     // ressources, en gardant l'Activity comme baseContext.
     val baseContext = LocalContext.current
     val displayContext = remember(baseContext, demoModeActive) {
+        // Les ressources seules ne suffisent pas : les heures (DateTimeFormatter) et le « il y a
+        // 3 min » (DateUtils) lisent la locale par défaut du processus, pas celle de ce Context —
+        // d'où des captures en anglais avec « Il y a 0 minute » ou des heures 24 h/12 h mélangées
+        // (retour David, 2026-10-03). On l'aligne donc aussi, et on la remet à la langue de
+        // l'Activity dès qu'on quitte la démo. Fait ici plutôt que dans un effet : un effet
+        // s'exécuterait après la composition, une fois les textes déjà formatés.
+        Locale.setDefault(if (demoModeActive) Locale.ENGLISH else baseContext.resources.configuration.locales[0])
         if (demoModeActive) LocaleContextWrapper(baseContext, Locale.ENGLISH) else baseContext
     }
 

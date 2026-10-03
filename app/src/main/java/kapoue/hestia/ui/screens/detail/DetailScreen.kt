@@ -66,8 +66,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
+import kapoue.hestia.core.util.formatClockTime
 import kapoue.hestia.core.util.formatDate
 import kapoue.hestia.core.util.formatPower
+import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.repository.DeviceRepository
@@ -375,7 +377,7 @@ fun DetailScreen(
                     Text(
                         stringResource(
                             R.string.planning_delete_message,
-                            "%02d:%02d – %02d:%02d".format(p.startHour, p.startMinute, p.endHour, p.endMinute),
+                            formatTimeRange(p.startHour, p.startMinute, p.endHour, p.endMinute),
                         ),
                     )
                     // La suppression d'un planning en cours retire l'extinction : on prévient.
@@ -413,7 +415,7 @@ fun DetailScreen(
                     Text(
                         stringResource(
                             R.string.planning_pause_message,
-                            "%02d:%02d – %02d:%02d".format(p.startHour, p.startMinute, p.endHour, p.endMinute),
+                            formatTimeRange(p.startHour, p.startMinute, p.endHour, p.endMinute),
                         ),
                     )
                     Text(
@@ -445,7 +447,7 @@ fun DetailScreen(
                 Text(
                     stringResource(
                         R.string.planning_paused_delete_message,
-                        "%02d:%02d – %02d:%02d".format(p.startHour, p.startMinute, p.endHour, p.endMinute),
+                        formatTimeRange(p.startHour, p.startMinute, p.endHour, p.endMinute),
                     ),
                 )
             },
@@ -616,7 +618,7 @@ internal fun PlanningInProgressDialog(
     onCancel: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val end = "%02d:%02d".format(planning.endHour, planning.endMinute)
+    val end = formatClockTime(planning.endHour, planning.endMinute)
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(stringResource(R.string.timer_planning_active_title)) },
@@ -719,7 +721,7 @@ private fun PlanningRow(planning: Planning, isActive: Boolean, onEdit: () -> Uni
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = "%02d:%02d – %02d:%02d".format(
+                    text = formatTimeRange(
                         planning.startHour, planning.startMinute, planning.endHour, planning.endMinute,
                     ),
                     style = MaterialTheme.typography.bodyLarge,
@@ -779,7 +781,7 @@ private fun PausedPlanningRow(paused: PausedPlanning, onResume: () -> Unit, onDe
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "%02d:%02d – %02d:%02d".format(
+                text = formatTimeRange(
                     display.startHour, display.startMinute, display.endHour, display.endMinute,
                 ),
                 style = MaterialTheme.typography.bodyLarge,
@@ -876,7 +878,7 @@ private fun dayLabelFull(day: Int): String = stringResource(
 private fun createPlanningResultMessage(result: CreatePlanningResult): String? = when (result) {
     is CreatePlanningResult.Conflict -> stringResource(
         R.string.planning_conflict,
-        "%02d:%02d – %02d:%02d".format(
+        formatTimeRange(
             result.existing.startHour, result.existing.startMinute,
             result.existing.endHour, result.existing.endMinute,
         ),

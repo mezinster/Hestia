@@ -139,7 +139,10 @@ fun DeviceTile(
                         fontWeight = FontWeight.Medium,
                         style = MaterialTheme.typography.labelSmall,
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
+                        // 2 lignes au plus : en 12 h (« Scheduled · 5:20 PM–7:20 PM ») la plage
+                        // ne tient pas toujours à côté du libellé ; plutôt que de la tronquer
+                        // avec « … », elle passe entière à la ligne (voir compactTimeRange).
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -371,6 +374,13 @@ fun SmokeDetectorTile(
         }
     }
 }
+
+/**
+ * Version compacte d'une plage horaire pour la tuile : sans espaces autour du tiret, et avec des
+ * espaces insécables dans chaque heure (« 5:20\u00A0PM–7:20\u00A0PM »), pour qu'une plage trop
+ * longue passe entière à la ligne au lieu d'être coupée au milieu d'une heure ou tronquée.
+ */
+private fun compactTimeRange(range: String): String = range.replace(" – ", "–").replace(' ', '\u00A0')
 
 /**
  * « Il y a 3 min »/« hier » — délégué à `DateUtils` (Android), qui applique déjà la langue du
@@ -640,16 +650,18 @@ internal fun TileStatus.toVisual(
             presence != null -> TileVisual(
                 bgColor = physicalBg, ringColor = ringColor, textColor = colors.presenceText,
                 label = stringResource(R.string.state_presence),
-                countdown = formatTimeRange(presence.startHour, presence.startMinute, presence.endHour, presence.endMinute),
+                countdown = compactTimeRange(formatTimeRange(presence.startHour, presence.startMinute, presence.endHour, presence.endMinute)),
                 dashed = false,
                 ringEmphasis = output,
             )
             activePlanning != null -> TileVisual(
                 bgColor = physicalBg, ringColor = ringColor, textColor = colors.plannedText,
                 label = stringResource(R.string.state_planned),
-                countdown = "%02d:%02d – %02d:%02d".format(
-                    activePlanning.startHour, activePlanning.startMinute,
-                    activePlanning.endHour, activePlanning.endMinute,
+                countdown = compactTimeRange(
+                    formatTimeRange(
+                        activePlanning.startHour, activePlanning.startMinute,
+                        activePlanning.endHour, activePlanning.endMinute,
+                    ),
                 ),
                 dashed = false,
                 // Déjà relu par DeviceRepository.getPlannings (Script.GetCode du script de
