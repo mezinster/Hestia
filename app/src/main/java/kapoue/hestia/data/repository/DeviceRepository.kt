@@ -466,18 +466,28 @@ class DeviceRepository @Inject constructor(
     private fun ntfyTopic(): String? = if (appPreferences.ntfyEnabled.value) appPreferences.ntfyTopic.value else null
 
     /**
-     * Déploie (ou réutilise) le script minimal qui notifie la fin naturelle d'un minuteur sans
+     * Déploie (ou met à jour) le script partagé qui notifie la fin naturelle d'un minuteur sans
      * coupure sur seuil — seul cas sans aucun script associé sinon. Best-effort, ne fait jamais
-     * échouer l'appelant.
+     * échouer l'appelant. Partagé par appareil (consolidation 2026-09-29, voir
+     * [TimerNotifyScriptGenerator]) : ajoute/remplace juste ce canal via `Script.Eval` si le
+     * script tourne déjà, sans toucher aux autres canaux suivis — jamais de redéploiement complet
+     * tant qu'il est en vie, même raison que [upsertChargeSupervisorChannel].
      */
     private suspend fun deployTimerNotifyScript(device: Device, topic: String, body: String) {
         val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
         val scripts = listResult.getOrNull()?.scripts ?: return
-        val scriptId = scripts.firstOrNull { it.name == TimerNotifyScriptGenerator.scriptName(device.switchId) }?.id
-            ?: rpcClient.scriptCreate(ip, TimerNotifyScriptGenerator.scriptName(device.switchId)).getOrNull()?.id
-            ?: return
-        rpcClient.scriptStop(ip, scriptId)
-        val code = TimerNotifyScriptGenerator.generate(device.switchId, scriptId, topic, device.name, body)
+        val existing = scripts.firstOrNull { it.name == TimerNotifyScriptGenerator.SCRIPT_NAME }
+        val config = TimerNotifyScriptGenerator.ChannelConfig(device.switchId, device.name, body)
+
+        if (existing != null && existing.running) {
+            rpcClient.scriptEval(ip, existing.id, TimerNotifyScriptGenerator.evalUpsertChannel(config))
+            rpcClient.scriptSetConfig(ip, existing.id, enable = false)
+            return
+        }
+
+        val scriptId = existing?.id ?: rpcClient.scriptCreate(ip, TimerNotifyScriptGenerator.SCRIPT_NAME).getOrNull()?.id ?: return
+        if (existing != null) rpcClient.scriptStop(ip, scriptId)
+        val code = TimerNotifyScriptGenerator.generateSupervisor(listOf(config), selfId = scriptId, ntfyTopic = topic)
         rpcClient.scriptPutCode(ip, scriptId, code)
         // enable=false (2026-08-22) : script transitoire — le minuteur natif qu'il accompagne ne
         // survit pas à un redémarrage de l'appareil, lui non plus ne doit pas redémarrer au boot.
@@ -488,13 +498,16 @@ class DeviceRepository @Inject constructor(
         rpcClient.scriptStart(ip, scriptId)
     }
 
-    /** Supprime le script de notif de fin de minuteur s'il existe (best-effort). */
+    /**
+     * Retire [device] du suivi du script de notif de fin de minuteur, sans toucher aux autres
+     * canaux (consolidation 2026-09-29) — ne fait rien si le script n'existe pas ou n'est pas en
+     * cours d'exécution (rien à retirer), même logique que [removeChargeSupervisorChannel].
+     */
     private suspend fun removeTimerNotifyScript(device: Device) {
         val (ip, listResult) = withIp(device) { i -> rpcClient.scriptList(i) }
-        listResult.getOrNull()?.scripts?.firstOrNull { it.name == TimerNotifyScriptGenerator.scriptName(device.switchId) }?.let {
-            rpcClient.scriptStop(ip, it.id)
-            rpcClient.scriptDelete(ip, it.id)
-        }
+        val existing = listResult.getOrNull()?.scripts?.firstOrNull { it.name == TimerNotifyScriptGenerator.SCRIPT_NAME }
+        if (existing == null || !existing.running) return
+        rpcClient.scriptEval(ip, existing.id, TimerNotifyScriptGenerator.evalRemoveChannel(device.switchId))
     }
 
     /**
@@ -1253,8 +1266,25 @@ class DeviceRepository @Inject constructor(
                 days = w.days, marginMinutes = w.marginMinutes,
             )
         }
-        return RpcResult.Success((native + presence).sortedWith(compareBy({ it.startMinutes }, { it.endMinutes })))
+        return RpcResult.Success((native + presence).sortedWith(planningDisplayOrder))
     }
+
+    /**
+     * Ordre d'affichage des plannings : jour d'abord (lundi → dimanche, cohérent avec les puces de
+     * sélection, voir [ScheduleCodec.displayRank]), heure de début ensuite (retour David,
+     * 2026-09-28 : le tri ne se faisait jusque-là que par heure, jours ignorés). Un planning
+     * récurrent se classe sur son premier jour actif ; un Unique (days vide, date renseignée) sur
+     * le jour réel de sa date.
+     */
+    private val planningDisplayOrder: Comparator<Planning> = compareBy(
+        { p ->
+            p.days.minOfOrNull { ScheduleCodec.displayRank(it) }
+                ?: p.date?.let { ScheduleCodec.displayRank(it.dayOfWeek.value % 7) }
+                ?: 0
+        },
+        { it.startMinutes },
+        { it.endMinutes },
+    )
 
     /**
      * Reconstruit les plannings à partir des programmes cron. On ne retient que les jobs
@@ -1299,7 +1329,7 @@ class DeviceRepository @Inject constructor(
                 cutoffScriptId = on.scriptId,
             )
         }
-        return plannings.sortedWith(compareBy({ it.startMinutes }, { it.endMinutes }))
+        return plannings.sortedWith(planningDisplayOrder)
     }
 
     /**
@@ -1377,7 +1407,7 @@ class DeviceRepository @Inject constructor(
         }
 
         val scriptId = if (cutoffThresholdW != null) {
-            createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name) ?: return CreatePlanningResult.Error
+            createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name, ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)?.endBody.orEmpty()) ?: return CreatePlanningResult.Error
         } else {
             null
         }
@@ -1392,7 +1422,7 @@ class DeviceRepository @Inject constructor(
             val offDays = if (endMin < startMin) ScheduleCodec.nextDay(days) else days
             ScheduleCodec.timespec(endHour, endMinute, offDays)
         }
-        val ntfy = ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute)
+        val ntfy = ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)
         val onId = rpcClient.scheduleCreate(
             ip, onTimespec, device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
             ntfyTopic = ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.startBody,
@@ -1402,8 +1432,14 @@ class DeviceRepository @Inject constructor(
             return CreatePlanningResult.Error
         }
         val offId = rpcClient.scheduleCreate(
-            ip, offTimespec, device.switchId, on = false, scriptCallMethod = "Script.Stop", scriptId = scriptId,
-            ntfyTopic = ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.endBody,
+            ip, offTimespec, device.switchId, on = false,
+            // Avec seuil : le script décide lui-même de notifier la fin (planEnd) — pas de ntfy
+            // dans le programme, qui préviendrait à 18 h même après une coupure sur seuil
+            // (retour David, 2026-09-28). Sans seuil : inchangé, le programme notifie seul.
+            scriptCallMethod = if (scriptId != null) "Script.Eval" else null,
+            scriptId = scriptId,
+            scriptCode = if (scriptId != null) "planEnd()" else null,
+            ntfyTopic = if (scriptId != null) null else ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.endBody,
         ).getOrNull()?.id
         if (offId == null) {
             // Ne pas laisser un allumage orphelin si l'extinction échoue.
@@ -1445,14 +1481,27 @@ class DeviceRepository @Inject constructor(
     private data class NtfyPlanningTexts(val topic: String, val title: String, val startBody: String, val endBody: String)
 
     /** Textes ntfy d'un planning (début/fin), ou null si ntfy est désactivé — rien à générer. */
-    private fun ntfyPlanningTexts(device: Device, startHour: Int, startMinute: Int, endHour: Int, endMinute: Int): NtfyPlanningTexts? {
+    private fun ntfyPlanningTexts(
+        device: Device,
+        startHour: Int,
+        startMinute: Int,
+        endHour: Int,
+        endMinute: Int,
+        cutoffThresholdW: Int?,
+    ): NtfyPlanningTexts? {
         val topic = ntfyTopic() ?: return null
         val start = formatClockTime(startHour, startMinute)
         val end = formatClockTime(endHour, endMinute)
         return NtfyPlanningTexts(
             topic = topic,
             title = device.name,
-            startBody = context.getString(R.string.notif_planning_started, start, end),
+            // Seuil de coupure précisé dans la notif de début quand il y en a un (retour David,
+            // 2026-09-28) — sinon rien ne distinguait un planning avec coupure d'un planning simple.
+            startBody = if (cutoffThresholdW != null) {
+                context.getString(R.string.notif_planning_started_with_threshold, start, end, cutoffThresholdW)
+            } else {
+                context.getString(R.string.notif_planning_started, start, end)
+            },
             endBody = context.getString(R.string.notif_planning_ended, start, end),
         )
     }
@@ -1463,7 +1512,13 @@ class DeviceRepository @Inject constructor(
      * se supprime jamais lui-même, seulement s'auto-désactive), un nom identique ferait échouer
      * `Script.Create`.
      */
-    private suspend fun createCutoffScript(ip: String, switchId: Int, thresholdW: Int, ntfyTitle: String): Int? {
+    private suspend fun createCutoffScript(
+        ip: String,
+        switchId: Int,
+        thresholdW: Int,
+        ntfyTitle: String,
+        planEndBody: String,
+    ): Int? {
         // Pas d'éviction du relais ici, volontairement : ce script reste enable:false en
         // permanence (voir plus bas), il ne consomme donc jamais de slot dans la limite des 3
         // scripts activés — même raison que ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME, voir
@@ -1474,6 +1529,7 @@ class DeviceRepository @Inject constructor(
             switchId, thresholdW, belowSec = 60, selfId = id,
             ntfyTopic = topic, ntfyTitle = ntfyTitle,
             ntfyBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
+            planEndBody = planEndBody,
         )
         rpcClient.scriptPutCode(ip, id, code).errorOrNull()?.let {
             rpcClient.scriptDelete(ip, id)
@@ -1555,7 +1611,7 @@ class DeviceRepository @Inject constructor(
         }
 
         val scriptId = if (cutoffThresholdW != null) {
-            createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name) ?: return CreatePlanningResult.Error
+            createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name, ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)?.endBody.orEmpty()) ?: return CreatePlanningResult.Error
         } else {
             null
         }
@@ -1569,7 +1625,7 @@ class DeviceRepository @Inject constructor(
             val offDays = if (endMin < startMin) ScheduleCodec.nextDay(days) else days
             ScheduleCodec.timespec(endHour, endMinute, offDays)
         }
-        val ntfy = ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute)
+        val ntfy = ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)
         val onId = rpcClient.scheduleCreate(
             ip, onTimespec, device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
             ntfyTopic = ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.startBody,
@@ -1579,8 +1635,14 @@ class DeviceRepository @Inject constructor(
             return CreatePlanningResult.Error
         }
         val offId = rpcClient.scheduleCreate(
-            ip, offTimespec, device.switchId, on = false, scriptCallMethod = "Script.Stop", scriptId = scriptId,
-            ntfyTopic = ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.endBody,
+            ip, offTimespec, device.switchId, on = false,
+            // Avec seuil : le script décide lui-même de notifier la fin (planEnd) — pas de ntfy
+            // dans le programme, qui préviendrait à 18 h même après une coupure sur seuil
+            // (retour David, 2026-09-28). Sans seuil : inchangé, le programme notifie seul.
+            scriptCallMethod = if (scriptId != null) "Script.Eval" else null,
+            scriptId = scriptId,
+            scriptCode = if (scriptId != null) "planEnd()" else null,
+            ntfyTopic = if (scriptId != null) null else ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.endBody,
         ).getOrNull()?.id
         if (offId == null) {
             rpcClient.scheduleDelete(ip, onId)

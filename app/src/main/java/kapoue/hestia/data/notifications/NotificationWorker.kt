@@ -73,8 +73,13 @@ class NotificationWorker(
                     val (startKind, startText) = if (p.isPresence) "pr-start" to R.string.notif_presence_started else "pl-start" to R.string.notif_planning_started
                     val (endKind, endText) = if (p.isPresence) "pr-end" to R.string.notif_presence_ended else "pl-end" to R.string.notif_planning_ended
                     ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.START, from, now, zone)?.let { t ->
-                        post(ctx, device.id, startKind, t, device.name,
-                            ctx.getString(startText, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))
+                        val threshold = p.cutoffThresholdW
+                        val startBody = if (!p.isPresence && threshold != null) {
+                            ctx.getString(R.string.notif_planning_started_with_threshold, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes), threshold)
+                        } else {
+                            ctx.getString(startText, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes))
+                        }
+                        post(ctx, device.id, startKind, t, device.name, startBody)
                         posted++
                     }
                     ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.END, from, now, zone)?.let { t ->

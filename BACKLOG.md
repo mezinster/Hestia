@@ -277,6 +277,25 @@ dans l'historique git).
 
 ## Fonctionnalités futures
 
+- **Fusionner tous les scripts métier d'un appareil (charge, minuteur bouton, présence,
+  notification de planning) en un seul script partagé — échange du 2026-09-28/29, écarté pour
+  l'instant au profit d'une simple consolidation par type (voir « Fait » de la même date).**
+  Question de David : peut-on décharger un appareil saturé (ex. Strip4, 4 canaux) sur un autre
+  appareil du réseau ayant de la place, comme le fait déjà le relais fumée ? Réponse technique
+  actée : non, transposable seulement au relais fumée (déclenché par un webhook HTTP entrant,
+  n'agit que par une requête HTTP sortante vers ntfy — aucune lecture/écriture d'un canal local).
+  Charge/bouton-minuteur/présence/planning doivent tous lire et parfois couper **le canal de
+  l'appareil sur lequel ils tournent** (`Shelly.getComponentStatus`/`Switch.Set`, locaux à la
+  prise) et sont déclenchés par les événements natifs de cet appareil précis (`Schedule`, bouton
+  physique) — un `Schedule`/bouton de l'appareil A ne peut démarrer qu'un script hébergé sur A,
+  jamais un script sur B. Piste plus radicale envisagée à la place : au lieu de 4 scripts
+  partagés distincts (un par type d'usage) qui se disputent les 3 emplacements d'un appareil,
+  n'en garder qu'**un seul par appareil**, suivant plusieurs *types* d'usage à la fois (chacun
+  suit déjà plusieurs canaux dans un tableau de config — rien n'empêche techniquement d'y ajouter
+  une dimension « type »). Ferait quasiment disparaître le risque de saturation (1 script +
+  éventuellement le relais), mais chantier bien plus gros que la consolidation retenue pour
+  l'instant — à reprendre seulement si la saturation se manifeste vraiment en usage réel.
+
 - **Réglages : le bloc multiprises ne se lit pas comme un groupe — retour de David le
   2026-09-23, solution actée, à coder plus tard.** L'en-tête (`DeviceGroupHeaderRow`) a sa propre
   carte avec fond ; chaque ligne de canal (`ChannelSubRow`) n'en a aucune, juste une indentation.

@@ -84,6 +84,7 @@ object ChargeScriptGenerator {
         ntfyTitle: String = "",
         ntfyBody: String = "",
         ntfyEndBody: String = "",
+        planEndBody: String = "",
     ): String {
         // Titre statique (connu à la génération, un script dédié par planning) mais corps
         // dynamique : la durée de charge n'est calculable qu'à l'exécution, au moment de la
@@ -92,6 +93,7 @@ object ChargeScriptGenerator {
         val cutoffBodyExpr = "\"${NtfyScriptSupport.jsString(ntfyBody)} \" + fmtDur(now - onSince)"
         val cutoffNtfyStatement = NtfyScriptSupport.callDynamicTitleAndBody(ntfyTopic, cutoffTitleExpr, cutoffBodyExpr)
         val endNtfyStatement = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyEndBody)
+        val planEndNtfyStatement = if (planEndBody.isBlank()) "" else NtfyScriptSupport.call(ntfyTopic, ntfyTitle, planEndBody)
         return """
         // Généré par Hestia — coupure sur seuil de consommation
         $MARKER$thresholdW
@@ -100,6 +102,7 @@ object ChargeScriptGenerator {
         let wasOn = false;
         let lastTimerEnd = null;
         let onSince = null;
+        let cutoffFired = false;
 
         function stopSelf() {
           Shelly.call("Script.SetConfig", { id: CFG.selfId, config: { enable: false } });
@@ -113,6 +116,16 @@ object ChargeScriptGenerator {
           m = m % 60;
           if (h > 0) return h + "h" + (m < 10 ? "0" : "") + m;
           return m + "min";
+        }
+        // Appelé par le programme d'extinction du planning (Script.Eval) à la fin du créneau : la
+        // notif « planning terminé » ne part que si la coupure sur seuil n'a pas déjà eu lieu
+        // (retour David, 2026-09-28 : deux notifs à 4 h d'écart pour la même charge). Si le script
+        // s'est déjà arrêté après sa coupure, cet appel échoue simplement, ce qui revient au même.
+        function planEnd() {
+          if (!cutoffFired) {
+            $planEndNtfyStatement
+          }
+          stopSelf();
         }
 
         Timer.set(1000, true, function () {
@@ -142,6 +155,7 @@ object ChargeScriptGenerator {
             if (now === null) return;
             if (belowSince === null) belowSince = now;
             if (now - belowSince >= CFG.belowSec) {
+              cutoffFired = true;
               Shelly.call("Switch.Set", { id: CFG.switchId, on: false });
               $cutoffNtfyStatement
               stopSelf();

@@ -202,6 +202,22 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Le planning se déclenche réellement à l'heure dite (test avec un créneau proche), et
       **survit à un débranchement/rebranchement** de la prise
 
+### 9bis. Notifications ntfy des plannings et minuteurs (lot 2026-09-29)
+
+- [x] Minuteur « Active pour » **sans seuil** sur deux canaux d'une Strip4 à quelques secondes
+      d'écart : une notification de fin par canal (script partagé `hestia_timer_notify`) — validé
+      le 2026-10-03
+- [x] Planning **avec seuil** coupé avant son heure de fin (prise à vide, seuil 10 W, 3 min) :
+      « Coupure sur seuil » après 1 min, **aucune** notification « planning terminé » ensuite —
+      validé le 2026-10-03
+- [ ] **Non testé faute de charge** : planning avec seuil qui va jusqu'à son heure de fin sans
+      coupure (charge > seuil pendant tout le créneau, ex. lampe 20 W avec seuil 5 W) → une seule
+      notification « planning terminé » envoyée par `planEnd()`. Si le cas se présente en vrai et
+      que la notification manque : 5 taps sur le titre du Tableau, envoyer le journal ; piste =
+      l'OFF-job du planning doit appeler `Script.Eval planEnd()` (voir `DeviceRepository`,
+      `createPlanning`/`updatePlanning`) et le script `ChargeScriptGenerator.generate` doit être
+      encore actif à cette heure.
+
 ## 10. Thèmes et affichage
 
 - [ ] Thème clair : tous les textes lisibles, aucun contraste douteux

@@ -115,6 +115,7 @@
     <string name="notif_channel_desc">Start and end of plannings and presence windows</string>
     <string name="notif_planning_started">Planning from %1$s to %2$s started</string>
     <string name="notif_planning_ended">Planning from %1$s to %2$s ended</string>
+    <string name="notif_planning_started_with_threshold">Planning from %1$s to %2$s started (cutoff below %3$d W)</string>
     <string name="notif_presence_started">Presence from %1$s to %2$s started</string>
     <string name="notif_presence_ended">Presence from %1$s to %2$s ended</string>
     <string name="notif_timer_ended">%1$s ended</string>

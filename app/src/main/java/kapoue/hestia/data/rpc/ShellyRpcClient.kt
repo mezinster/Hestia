@@ -367,6 +367,10 @@ class ShellyRpcClient @Inject constructor(
         on: Boolean,
         scriptCallMethod: String? = null,
         scriptId: Int? = null,
+        // Code JS à évaluer quand [scriptCallMethod] vaut "Script.Eval" (extinction d'un planning
+        // avec seuil : le script décide lui-même s'il notifie la fin, voir planEnd dans
+        // ChargeScriptGenerator.generate).
+        scriptCode: String? = null,
         ntfyTopic: String? = null,
         ntfyTitle: String? = null,
         ntfyBody: String? = null,
@@ -396,7 +400,13 @@ class ShellyRpcClient @Inject constructor(
                         add(
                             buildJsonObject {
                                 put("method", scriptCallMethod)
-                                put("params", buildJsonObject { put("id", scriptId) })
+                                put(
+                                    "params",
+                                    buildJsonObject {
+                                        put("id", scriptId)
+                                        if (scriptCode != null) put("code", scriptCode)
+                                    },
+                                )
                             },
                         )
                     }
@@ -564,7 +574,7 @@ class ShellyRpcClient @Inject constructor(
                 // le détail est ouvert : le journaliser en succès noierait le tampon circulaire de
                 // routine, au détriment des entrées vraiment utiles à un diagnostic. Les échecs
                 // (avertissements ci-dessus/ci-dessous) restent journalisés, eux, dans tous les cas.
-                if (method != "Switch.GetStatus") {
+                if (method !in QUIET_ON_SUCCESS) {
                     logger.info(DiagnosticLogger.RPC, "$method @ $ip → ${response.code} (${elapsed}ms)")
                 }
                 RpcResult.Success(decoded)
@@ -587,6 +597,17 @@ class ShellyRpcClient @Inject constructor(
 
     private companion object {
         val SWITCH_KEY = Regex("""switch:(\d+)""")
+
+        /**
+         * Lectures de routine relevées en boucle (Tableau toutes les ~5 s, Réglages toutes les 60 s,
+         * une fois par canal d'un même appareil) : les journaliser en succès faisait tourner tout
+         * le tampon circulaire de 250 entrées en ~80 s (constaté le 2026-09-29 sur un Strip4 :
+         * impossible de retrouver le lancement d'un minuteur, déjà évincé quand le journal est
+         * ouvert). Les échecs restent journalisés dans tous les cas.
+         */
+        val QUIET_ON_SUCCESS = setOf(
+            "Switch.GetStatus", "Schedule.List", "Script.List", "Script.GetCode", "Shelly.GetStatus",
+        )
         const val MAX_COMPONENT_PAGES = 32
     }
 }

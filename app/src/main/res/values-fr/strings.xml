@@ -111,6 +111,7 @@
     <string name="notif_channel_desc">Début et fin des plannings et des plages de présence</string>
     <string name="notif_planning_started">Planning de %1$s à %2$s lancé</string>
     <string name="notif_planning_ended">Planning de %1$s à %2$s terminé</string>
+    <string name="notif_planning_started_with_threshold">Planning de %1$s à %2$s lancé (coupure sous %3$d W)</string>
     <string name="notif_presence_started">Présence de %1$s à %2$s lancée</string>
     <string name="notif_presence_ended">Présence de %1$s à %2$s terminée</string>
     <string name="notif_timer_ended">%1$s terminé</string>

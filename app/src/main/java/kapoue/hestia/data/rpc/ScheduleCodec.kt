@@ -93,6 +93,14 @@ object ScheduleCodec {
     /** Jours décalés au lendemain (pour l'extinction d'un créneau qui passe minuit). */
     fun nextDay(days: Set<Int>): Set<Int> = days.map { (it + 1) % 7 }.toSet()
 
+    /**
+     * Rang d'affichage d'un jour cron (0 = dimanche … 6 = samedi) dans l'ordre lundi → dimanche
+     * déjà utilisé pour les puces de sélection d'un planning (`DetailScreen.WEEK_DAYS`) : 0 pour
+     * lundi, 6 pour dimanche. Sert à trier les plannings par jour d'abord (retour David,
+     * 2026-09-28 : le tri ne se faisait jusque-là que par heure de début, jours ignorés).
+     */
+    fun displayRank(cronDay: Int): Int = (cronDay + 6) % 7
+
     private const val WEEK = 7 * 1440 // minutes dans une semaine
 
     /**
