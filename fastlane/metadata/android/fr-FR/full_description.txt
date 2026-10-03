@@ -2,17 +2,26 @@ Hestia pilote vos appareils domotiques Shelly (Gen2 et ultérieur) directement s
 
 Fonctionnalités :
 
-* Tableau des canaux avec état et interrupteur, en un coup d'œil.
+* Tableau des appareils : prises, blocs multiprises et détecteurs de fumée, avec état, consommation et interrupteur. Un tap ouvre une fiche rapide, le détail est à un tap de plus.
 * Minuteur « marche pour X » exécuté par l'appareil, en toute autonomie (le téléphone peut être éteint).
+* Planning (récurrent ou occasion unique), avec coupure optionnelle sur seuil de consommation, par exemple en fin de charge.
 * Simulation de présence : un script généré par l'application s'exécute sur l'appareil et allume/éteint dans une plage horaire, avec une marge aléatoire.
-* Planning (récurrent ou occasion unique), avec coupure optionnelle sur seuil de consommation.
+* Détecteurs de fumée : état, batterie, coupure de l'alarme, et possibilité de couper automatiquement une prise en cas d'alarme.
+* Bouton physique et LED des prises configurables.
+* Mise à jour du firmware depuis l'application : vérification, installation, redémarrage de l'appareil.
 * Sauvegarde et restauration de votre configuration au format JSON.
-* Notifications instantanées optionnelles via ntfy (désactivées par défaut).
+
+Options, toutes désactivées par défaut et expliquées dans les Réglages :
+
+* Notifications instantanées via ntfy, envoyées par les appareils eux-mêmes.
+* Cloud Shelly : repli à distance pour l'état et la marche/arrêt, avec votre clé de compte.
+* Vérification automatique du firmware, pour les appareils où le Cloud Shelly est activé.
 
 Respect de la vie privée :
 
 * Communication uniquement avec les adresses que vous saisissez vous-même.
 * Aucune découverte réseau, aucun traçage.
+* Les trois options ci-dessus sont les seules qui font sortir des données du réseau local, et seulement si vous les activez.
 * Depuis Android 17, l'autorisation d'accès au réseau local est demandée au premier contact, précédée d'une explication claire.
 
 Langue : l'application est disponible en français et en anglais, elle s'adapte à la langue du système (anglais par défaut, français si l'appareil est en français).
