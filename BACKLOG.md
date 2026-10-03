@@ -466,6 +466,22 @@ dans l'historique git).
 - **Lien Liberapay (ou PayPal) dans À propos** (2026-08-14) : un lien de plus à côté de la licence
   GPL, aucun impact vie privée (lien ouvert à la demande de l'utilisateur). Liberapay plutôt que
   PayPal si un seul à choisir — plus dans l'esprit du projet.
+- **Lien Ko-fi sur la page F-Droid** (demandé le 2026-10-03). David veut ajouter un lien
+  `ko-fi.com/...` sur la fiche F-Droid d'Hestia. Piste à vérifier avant de s'y mettre : le lien
+  « Faire un don » d'une fiche F-Droid vient de la **recette fdroiddata** (champ `Donate:` dans
+  `metadata/kapoue.hestia.yml` côté `gitlab.com/fdroid/fdroiddata`, donc une merge request à
+  ouvrir sur leur dépôt, comme pour l'ajout initial), pas du dossier `fastlane/` — ce dernier ne
+  porte que le texte et les images. Alternative ou complément : une ligne avec le lien dans
+  `full_description.txt` (FR+EN), mais à confirmer que F-Droid affiche bien les URL en clair
+  dans ce champ. Garder la cohérence avec le reste : mentionner aussi le lien dans le README
+  et, si on le met dans l'application, dans l'écran À propos (jamais de cadeau ni de
+  contrepartie implicite — le projet reste indépendant et gratuit). Rien à coder tant que
+  David n'a pas donné l'URL exacte de sa page Ko-fi.
+  **Exemple de rendu voulu** : https://f-droid.org/fr/packages/app.sterna/ — la fiche affiche un
+  lien « ko-fi.com/… » dans un bloc de liens dédié aux dons (balise `donate-options`), séparé des
+  autres liens du projet. On pourra ouvrir la recette fdroiddata de cette appli pour voir quel
+  champ elle utilise exactement.
+
 ## Fait — pour mémoire
 
 Points sortis du backlog, avec ce qui a été tranché :
