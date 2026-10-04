@@ -227,6 +227,13 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Grande police système : aucun texte tronqué ni chevauchement
 - [ ] Rotation de l'écran sur tous les écrans : pas de perte d'état
 - [ ] Écran de petite taille (Sony) : grille lisible, boutons atteignables au pouce
+- [ ] Réglages → Langue : bascule Système → English → Français → Système, appliquée immédiatement sur tous les écrans
+- [ ] Re-sélectionner la langue déjà active : rien ne se passe (pas de clignotement)
+- [ ] Android 13+ (Pixel) : changer la langue de Hestia dans Paramètres → Langue de l'appli ; Réglages → Langue reflète le choix
+- [ ] Android 11–12 (Sony) : langue forcée conservée après rotation, bascule du thème sombre et redémarrage de l'appli
+- [ ] Android 11–12 (Sony) : retour à « Suivre la langue du système » → langue du téléphone, pas la dernière langue forcée
+- [ ] Notification Android (worker) et texte ntfy d'un minuteur nouvellement armé : dans la langue choisie, pas celle du système
+- [ ] Mode démo : toujours en anglais ; en sortant, retour à la langue choisie
 
 ## 11. Navigation
 

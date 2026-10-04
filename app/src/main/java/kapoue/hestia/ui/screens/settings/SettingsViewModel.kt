@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.R
+import kapoue.hestia.core.locale.AppLocaleManager
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.backup.BackupManager
 import kapoue.hestia.data.backup.ImportResult
@@ -17,6 +18,7 @@ import kapoue.hestia.data.notifications.NtfyClient
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.RpcResult
+import kapoue.hestia.domain.model.AppLanguage
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.ThemeMode
 import kapoue.hestia.ui.common.UserMessage
@@ -36,6 +38,7 @@ class SettingsViewModel @Inject constructor(
     private val repository: DeviceRepository,
     private val backupManager: BackupManager,
     private val appPreferences: AppPreferences,
+    private val appLocaleManager: AppLocaleManager,
     private val logger: DiagnosticLogger,
     private val ntfyClient: NtfyClient,
     private val cloudClient: ShellyCloudClient,
@@ -54,6 +57,15 @@ class SettingsViewModel @Inject constructor(
     val themeMode: StateFlow<ThemeMode> = appPreferences.themeMode
 
     fun setThemeMode(mode: ThemeMode) = appPreferences.setThemeMode(mode)
+
+    /** Lue à la demande (pas de Flow) : sur Android 13+ elle peut changer depuis les Paramètres système. */
+    fun appLanguage(): AppLanguage = appLocaleManager.current()
+
+    /** @return true si l'écran doit recréer l'Activity (Android 11–12). */
+    fun setAppLanguage(language: AppLanguage): Boolean {
+        logger.info(DiagnosticLogger.UI, "Langue de l'appli → ${language.tag ?: "système"}")
+        return appLocaleManager.set(language)
+    }
 
     val notificationsEnabled: StateFlow<Boolean> = appPreferences.notificationsEnabled
 

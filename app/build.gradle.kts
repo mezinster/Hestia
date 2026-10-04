@@ -55,6 +55,12 @@ android {
         compose = true
     }
 
+    // Génère le localeConfig (langues de values-*/) : sur Android 13+, Hestia apparaît dans
+    // Paramètres → Langue de l'appli, synchronisé avec le choix fait dans Réglages.
+    androidResources {
+        generateLocaleConfig = true
+    }
+
     // Le schéma Room est exporté pour permettre le suivi des migrations en revue.
     ksp {
         arg("room.schemaLocation", "$projectDir/schemas")

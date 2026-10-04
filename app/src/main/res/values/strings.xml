@@ -51,7 +51,10 @@
     <string name="settings_devices_empty">No devices yet.\nAdd your first Shelly device with the + button.</string>
     <string name="settings_add_device">Add a device</string>
     <string name="settings_device_channel">Channel %1$d</string>
-    <string name="settings_group_channels">%1$d channels</string>
+    <plurals name="settings_group_channels">
+        <item quantity="one">%1$d channel</item>
+        <item quantity="other">%1$d channels</item>
+    </plurals>
     <string name="settings_open_web">Open web interface</string>
     <string name="settings_edit_device">Edit</string>
     <string name="settings_delete_device">Delete</string>
@@ -61,7 +64,10 @@
     <string name="settings_smoke_relay_badge">Relays smoke detector alerts — may change automatically</string>
     <string name="settings_smoke_relay_explanation">A smoke detector can\'t send its alerts to ntfy directly — another device has to pass them along instead. Hestia picks which one automatically, nothing to set up. The icon next to a name shows which one is handling it right now; that can change on its own if another setting needs the room.</string>
     <string name="delete_group_title">Delete this device?</string>
-    <string name="delete_group_message">\"%1$s\" and its %2$d channels will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</string>
+    <plurals name="delete_group_message">
+        <item quantity="one">\"%1$s\" and its %2$d channel will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</item>
+        <item quantity="other">\"%1$s\" and its %2$d channels will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</item>
+    </plurals>
     <string name="settings_permission_section">Local network permission</string>
     <string name="settings_permission_granted">Granted</string>
     <string name="settings_permission_denied">Denied</string>
@@ -71,6 +77,11 @@
     <string name="settings_theme_system">Follow system theme</string>
     <string name="settings_theme_light">Light theme</string>
     <string name="settings_theme_dark">Dark theme</string>
+    <string name="settings_language_section">Language</string>
+    <string name="settings_language_system">Follow system language</string>
+    <!-- Noms des langues dans leur propre langue : identiques quelle que soit la langue de l'interface. -->
+    <string name="language_name_en" translatable="false">English</string>
+    <string name="language_name_fr" translatable="false">Français</string>
 
     <!-- Notifications de bornes de programmation -->
     <string name="settings_notifications_section">Notifications</string>

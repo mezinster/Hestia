@@ -47,7 +47,11 @@
     <string name="settings_devices_empty">Aucun appareil pour l\'instant.\nAjoute ton premier appareil Shelly avec le bouton +.</string>
     <string name="settings_add_device">Ajouter un appareil</string>
     <string name="settings_device_channel">Canal %1$d</string>
-    <string name="settings_group_channels">%1$d canaux</string>
+    <plurals name="settings_group_channels">
+        <item quantity="one">%1$d canal</item>
+        <item quantity="many">%1$d de canaux</item>
+        <item quantity="other">%1$d canaux</item>
+    </plurals>
     <string name="settings_open_web">Ouvrir l\'interface web</string>
     <string name="settings_edit_device">Modifier</string>
     <string name="settings_delete_device">Supprimer</string>
@@ -57,7 +61,11 @@
     <string name="settings_smoke_relay_badge">Relaie les alertes du détecteur de fumée — peut changer automatiquement</string>
     <string name="settings_smoke_relay_explanation">Un détecteur de fumée ne peut pas envoyer ses alertes directement à ntfy : un autre appareil doit les transmettre à sa place. Hestia choisit lui-même lequel, automatiquement — rien à régler. Le picto à côté d\'un nom indique celui qui s\'en charge actuellement ; ça peut changer tout seul si un autre réglage a besoin de la place.</string>
     <string name="delete_group_title">Supprimer cet appareil ?</string>
-    <string name="delete_group_message">« %1$s » et ses %2$d canaux seront retirés de Hestia. Ça n\'affecte pas l\'appareil lui-même ni sa configuration.</string>
+    <plurals name="delete_group_message">
+        <item quantity="one">« %1$s » et son %2$d canal seront retirés de Hestia. Ça n\'affecte pas l\'appareil lui-même ni sa configuration.</item>
+        <item quantity="many">« %1$s » et ses %2$d de canaux seront retirés de Hestia. Ça n\'affecte pas l\'appareil lui-même ni sa configuration.</item>
+        <item quantity="other">« %1$s » et ses %2$d canaux seront retirés de Hestia. Ça n\'affecte pas l\'appareil lui-même ni sa configuration.</item>
+    </plurals>
     <string name="settings_permission_section">Permission réseau local</string>
     <string name="settings_permission_granted">Accordée</string>
     <string name="settings_permission_denied">Refusée</string>
@@ -67,6 +75,8 @@
     <string name="settings_theme_system">Suivre le thème système</string>
     <string name="settings_theme_light">Thème clair</string>
     <string name="settings_theme_dark">Thème foncé</string>
+    <string name="settings_language_section">Langue</string>
+    <string name="settings_language_system">Suivre la langue du système</string>
 
     <!-- Notifications de bornes de programmation -->
     <string name="settings_notifications_section">Notifications</string>
