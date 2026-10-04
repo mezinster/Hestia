@@ -34,4 +34,11 @@ class AppLanguageTest {
         assertEquals(AppLanguage.SYSTEM, AppLanguage.fromTag("zz-ZZ"))
         assertEquals(AppLanguage.SYSTEM, AppLanguage.fromTag("%%garbage%%"))
     }
+
+    @Test
+    fun `russe reconnu`() {
+        assertEquals(AppLanguage.RU, AppLanguage.fromTag("ru"))
+        assertEquals(AppLanguage.RU, AppLanguage.fromTag("ru-RU"))
+        assertEquals(AppLanguage.RU, AppLanguage.fromTag("RU"))
+    }
 }

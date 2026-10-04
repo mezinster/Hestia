@@ -7,7 +7,8 @@ package kapoue.hestia.domain.model
 enum class AppLanguage(val tag: String?) {
     SYSTEM(null),
     EN("en"),
-    FR("fr");
+    FR("fr"),
+    RU("ru");
 
     companion object {
         /**

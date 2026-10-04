@@ -82,6 +82,7 @@
     <!-- Noms des langues dans leur propre langue : identiques quelle que soit la langue de l'interface. -->
     <string name="language_name_en" translatable="false">English</string>
     <string name="language_name_fr" translatable="false">Français</string>
+    <string name="language_name_ru" translatable="false">Русский</string>
 
     <!-- Notifications de bornes de programmation -->
     <string name="settings_notifications_section">Notifications</string>

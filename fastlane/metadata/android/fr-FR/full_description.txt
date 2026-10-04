@@ -24,6 +24,6 @@ Respect de la vie privée :
 * Les trois options ci-dessus sont les seules qui font sortir des données du réseau local, et seulement si vous les activez.
 * Depuis Android 17, l'autorisation d'accès au réseau local est demandée au premier contact, précédée d'une explication claire.
 
-Langue : l'application est disponible en français et en anglais, elle s'adapte à la langue du système (anglais par défaut, français si l'appareil est en français).
+Langue : l'application est disponible en français, en anglais et en russe ; par défaut elle suit la langue du système (anglais si aucune des langues de l'appareil n'est prise en charge), et la langue peut aussi être choisie manuellement dans les Réglages.
 
 Indépendance : Hestia est un projet indépendant, sans aucun lien avec Shelly ni avec Allterco Robotics. Ce projet n'est ni commandité, ni sponsorisé, ni approuvé par Shelly. Aucune rémunération ni aucun matériel n'a été fourni ou prêté par la marque. Shelly est une marque déposée de son propriétaire respectif ; elle n'est citée qu'à titre de compatibilité technique.

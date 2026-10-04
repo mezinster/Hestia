@@ -842,6 +842,7 @@ private fun appLanguageLabel(language: AppLanguage): Int = when (language) {
     AppLanguage.SYSTEM -> R.string.settings_language_system
     AppLanguage.EN -> R.string.language_name_en
     AppLanguage.FR -> R.string.language_name_fr
+    AppLanguage.RU -> R.string.language_name_ru
 }
 
 /**

@@ -17,6 +17,7 @@ class StringResourcesConsistencyTest {
     /** Locale → quantités de pluriel obligatoires (règles CLDR de la langue). */
     private val LOCALES = mapOf(
         "values-fr" to setOf("one", "many", "other"),
+        "values-ru" to setOf("one", "few", "many", "other"),
     )
     private val DEFAULT_QUANTITIES = setOf("one", "other")
 
@@ -91,6 +92,20 @@ class StringResourcesConsistencyTest {
                 assertTrue("$dir/$key : il manque ${required - items.keys}", items.keys.containsAll(required))
             }
         }
+    }
+
+    @Test
+    fun `les dossiers values-xx existants sont exactement ceux verifies`() {
+        val existing = File("src/main/res").listFiles { f -> f.isDirectory && f.name.startsWith("values-") }
+            .orEmpty()
+            .filter { File(it, "strings.xml").exists() }
+            .map { it.name }
+            .toSet()
+        assertEquals(
+            "Locale ajoutée ou retirée sans mise à jour de LOCALES : les contrôles de cohérence l'ignoreraient",
+            existing,
+            LOCALES.keys,
+        )
     }
 
     @Test

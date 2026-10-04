@@ -1,0 +1,511 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Traduction russe. Mêmes clés et même ordre que values/strings.xml (anglais, défaut) ;
+     les entrées translatable="false" (URL, noms de langues) n'y figurent pas. -->
+<resources>
+    <string name="app_name">Hestia</string>
+    <string name="action_ok">ОК</string>
+    <string name="action_cancel">Отмена</string>
+
+    <!-- App shell (bottom navigation bar area) -->
+    <string name="app_shell_smoke_relay_banner">Сейчас ни одно устройство не может пересылать оповещения датчика дыма в ntfy. Освободи место на одном из них, проверь, что оно включено и подключено к сети, или пока получай уведомления этого датчика через официальное приложение Shelly. Нажми, чтобы узнать подробности.</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Панель</string>
+    <string name="nav_settings">Настройки</string>
+    <string name="nav_about">О приложении</string>
+
+    <!-- Écrans placeholder (complétés aux lots suivants) -->
+    <string name="dashboard_placeholder">Панель устройств появится в следующей версии.</string>
+    <string name="about_placeholder">Экран «О приложении» появится в одной из следующих версий.</string>
+
+    <!-- Écran À propos (lot 7) -->
+    <string name="about_version">Версия %1$s</string>
+    <string name="about_name_origin_title">Происхождение названия</string>
+    <string name="about_name_origin">В греческой мифологии Гестия — богиня семейного очага и домашнего огня. Она тихо и незаметно оберегает дом.</string>
+    <string name="about_positioning_title">Локальное управление по умолчанию</string>
+    <string name="about_positioning">По умолчанию Hestia управляет твоими устройствами полностью в локальной сети, без облака и без учётной записи. Есть две отдельные опции, обе по умолчанию выключены и включаются только тобой: мгновенные уведомления через ntfy (Настройки), которые отправляют текст твоих уведомлений во внешний сервис на твой выбор, и подключение устройства к Shelly Cloud (экран «Изменить»), которое позволяет управлять им через мобильную сеть, когда ты не дома.</string>
+    <string name="about_positioning_network">В домашней сети Wi-Fi работают все функции. Через мобильный интернет (резервный доступ через облако, если он включён) доступны только состояние, энергопотребление и включение/выключение для розетки и состояние (тревога, батарея) для датчика дыма. Всё остальное (расписания, имитация присутствия, таймер кнопки, отключение по порогу, светодиод, обновление прошивки, отключение звука тревоги) работает только при подключении к той же сети Wi-Fi, что и устройство.</string>
+    <string name="about_permission_title">Разрешение на доступ к локальной сети</string>
+    <string name="about_permission_body">Начиная с Android 17 приложение должно спрашивать твоё разрешение, чтобы связываться с устройствами в локальной сети. Оно нужно Hestia для связи с твоими устройствами. Приложение обращается только к адресам, указанным тобой, никогда не сканирует твою сеть и ничего не отправляет за её пределы.</string>
+    <string name="about_independence_title">Независимость</string>
+    <string name="about_independence">Hestia — независимый проект, никак не связанный ни с Shelly, ни с Allterco Robotics. Проект не создавался по заказу Shelly, не спонсируется и не одобрен этой компанией. Бренд не выплачивал никакого вознаграждения и не предоставлял оборудования — ни в собственность, ни во временное пользование. Shelly — зарегистрированный товарный знак соответствующего правообладателя; он упоминается исключительно для указания технической совместимости.</string>
+    <string name="about_compat">Совместимо с Shelly Gen2 и новее. Поддержка других брендов планируется в будущих версиях.</string>
+    <string name="about_license_title">Лицензия</string>
+    <string name="about_license">Распространяется по лицензии GPLv3.</string>
+    <string name="about_license_link">(подробнее)</string>
+    <string name="about_contact_title">Контакты</string>
+    <string name="about_contact_body">Вопросы, отзывы, сообщения об ошибках — со мной также можно связаться здесь:</string>
+    <string name="about_contact_mastodon">Mastodon</string>
+    <string name="about_contact_telegram">Telegram</string>
+    <string name="about_share_title">Поделиться приложением</string>
+    <string name="about_share_button">Поделиться</string>
+    <string name="about_share_or">или</string>
+    <string name="about_share_text">Hestia — локальное управление розетками Shelly, без облака: %1$s</string>
+    <string name="about_qr_hint">Отсканируй, чтобы скачать Hestia. Нажми, чтобы увеличить яркость</string>
+    <string name="about_qr_hint_max">Яркость на максимуме. Нажми, чтобы уменьшить</string>
+
+    <!-- Réglages -->
+    <string name="settings_devices_title">Устройства</string>
+    <string name="settings_devices_empty">Устройств пока нет.\nДобавь первое устройство Shelly кнопкой +.</string>
+    <string name="settings_add_device">Добавить устройство</string>
+    <string name="settings_device_channel">Канал %1$d</string>
+    <plurals name="settings_group_channels">
+        <item quantity="one">%1$d канал</item>
+        <item quantity="few">%1$d канала</item>
+        <item quantity="many">%1$d каналов</item>
+        <item quantity="other">%1$d канала</item>
+    </plurals>
+    <string name="settings_open_web">Открыть веб-интерфейс</string>
+    <string name="settings_edit_device">Изменить</string>
+    <string name="settings_delete_device">Удалить</string>
+    <string name="settings_delete_group">Удалить это устройство</string>
+    <string name="settings_rename_channel">Переименовать канал</string>
+    <string name="settings_rename_channel_title">Переименовать канал</string>
+    <string name="settings_smoke_relay_badge">Пересылает оповещения датчика дыма — может меняться автоматически</string>
+    <string name="settings_smoke_relay_explanation">Датчик дыма не может отправлять оповещения в ntfy напрямую — их должно передавать другое устройство. Hestia выбирает его автоматически, настраивать ничего не нужно. Значок рядом с названием показывает, какое устройство занимается этим сейчас; оно может смениться само, если место понадобится для другой настройки.</string>
+    <string name="delete_group_title">Удалить это устройство?</string>
+    <plurals name="delete_group_message">
+        <item quantity="one">«%1$s» и его %2$d канал будут удалены из Hestia. Само устройство и его настройки не изменятся.</item>
+        <item quantity="few">«%1$s» и его %2$d канала будут удалены из Hestia. Само устройство и его настройки не изменятся.</item>
+        <item quantity="many">«%1$s» и его %2$d каналов будут удалены из Hestia. Само устройство и его настройки не изменятся.</item>
+        <item quantity="other">«%1$s» и его %2$d канала будут удалены из Hestia. Само устройство и его настройки не изменятся.</item>
+    </plurals>
+    <string name="settings_permission_section">Разрешение на доступ к локальной сети</string>
+    <string name="settings_permission_granted">Предоставлено</string>
+    <string name="settings_permission_denied">Отклонено</string>
+    <string name="settings_permission_not_required">Не требуется в этой версии Android</string>
+    <string name="settings_permission_open_system">Открыть системные настройки приложения</string>
+    <string name="settings_appearance_section">Оформление</string>
+    <string name="settings_theme_system">Как в системе</string>
+    <string name="settings_theme_light">Светлая тема</string>
+    <string name="settings_theme_dark">Тёмная тема</string>
+    <string name="settings_language_section">Язык</string>
+    <string name="settings_language_system">Как в системе</string>
+
+    <!-- Notifications de bornes de programmation -->
+    <string name="settings_notifications_section">Уведомления</string>
+    <string name="settings_notifications_label">Уведомления о расписаниях</string>
+    <string name="settings_notifications_desc">Сообщает о начале и окончании расписаний и периодов имитации присутствия. Проверка идёт в фоне примерно раз в 15 мин, поэтому уведомление может прийти с небольшой задержкой.</string>
+    <string name="settings_notifications_denied">Разрешение отклонено. Чтобы получать уведомления, включи их для Hestia в настройках Android.</string>
+    <string name="settings_notifications_superseded">Заменено мгновенными уведомлениями (ntfy, ниже) — на самом деле не выключено, просто больше не нужно.</string>
+
+    <!-- Notifications instantanées via ntfy (service externe, opt-in, remplace la section ci-dessus si actif) -->
+    <string name="settings_ntfy_section">Мгновенные уведомления (ntfy)</string>
+    <string name="settings_ntfy_desc_before">Отправляет уведомления мгновенно, прямо с твоих розеток, через внешний сервис — а не только в пределах локальной сети. Нужно приложение ntfy — оно есть в </string>
+    <string name="settings_ntfy_desc_after"> — чтобы получать уведомления на телефоне.</string>
+    <string name="settings_ntfy_toggle_label">Включить ntfy</string>
+    <string name="settings_ntfy_topic_hint_setup">Остался один шаг: установи приложение ntfy, создай тему и вставь её ниже. Пока это поле пустое, ты ничего не получишь.</string>
+    <string name="settings_ntfy_topic_label">Тема ntfy</string>
+    <string name="settings_ntfy_topic_placeholder">Ещё не задана</string>
+    <string name="settings_ntfy_topic_hint">Относись к ней как к паролю: никому её не сообщай. Сгенерируй её в приложении ntfy.</string>
+    <string name="settings_ntfy_reveal">Показать тему</string>
+    <string name="settings_ntfy_hide">Скрыть тему</string>
+    <string name="settings_ntfy_test">Проверить</string>
+    <string name="ntfy_test_message">Если ты это читаешь, ntfy работает. Если не читаешь — у нас проблема с логикой.</string>
+
+    <!-- Cloud Shelly, repli à distance (opt-in, désactivé par défaut — voir CLAUDE.md) -->
+    <string name="settings_cloud_section">Shelly Cloud</string>
+    <string name="settings_cloud_desc">Позволяет Hestia показывать состояние твоих розеток (потребление, вкл./выкл.) и датчиков дыма (тревога, батарея), даже когда ты вне домашней сети. По умолчанию выключено: без ключа ниже Hestia, как обычно, общается с твоими устройствами только по локальной сети.</string>
+    <string name="settings_cloud_where_before">Ключ авторизации и адрес сервера можно найти на </string>
+    <string name="settings_cloud_where_after"> → User → Access and permissions → Authorization cloud key.</string>
+    <string name="settings_cloud_key_label">Ключ авторизации</string>
+    <string name="settings_cloud_key_reveal">Показать ключ</string>
+    <string name="settings_cloud_key_hide">Скрыть ключ</string>
+    <string name="settings_cloud_server_label">Адрес сервера</string>
+    <string name="settings_cloud_server_placeholder">например, shelly-281-eu.shelly.cloud</string>
+    <string name="settings_cloud_test">Проверить</string>
+    <string name="settings_cloud_test_success">Работает — ключ принят.</string>
+    <string name="settings_cloud_test_error">Не получилось. Проверь ключ и адрес сервера.</string>
+    <string name="settings_cloud_clear">Удалить ключ</string>
+
+    <!-- Canal et contenus des notifications (textes courts : certains sont envoyés tels quels par l'appareil à ntfy) -->
+    <string name="notif_channel_name">Расписания</string>
+    <string name="notif_channel_desc">Начало и окончание расписаний и периодов имитации присутствия</string>
+    <string name="notif_planning_started">Расписание с %1$s до %2$s запущено</string>
+    <string name="notif_planning_ended">Расписание с %1$s до %2$s завершено</string>
+    <string name="notif_planning_started_with_threshold">Расписание с %1$s до %2$s запущено (отключение ниже %3$d Вт)</string>
+    <string name="notif_presence_started">Имитация присутствия с %1$s до %2$s запущена</string>
+    <string name="notif_presence_ended">Имитация присутствия с %1$s до %2$s завершена</string>
+    <string name="notif_timer_ended">Таймер %1$s завершён</string>
+    <string name="notif_cutoff_triggered">Отключено (мощность ниже порога)</string>
+    <!-- Préfixe seul : la durée (« 1h32 », « 45min ») est ajoutée après une espace par le script généré. -->
+    <string name="notif_cutoff_triggered_with_duration">Отключено (мощность ниже порога) через</string>
+    <string name="notif_ntfy_presence_started">Имитация присутствия запущена</string>
+    <string name="notif_ntfy_presence_ended">Имитация присутствия остановлена</string>
+    <string name="notif_button_timer_ended">Таймер кнопки завершён</string>
+
+    <!-- Minuteur déclenché par le bouton physique -->
+    <string name="detail_button_timer_section">Физическая кнопка</string>
+    <string name="detail_button_timer_desc">Физической кнопке розетки можно задать особое поведение (как у шаблонов «Свой»: длительность, при желании — порог отключения). Оно работает, даже если приложение Hestia закрыто.\n\nБез настройки кнопка остаётся обычным выключателем: каждое нажатие включает или выключает розетку.</string>
+    <string name="detail_button_timer_configure">Настроить физическую кнопку</string>
+    <string name="detail_button_timer_dialog_title">Таймер физической кнопки</string>
+    <string name="detail_button_timer_row_label">При нажатии: %1$s</string>
+    <string name="detail_button_timer_row_label_unlimited">При нажатии: без ограничения времени</string>
+    <string name="detail_button_timer_disable">Отключить</string>
+    <string name="detail_button_timer_disable_confirm_title">Отключить таймер физической кнопки?</string>
+    <string name="detail_button_timer_disable_confirm_message">Кнопка снова станет обычным выключателем.</string>
+
+    <string name="settings_security_section">Безопасность</string>
+    <string name="settings_security_password_hint">Пароль устройства</string>
+    <string name="settings_security_coming_soon">Скоро</string>
+
+    <!-- Ajout / modification d'appareil -->
+    <string name="add_device_title">Новое устройство</string>
+    <string name="edit_device_title">Изменить устройство</string>
+    <string name="add_device_name_label">Название</string>
+    <string name="add_device_name_hint">Например: Розетка самоката</string>
+    <string name="add_device_name_hint_smoke_detector">Например: Датчик на кухне</string>
+    <string name="add_device_name_group_hint">Применяется ко всем каналам этого устройства. Отдельный канал можно переименовать в настройках.</string>
+    <string name="add_device_ip_label">IP-адрес</string>
+    <string name="add_device_ip_hint">Например: 192.168.1.96</string>
+    <string name="add_device_ip_locations_title">IP-адреса</string>
+    <string name="add_device_ip_location_default_name_1">Первый IP-адрес</string>
+    <string name="add_device_ip_location_default_name_2">Второй IP-адрес</string>
+    <string name="add_device_add_second_ip">Добавить второй IP-адрес</string>
+    <string name="add_device_ip_location_dialog_title">Изменить адрес</string>
+    <string name="add_device_ip_location_name_label">Название (необязательно)</string>
+    <string name="add_device_ip_location_edit">Изменить</string>
+    <string name="add_device_ip_location_delete">Удалить</string>
+    <string name="add_device_ip_location_delete_confirm_title">Удалить этот адрес?</string>
+    <string name="add_device_ip_location_delete_confirm_message">Адрес будет удалён только после нажатия «Сохранить» внизу экрана.</string>
+    <string name="add_device_type_label">Тип</string>
+    <string name="add_device_type_prompt">Какой это тип устройства?</string>
+    <string name="add_device_found_name">Название на розетке: %1$s</string>
+    <string name="add_device_smoke_wake_hint">Трижды коротко нажми кнопку на датчике, чтобы разбудить его (режим настройки на 2 минуты), затем подтверди ниже.</string>
+    <string name="add_device_confirmed_name">Добавлено: %1$s</string>
+    <string name="add_device_led_title">Светодиод</string>
+    <string name="add_device_led_hint">Днём горит с обычной яркостью, с 22:00 до 8:00 приглушается до 30%. Если выключить, он не будет гореть совсем.</string>
+    <string name="add_device_led_loading">Проверка…</string>
+    <string name="add_device_led_unavailable">Не поддерживается этим устройством или оно недоступно.</string>
+    <string name="device_type_plug">Розетка</string>
+    <string name="device_type_lamp">Лампа</string>
+    <string name="device_type_sensor">Датчик</string>
+    <string name="device_type_smoke_detector">Датчик дыма</string>
+    <string name="add_device_test_and_add">Проверить подключение и добавить</string>
+    <string name="add_device_add_smoke_detector">Добавить</string>
+    <string name="add_device_smoke_detector_hint">Это устройство работает от батареи и большую часть времени спит. Стоит включить для этого датчика уведомления ntfy и Shelly Cloud — именно это позволит получить оповещение, даже пока он спит.</string>
+    <string name="add_device_testing">Проверка подключения…</string>
+    <string name="add_device_save">Сохранить</string>
+    <string name="add_device_cancel">Отмена</string>
+
+    <!-- Détection de canaux -->
+    <string name="add_device_channels_title">Обнаруженные каналы</string>
+    <string name="add_device_channels_prompt">У этого устройства несколько каналов. Выбери, какие добавить: каждый появится отдельной плиткой.</string>
+    <string name="add_device_channel_label">Канал %1$d</string>
+    <string name="add_device_add_selected">Добавить выбранные</string>
+    <string name="add_device_model_detected">Обнаружена модель: %1$s</string>
+
+    <!-- Validation -->
+    <string name="error_name_required">Укажи название устройства.</string>
+    <string name="error_ip_invalid">Неверный IP-адрес. Ожидаемый формат: 192.168.1.96</string>
+    <string name="error_ip_required">Введи IP-адрес устройства.</string>
+    <string name="error_channel_required">Выбери хотя бы один канал.</string>
+    <string name="error_device_exists">Этот канал этого устройства уже добавлен.</string>
+
+    <!-- Erreurs réseau / RPC (actionnables, pas techniques) -->
+    <string name="error_unreachable">Устройство недоступно. Проверь, что оно включено и подключено к той же сети Wi-Fi.</string>
+    <string name="error_timeout">Устройство не ответило вовремя. Проверь сеть и попробуй ещё раз.</string>
+    <string name="error_not_shelly">Устройство по этому адресу не отвечает как Shelly Gen2 или новее.</string>
+    <string name="error_gen1_unsupported">Это устройство Shelly Gen1, оно не поддерживается. Поддерживаются только Gen2 и новее.</string>
+    <string name="error_rpc_generic">Устройство вернуло ошибку (код %1$d). Попробуй ещё раз.</string>
+    <string name="error_permission_denied_action">Чтобы связаться с устройством, нужно разрешение на доступ к локальной сети. Его можно снова включить в системных настройках.</string>
+
+    <!-- Confirmation de suppression -->
+    <string name="delete_device_title">Удалить это устройство?</string>
+    <string name="delete_device_message">Устройство «%1$s» будет удалено из Hestia. На само устройство и его настройки это не повлияет.</string>
+    <string name="delete_device_confirm">Удалить</string>
+    <string name="delete_device_cancel">Отмена</string>
+
+    <!-- Modifications non enregistrées -->
+    <string name="unsaved_changes_title">Несохранённые изменения</string>
+    <string name="unsaved_changes_message">Некоторые изменения не сохранены. Выйти без сохранения?</string>
+    <string name="unsaved_changes_discard">Не сохранять</string>
+    <string name="unsaved_changes_keep">Продолжить редактирование</string>
+
+    <!-- Écran d'explication de la permission réseau local -->
+    <string name="permission_explain_title">Разреши доступ к локальной сети</string>
+    <string name="permission_explain_body">Начиная с Android 17 приложение должно спрашивать твоё разрешение, чтобы связываться с устройствами в локальной сети. Оно нужно Hestia для связи с твоими устройствами.\n\nПриложение обращается только к адресам, указанным тобой, никогда не сканирует твою сеть и ничего не отправляет за её пределы.</string>
+    <string name="permission_explain_continue">Продолжить</string>
+    <string name="permission_explain_cancel">Позже</string>
+    <string name="permission_denied_banner">Доступ к локальной сети не разрешён. Некоторые команды не смогут дойти до твоих устройств.</string>
+
+    <!-- Tableau -->
+    <string name="dashboard_empty_title">Нет устройств</string>
+    <string name="dashboard_empty_body">Добавь устройство Shelly, чтобы управлять им здесь.</string>
+    <string name="dashboard_empty_action">Добавить устройство</string>
+
+    <!-- États d'une tuile -->
+    <string name="state_active">Включено</string>
+    <!-- Inséré entre le libellé d'état et le compte à rebours (« Включено ещё 55:10 »). -->
+    <string name="timer_countdown_connector">ещё</string>
+    <string name="state_idle">Выключено</string>
+    <string name="state_planned">По расписанию</string>
+    <string name="state_presence">Присутствие</string>
+    <string name="tile_presence_disabled_today">Присутствие отключено на сегодня</string>
+    <string name="tile_planning_disabled_today">Расписание отключено на сегодня</string>
+
+    <!-- Smoke detector tile (see SMOKE-DETECTOR.md) -->
+    <string name="sensor_state_normal">Норма</string>
+    <string name="sensor_state_alarm">Тревога!</string>
+    <string name="sensor_state_mute">Звук тревоги отключён</string>
+    <string name="sensor_state_battery_error">Нет данных</string>
+    <string name="sensor_state_unreachable">Недоступен</string>
+    <string name="sensor_last_contact">Последняя связь: %1$s</string>
+
+    <!-- Smoke detector Detail screen (see SMOKE-DETECTOR.md) -->
+    <string name="sensor_mute_action">Отключить звук тревоги</string>
+    <string name="sensor_battery_label">Батарея: %1$d%%</string>
+    <string name="sensor_temperature_label">Температура: %1$.1f °C</string>
+    <string name="sensor_battery_threshold_info">Если заряд батареи упадёт ниже 15%, автоматически придёт уведомление.</string>
+    <string name="sensor_no_remote_test">Удалённая проверка невозможна: в Shelly нет такой команды. Чтобы проверить датчик, нажми кнопку на нём самом (3 сигнала, 3 вспышки).</string>
+
+    <!-- Cutting a plug off during an alarm (see SMOKE-DETECTOR.md, Lot 5) -->
+    <string name="sensor_cutoff_title">Отключать розетку при тревоге</string>
+    <string name="sensor_cutoff_desc">Датчик может сам выключить одну или несколько розеток, как только сработает настоящая тревога, — без участия приложения.</string>
+    <string name="sensor_cutoff_wake_first">Разбуди датчик (3 коротких нажатия), чтобы посмотреть или изменить эту настройку.</string>
+    <string name="sensor_cutoff_enable">Включить</string>
+    <string name="sensor_cutoff_manual_ip">IP-адрес</string>
+    <string name="sensor_cutoff_manual_add">Добавить</string>
+    <string name="sensor_cutoff_manual_remove">Удалить этот адрес</string>
+    <string name="sensor_cutoff_dhcp_hint">Лучше закрепи за этим устройством постоянный IP-адрес в настройках роутера (DHCP), чем задавать статический IP на самом устройстве.</string>
+    <string name="sensor_cutoff_unreachable">Датчик недоступен — разбуди его (3 коротких нажатия) и попробуй ещё раз.</string>
+
+    <!-- Relais ntfy des détecteurs de fumée — le nom de l'appareil sert de titre, ces textes sont le corps (envoyés tels quels à ntfy). -->
+    <string name="sensor_relay_body_alarm">Настоящая тревога!</string>
+    <string name="sensor_relay_body_alarm_off">Тревога прекратилась.</string>
+    <string name="sensor_relay_body_alarm_test">Запущена проверка (3 сигнала).</string>
+    <string name="state_offline">Недоступно</string>
+    <string name="state_loading">Загрузка…</string>
+
+    <!-- Bandeau global du Tableau (pas de tuile dédiée) quand la permission réseau local manque -->
+    <string name="dashboard_permission_banner">Чтобы связаться с устройствами, нужно разрешение на доступ к локальной сети.</string>
+
+    <!-- Actions de tuile -->
+    <string name="tile_toggle">Переключить</string>
+    <!-- Durée écoulée depuis l'allumage (compteur qui monte) : « Включено уже 12:34 ». -->
+    <string name="tile_on_since">уже %1$s</string>
+    <string name="tile_number">%1$s</string>
+    <!-- Provenance de l'état affiché — jamais silencieuse, voir CLAUDE.md -->
+    <string name="tile_via_local">Локальная сеть</string>
+    <string name="tile_via_cloud">Через Shelly Cloud (резервный удалённый доступ)</string>
+    <!-- Modale rapide d'un canal, dans un bloc multi-prises -->
+    <string name="tile_configure">Настроить</string>
+
+    <!-- Connectivité et ordre dans les Réglages -->
+    <string name="settings_connectivity_online">В сети</string>
+    <string name="settings_connectivity_offline">Не в сети</string>
+    <string name="settings_connectivity_checking">Проверка…</string>
+    <string name="settings_move_up">Переместить вверх</string>
+    <string name="settings_move_down">Переместить вниз</string>
+
+    <!-- Écran Détail -->
+    <string name="detail_back">Назад</string>
+    <string name="detail_timer_section">Включить на</string>
+    <string name="detail_timer_custom">Вручную</string>
+
+    <!-- Durées -->
+    <string name="duration_hours">%1$d ч</string>
+    <string name="duration_minutes">%1$d мин</string>
+    <string name="duration_hours_minutes">%1$d ч %2$d мин</string>
+
+    <!-- Sélecteur « Perso » -->
+    <string name="duration_picker_title">Своя длительность</string>
+    <string name="duration_picker_hours">Часы</string>
+    <string name="duration_picker_minutes">Минуты</string>
+    <string name="duration_picker_start">Запустить</string>
+    <string name="timer_cutoff_label">Выключить, если мощность упадёт ниже</string>
+    <string name="duration_picker_min_error">Минимальная длительность — 1 минута.</string>
+    <string name="duration_picker_unlimited_label">Без ограничения времени</string>
+    <string name="duration_picker_unlimited_grace_note">Отключение по порогу начинает следить за потреблением только через 15 мин после включения — чтобы подключённый прибор успел действительно начать потреблять энергию.</string>
+
+    <!-- Deux réglages personnalisés enregistrables (« Свой ») -->
+    <string name="timer_preset_chip">Свой</string>
+    <string name="timer_preset_add">Добавить шаблон</string>
+    <string name="timer_preset_add_slot">Добавить шаблон «Свой %1$d»</string>
+    <string name="timer_preset_new_title">Новый шаблон</string>
+    <string name="timer_preset_edit_title">Изменить шаблон</string>
+    <string name="timer_preset_name_label">Название</string>
+    <string name="timer_preset_name_error">Дай шаблону название.</string>
+    <string name="timer_preset_save">Сохранить</string>
+    <string name="timer_preset_cutoff_detail">Отключение ниже %1$d Вт</string>
+    <string name="timer_preset_unlimited_detail">До отключения ниже %1$d Вт</string>
+    <string name="timer_preset_no_cutoff">Без порога отключения</string>
+    <string name="timer_preset_no_limit_detail">Без ограничений (как обычное включение)</string>
+    <string name="timer_preset_delete">Удалить шаблон</string>
+    <string name="timer_preset_row_label">%1$s - %2$s</string>
+    <string name="timer_preset_delete_confirm_title">Удалить этот шаблон?</string>
+    <string name="timer_preset_delete_confirm_message">Шаблон будет удалён. Новый можно создать в любой момент.</string>
+    <string name="timer_preset_delete_confirm_ok">Удалить</string>
+
+    <!-- Mise à jour du firmware -->
+    <string name="firmware_section">Обновление прошивки</string>
+    <string name="firmware_check_button">Проверить обновления</string>
+    <string name="firmware_check_hint">Обращается к серверам Shelly — только по твоему запросу.</string>
+    <string name="firmware_up_to_date">%1$s: установлена последняя версия (%2$s).</string>
+    <string name="firmware_update_available">%1$s: доступно обновление. Установленная версия: %2$s. Доступная версия: %3$s.</string>
+    <string name="firmware_beta_only">%1$s: установлена последняя версия (%2$s). Доступна бета-версия (%3$s) — Hestia предлагает только стабильные обновления.</string>
+    <string name="firmware_check_error">Не удалось проверить. Убедись, что устройство доступно.</string>
+    <string name="tile_firmware_update_banner">Есть обновление</string>
+    <string name="firmware_install_button">Установить обновление</string>
+    <string name="firmware_install_confirm_title">Установить обновление?</string>
+    <string name="firmware_install_confirm_message">Устройство перезагрузится, чтобы применить обновление: всё, что к нему подключено, обесточится на несколько секунд. Не отключай его от сети во время обновления.</string>
+    <string name="firmware_install_confirm_ok">Установить</string>
+    <string name="firmware_install_started">Установка началась. Устройство перезагрузится.</string>
+    <string name="firmware_install_error">Не удалось начать установку. Попробуй ещё раз.</string>
+
+    <!-- Redémarrage manuel (dépannage), sous la section firmware -->
+    <string name="firmware_reboot_hint">Если устройство ведёт себя странно (завис скрипт, розетка перестала отвечать), его можно перезагрузить.</string>
+    <string name="firmware_reboot_button">Перезагрузить устройство</string>
+    <string name="firmware_reboot_confirm_title">Перезагрузить устройство?</string>
+    <string name="firmware_reboot_confirm_message">На несколько секунд оно обесточит всё, чем управляет. Не отключай его от сети во время перезагрузки.</string>
+    <string name="firmware_reboot_confirm_ok">Перезагрузить</string>
+    <string name="firmware_reboot_started">Перезагрузка началась.</string>
+    <string name="firmware_reboot_error">Не удалось начать перезагрузку. Попробуй ещё раз.</string>
+
+    <!-- Cloud Shelly (opt-in, désactivé par défaut — voir CLAUDE.md) -->
+    <string name="cloud_section_title">Shelly Cloud</string>
+    <string name="cloud_section_hint">Позволяет этому устройству подключаться к облачным серверам Shelly — это нужно для официального приложения Shelly, голосовых ассистентов и удалённого доступа вне локальной сети. По умолчанию выключено, и этот переключатель управляет только подключением самого устройства: учётная запись Shelly создаётся и устройство добавляется в неё вне Hestia — через приложение Shelly или control.shelly.cloud. Hestia никогда не запрашивает данные для входа в Shelly.</string>
+    <string name="cloud_loading">Проверка…</string>
+    <string name="cloud_unavailable">Не поддерживается этим устройством или оно недоступно.</string>
+    <string name="cloud_toggle_label">Подключить к Shelly Cloud</string>
+    <string name="cloud_status_connected">Подключено к облачному серверу.</string>
+    <string name="cloud_status_disconnected">Не подключено.</string>
+    <string name="cloud_id_label">Cloud ID: %1$s</string>
+    <string name="cloud_portal_link">Открыть control.shelly.cloud</string>
+
+    <!-- Simulation de présence -->
+    <string name="presence_toggle_label">Имитировать присутствие</string>
+    <string name="presence_margin">Случайное отклонение</string>
+    <string name="presence_margin_value">± %1$d мин</string>
+    <string name="presence_row_label">Имитация присутствия – ± %1$d мин</string>
+    <string name="presence_configure">Настроить</string>
+    <string name="presence_state_active">Активна</string>
+    <string name="presence_state_inactive">Неактивна</string>
+    <string name="presence_screen_title">Имитация присутствия</string>
+    <string name="presence_intro">Hestia создаёт скрипт, который включает и выключает устройство в выбранный промежуток времени со случайным отклонением. После загрузки он работает на устройстве самостоятельно, даже если телефон выключен.</string>
+    <string name="presence_start_time">Время начала</string>
+    <string name="presence_end_time">Время окончания</string>
+    <string name="presence_deploy">Загрузить на устройство</string>
+    <string name="presence_stop">Остановить имитацию</string>
+    <string name="presence_deploying">Загрузка на устройство…</string>
+    <string name="presence_deployed_confirm">Имитация запущена на устройстве.</string>
+    <string name="presence_stopped_confirm">Имитация остановлена.</string>
+    <string name="presence_error_planning_exists">На этой розетке уже есть расписание. Удали его, прежде чем включать режим присутствия.</string>
+    <string name="presence_error_margin">Недопустимое отклонение (от 0 до 120 минут).</string>
+    <string name="presence_clock_device_time">Время на устройстве: %1$s</string>
+    <string name="presence_clock_warning">Часы устройства расходятся с телефоном примерно на %1$s. Имитация работает по часам устройства: проверь, что у него стабильное подключение к сети.</string>
+
+    <!-- Bascule manuelle pendant une simulation de présence (Tableau) -->
+    <string name="presence_toggle_title">Имитация присутствия активна</string>
+    <string name="presence_toggle_message">Переключатель остановит имитацию на сегодня — завтра она возобновится как обычно, в то же время.</string>
+    <string name="presence_toggle_stop">Остановить на сегодня</string>
+
+    <!-- Conflit minuteur / présence -->
+    <string name="conflict_title">Имитация присутствия активна</string>
+    <string name="conflict_message">Пока идёт таймер, имитация присутствия может перехватить управление устройством. Что сделать?</string>
+    <string name="conflict_launch_anyway">Всё равно запустить</string>
+    <string name="conflict_stop_presence">Остановить имитацию и запустить</string>
+    <string name="conflict_cancel">Отмена</string>
+
+    <!-- Minuteur lancé pendant un planning en cours : avertissement, pas un blocage -->
+    <string name="timer_planning_active_title">Идёт расписание</string>
+    <string name="timer_planning_active_message">Расписание занимает этот промежуток до %1$s. Когда таймер закончится, розетка выключится, даже если расписание ещё не завершено. Расписание снова возьмёт управление при следующем срабатывании.</string>
+    <string name="timer_planning_active_confirm">Всё равно запустить</string>
+
+    <!-- Planning (composant Schedule natif de l'appareil) -->
+    <string name="planning_section">Расписание</string>
+    <string name="planning_empty">Нет расписаний.</string>
+    <string name="planning_add">Добавить расписание</string>
+    <string name="planning_limit_reached">Достигнут максимум — 10 расписаний.</string>
+    <string name="planning_delete">Удалить расписание</string>
+    <string name="planning_delete_title">Удалить это расписание?</string>
+    <string name="planning_delete_message">Расписание %1$s будет удалено с розетки.</string>
+    <string name="planning_delete_confirm">Удалить</string>
+    <string name="planning_every_day">Каждый день</string>
+    <string name="planning_dialog_title">Новое расписание</string>
+    <string name="planning_edit_title">Изменить расписание</string>
+    <string name="planning_edit_blocked_title">Идёт расписание</string>
+    <string name="planning_edit_blocked_message">Это расписание сейчас активно (оно включило розетку). Измени его, когда его время закончится, или удали.</string>
+    <string name="planning_delete_active_warning">Это расписание сейчас активно: если его удалить, розетка выключится.</string>
+    <string name="planning_pause">Приостановить расписание</string>
+    <string name="planning_row_active">Активно</string>
+    <string name="planning_pause_title">Приостановить это расписание?</string>
+    <string name="planning_pause_message">Расписание %1$s будет убрано с розетки, пока ты его не возобновишь, — вводить заново ничего не придётся.</string>
+    <string name="planning_pause_active_warning">Это расписание сейчас активно: если его приостановить, розетка выключится.</string>
+    <string name="planning_pause_confirm">Приостановить</string>
+    <string name="planning_paused_section">Приостановлено</string>
+    <string name="planning_resume">Возобновить</string>
+    <string name="planning_paused_delete">Забыть приостановленное расписание</string>
+    <string name="planning_paused_delete_title">Забыть это приостановленное расписание?</string>
+    <string name="planning_paused_delete_message">Расписание %1$s будет удалено безвозвратно, возобновить его будет нельзя.</string>
+    <string name="planning_resume_error_title">Не удалось возобновить расписание</string>
+    <string name="planning_ok">Понятно</string>
+    <string name="planning_start">Начало</string>
+    <string name="planning_end">Конец</string>
+    <string name="planning_days">Дни</string>
+    <string name="planning_all_days">Каждый день</string>
+    <string name="planning_once">Однократно</string>
+    <string name="planning_once_day">День</string>
+    <string name="planning_today">Сегодня</string>
+    <string name="planning_validate">Сохранить</string>
+    <string name="planning_validate_done">Сохранено</string>
+    <string name="planning_error_range">Начало и конец должны различаться.</string>
+    <string name="planning_error_no_day">Выбери хотя бы один день.</string>
+    <string name="planning_error_past">Это время уже прошло. Выбери время в будущем.</string>
+    <string name="planning_conflict">Этот промежуток пересекается с существующим расписанием (%1$s). Измени одно из них.</string>
+    <string name="planning_error_generic">Не удалось сохранить расписание. Проверь, что розетка отвечает.</string>
+    <string name="planning_day_mon">Пн</string>
+    <string name="planning_day_tue">Вт</string>
+    <string name="planning_day_wed">Ср</string>
+    <string name="planning_day_thu">Чт</string>
+    <string name="planning_day_fri">Пт</string>
+    <string name="planning_day_sat">Сб</string>
+    <string name="planning_day_sun">Вс</string>
+    <!-- Noms complets, joints par des virgules dans le résumé d'un planning (liste). -->
+    <string name="planning_day_full_mon">Понедельник</string>
+    <string name="planning_day_full_tue">Вторник</string>
+    <string name="planning_day_full_wed">Среда</string>
+    <string name="planning_day_full_thu">Четверг</string>
+    <string name="planning_day_full_fri">Пятница</string>
+    <string name="planning_day_full_sat">Суббота</string>
+    <string name="planning_day_full_sun">Воскресенье</string>
+
+    <!-- Sauvegarde / restauration -->
+    <string name="settings_backup_section">Резервная копия</string>
+    <string name="settings_backup_export">Экспортировать конфигурацию</string>
+    <string name="settings_backup_import">Импортировать конфигурацию</string>
+    <string name="backup_export_filename">hestia-backup.json</string>
+    <string name="backup_import_confirm_title">Заменить конфигурацию?</string>
+    <string name="backup_import_confirm_message">Импорт заменит все текущие устройства и настройки. Это действие необратимо.</string>
+    <string name="backup_import_confirm_ok">Заменить</string>
+    <string name="backup_export_success">Конфигурация экспортирована.</string>
+    <string name="backup_export_error">Не удалось экспортировать.</string>
+    <string name="backup_import_success">Конфигурация восстановлена.</string>
+    <string name="backup_import_invalid">Файл повреждён или несовместим.</string>
+    <string name="backup_import_error">Не удалось импортировать.</string>
+
+    <!-- Journal de diagnostic -->
+    <string name="diagnostic_title">Журнал диагностики</string>
+    <string name="diagnostic_warning">Журнал содержит локальные IP-адреса и названия твоих устройств. Делись им только с теми, кому доверяешь.</string>
+    <string name="diagnostic_share">Поделиться</string>
+    <string name="diagnostic_share_chooser">Поделиться журналом</string>
+    <string name="diagnostic_subject">Журнал диагностики Hestia</string>
+
+    <!-- En-tête du rapport partagé -->
+    <string name="diagnostic_theme_dark">тёмная</string>
+    <string name="diagnostic_theme_light">светлая</string>
+    <string name="diagnostic_report_header">Hestia — журнал диагностики</string>
+    <string name="diagnostic_report_app">Приложение: %1$s</string>
+    <string name="diagnostic_report_android">Android: %1$s (API %2$d)</string>
+    <string name="diagnostic_report_device">Устройство: %1$s %2$s</string>
+    <string name="diagnostic_report_language">Язык: %1$s</string>
+    <string name="diagnostic_report_theme">Тема: %1$s</string>
+    <string name="diagnostic_report_permission">Разрешение на доступ к локальной сети: %1$s</string>
+    <string name="diagnostic_report_device_count">Настроено устройств: %1$d</string>
+    <string name="diagnostic_report_notifications">Уведомления: %1$s</string>
+    <string name="diagnostic_report_enabled">включены</string>
+    <string name="diagnostic_report_disabled">выключены</string>
+    <string name="diagnostic_report_devices_header">Устройства:</string>
+    <string name="diagnostic_report_device_line">- %1$s (%2$s, %3$s) — прошивка %4$s</string>
+    <string name="diagnostic_report_firmware_unreachable">недоступна</string>
+</resources>

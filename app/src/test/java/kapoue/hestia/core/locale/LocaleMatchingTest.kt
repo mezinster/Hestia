@@ -24,7 +24,7 @@ class LocaleMatchingTest {
 
     @Test
     fun `liste systeme vide donne l'etiquette nue`() {
-        assertEquals("en", preferredTagFor(AppLanguage.EN, emptyList()))
+        assertEquals("ru", preferredTagFor(AppLanguage.RU, emptyList()))
     }
 
     @Test
