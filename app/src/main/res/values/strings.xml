@@ -182,7 +182,7 @@
     <string name="add_device_smoke_wake_hint">Press the detector\'s button 3 times briefly to wake it up (setup mode, 2 minutes), then confirm below.</string>
     <string name="add_device_confirmed_name">Added: %1$s</string>
     <string name="add_device_led_title">LED</string>
-    <string name="add_device_led_hint">Lit at normal brightness during the day, dimmed to 30% from 10pm to 8am. Off toggles it off permanently.</string>
+    <string name="add_device_led_hint" formatted="false">Lit at normal brightness during the day, dimmed to 30% from 10pm to 8am. Off toggles it off permanently.</string>
     <string name="add_device_led_loading">Checking…</string>
     <string name="add_device_led_unavailable">Unavailable on this device, or unreachable.</string>
     <string name="device_type_plug">Plug</string>

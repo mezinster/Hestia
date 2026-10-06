@@ -176,7 +176,7 @@
     <string name="add_device_smoke_wake_hint">Appuie 3 fois brièvement sur le bouton du détecteur pour le réveiller (mode configuration, 2 minutes), puis valide ci-dessous.</string>
     <string name="add_device_confirmed_name">Ajouté : %1$s</string>
     <string name="add_device_led_title">LED</string>
-    <string name="add_device_led_hint">Allumée à intensité normale le jour, réduite à 30 % de 22h à 8h. Sur Éteint, elle reste éteinte en permanence.</string>
+    <string name="add_device_led_hint" formatted="false">Allumée à intensité normale le jour, réduite à 30 % de 22h à 8h. Sur Éteint, elle reste éteinte en permanence.</string>
     <string name="add_device_led_loading">Vérification…</string>
     <string name="add_device_led_unavailable">Indisponible sur cet appareil, ou injoignable.</string>
     <string name="device_type_plug">Prise</string>

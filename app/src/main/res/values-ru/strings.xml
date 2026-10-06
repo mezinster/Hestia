@@ -174,7 +174,7 @@
     <string name="add_device_smoke_wake_hint">Трижды коротко нажми кнопку на датчике, чтобы разбудить его (режим настройки на 2 минуты), затем подтверди ниже.</string>
     <string name="add_device_confirmed_name">Добавлено: %1$s</string>
     <string name="add_device_led_title">Индикатор</string>
-    <string name="add_device_led_hint">Днём горит с обычной яркостью, с 22:00 до 8:00 приглушается до 30%. Если выключить, он не будет гореть совсем.</string>
+    <string name="add_device_led_hint" formatted="false">Днём горит с обычной яркостью, с 22:00 до 8:00 приглушается до 30%. Если выключить, он не будет гореть совсем.</string>
     <string name="add_device_led_loading">Проверка…</string>
     <string name="add_device_led_unavailable">Не поддерживается этим устройством или оно недоступно.</string>
     <string name="device_type_plug">Розетка</string>
