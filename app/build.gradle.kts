@@ -27,11 +27,30 @@ android {
         versionCode = 55
         versionName = "2.16.1"
 
+        manifestPlaceholders["appLabel"] = "@string/app_name"
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Version de test du fork (branche test-release/*, jamais proposée en PR) : signée avec une
+    // clé personnelle hors dépôt, déclarée dans ~/.gradle/gradle.properties (HESTIA_FORK_*).
+    signingConfigs {
+        create("forkTest") {
+            storeFile = providers.gradleProperty("HESTIA_FORK_STORE_FILE").orNull?.let { file(it) }
+            storePassword = providers.gradleProperty("HESTIA_FORK_STORE_PASSWORD").orNull
+            keyAlias = providers.gradleProperty("HESTIA_FORK_KEY_ALIAS").orNull
+            keyPassword = providers.gradleProperty("HESTIA_FORK_KEY_PASSWORD").orNull
+        }
     }
 
     buildTypes {
         release {
+            // Identifiant distinct : s'installe à côté de la version F-Droid sans conflit de
+            // signature, et se reconnaît à son nom dans le lanceur et à son numéro de version.
+            applicationIdSuffix = ".mezinster"
+            versionNameSuffix = "-test.1"
+            manifestPlaceholders["appLabel"] = "Hestia (test)"
+            signingConfig = signingConfigs.getByName("forkTest")
             // R8 : indispensable ici, car material-icons-extended embarque plusieurs milliers
             // d'icônes compilées en code alors que l'application en utilise quinze. Sans
             // minification, l'APK atteint 47 Mo dont ~48 Mo de DEX décompressé.
