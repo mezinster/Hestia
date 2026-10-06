@@ -14,7 +14,7 @@ android {
 
     defaultConfig {
         applicationId = "kapoue.hestia"
-        minSdk = 30
+        minSdk = 29
         targetSdk = 37
         // Doit rester un littéral : fdroidserver lit ce fichier par expression régulière, il ne
         // l'exécute pas. Une variable ici et checkupdates échoue sur « vercode=None ».
