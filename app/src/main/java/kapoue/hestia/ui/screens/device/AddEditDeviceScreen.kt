@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
@@ -314,7 +315,7 @@ fun AddEditDeviceScreen(
                     // Sonde automatique (prise uniquement, retour David, 2026-09-23) : débounce
                     // après la dernière frappe, ou touche Suivant du clavier — jamais besoin de
                     // quitter le champ (peu fiable, voir échange).
-                    if (state.type == DeviceType.PLUG && state.autoProbing) {
+                    if ((state.type == DeviceType.PLUG || state.type == DeviceType.LAMP) && state.autoProbing) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
@@ -325,7 +326,7 @@ fun AddEditDeviceScreen(
                     HorizontalDivider()
 
                     val foundName = state.foundDeviceName
-                    if (state.type == DeviceType.PLUG && foundName != null) {
+                    if ((state.type == DeviceType.PLUG || state.type == DeviceType.LAMP) && foundName != null) {
                         // Nom déjà trouvé sur la prise par la sonde automatique : plus besoin du
                         // champ Nom éditable, l'appareil fait autorité (retour David, 2026-09-23).
                         Text(
@@ -542,9 +543,9 @@ private fun primaryButtonLabel(state: AddEditUiState): String = when {
  * 2026-09-23) — toujours visibles, y compris après le choix : celle non retenue se grise à 50 %
  * au lieu de disparaître, pour pouvoir se raviser sans recommencer tout le formulaire (retour
  * David, même jour). [selectedType] = null tant que rien n'a encore été choisi (aucune des deux
- * grisée dans ce cas). [DeviceType.LAMP] et [DeviceType.SENSOR] existent dans l'enum mais rien
- * dans Hestia ne les distingue encore d'une prise classique ; les proposer donnerait l'impression
- * d'un vrai support qui n'existe pas.
+ * grisée dans ce cas). [DeviceType.LAMP] est proposé depuis le 2026-10-07 (variateurs, canaux
+ * light:N) ; [DeviceType.SENSOR] existe dans l'enum mais rien dans Hestia ne le distingue encore
+ * d'une prise classique ; le proposer donnerait l'impression d'un vrai support qui n'existe pas.
  */
 @Composable
 private fun DeviceTypeTiles(selectedType: DeviceType?, onSelected: (DeviceType) -> Unit) {
@@ -556,6 +557,13 @@ private fun DeviceTypeTiles(selectedType: DeviceType?, onSelected: (DeviceType) 
                 label = stringResource(deviceTypeLabel(DeviceType.PLUG)),
                 dimmed = selectedType != null && selectedType != DeviceType.PLUG,
                 onClick = { onSelected(DeviceType.PLUG) },
+                modifier = Modifier.weight(1f),
+            )
+            DeviceTypeTile(
+                icon = Icons.Filled.Lightbulb,
+                label = stringResource(deviceTypeLabel(DeviceType.LAMP)),
+                dimmed = selectedType != null && selectedType != DeviceType.LAMP,
+                onClick = { onSelected(DeviceType.LAMP) },
                 modifier = Modifier.weight(1f),
             )
             DeviceTypeTile(
@@ -598,7 +606,7 @@ private fun deviceTypeLabel(type: DeviceType): Int = when (type) {
     // Tout appareil à relais marche/arrêt passe par ce type, pas seulement une prise : le dire
     // évite qu'un possesseur de relais (1PM, Pro…) croie son appareil non pris en charge.
     DeviceType.PLUG -> R.string.device_type_plug_or_relay
-    DeviceType.LAMP -> R.string.device_type_lamp
+    DeviceType.LAMP -> R.string.device_type_dimmer
     DeviceType.SENSOR -> R.string.device_type_sensor
     DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector
 }

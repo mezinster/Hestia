@@ -10,8 +10,10 @@ import kapoue.hestia.R
 import kapoue.hestia.core.util.isValidIpv4
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.repository.LightRepository
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcResult
+import kapoue.hestia.data.rpc.isLightOnly
 import kapoue.hestia.domain.model.CloudInfo
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
@@ -107,6 +109,7 @@ data class AddEditUiState(
 @HiltViewModel
 class AddEditDeviceViewModel @Inject constructor(
     private val repository: DeviceRepository,
+    private val lightRepository: LightRepository,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -306,7 +309,7 @@ class AddEditDeviceViewModel @Inject constructor(
         // permission réseau local manque encore, on se tait, le tap explicite sur Ajouter reste le
         // seul déclencheur de la demande, comme avant ce lot (voir onPrimaryAction côté écran).
         val state = _uiState.value
-        if (!state.isEditMode && state.type == DeviceType.PLUG && isValidIpv4(value) && LocalNetworkPermission.isUsable(context)) {
+        if (!state.isEditMode && state.type.usesProbe() && isValidIpv4(value) && LocalNetworkPermission.isUsable(context)) {
             probeJob = viewModelScope.launch {
                 delay(AUTO_PROBE_DEBOUNCE_MS)
                 runAutoProbe(value)
@@ -317,7 +320,7 @@ class AddEditDeviceViewModel @Inject constructor(
     /** Touche Suivant/OK du clavier sur le champ IP : sonde immédiate, sans attendre le débounce. */
     fun onIpImeAction() {
         val state = _uiState.value
-        if (state.isEditMode || state.type != DeviceType.PLUG) return
+        if (state.isEditMode || !state.type.usesProbe()) return
         val ip = state.ipAddress
         if (!isValidIpv4(ip) || !LocalNetworkPermission.isUsable(context)) return
         probeJob?.cancel()
@@ -372,7 +375,7 @@ class AddEditDeviceViewModel @Inject constructor(
             next.copy(isDirty = isDirty(next))
         }
         val ip = _uiState.value.ipAddress
-        if (switching && value == DeviceType.PLUG && isValidIpv4(ip) && LocalNetworkPermission.isUsable(context)) {
+        if (switching && value.usesProbe() && isValidIpv4(ip) && LocalNetworkPermission.isUsable(context)) {
             probeJob = viewModelScope.launch {
                 delay(AUTO_PROBE_DEBOUNCE_MS)
                 runAutoProbe(ip)
@@ -454,6 +457,17 @@ class AddEditDeviceViewModel @Inject constructor(
             // supposé dont toutes les commandes échoueraient ensuite.
             caps.unsupportedKind?.let { kind ->
                 _uiState.update { it.copy(isTesting = false, error = kind.toUserMessage()) }
+                return@launch
+            }
+            // Variateur seul (light:N, 2026-10-07) : tous ses canaux ajoutés d'un coup, sans écran
+            // de sélection en v1.
+            if (caps.isLightOnly()) {
+                val added = lightRepository.addLightChannels(_uiState.value.name.trim(), ip, caps)
+                if (added == 0) {
+                    _uiState.update { it.copy(isTesting = false, error = UserMessage(R.string.error_device_exists)) }
+                } else {
+                    confirmThenClose(caps.reportedName?.takeIf { it.isNotBlank() } ?: _uiState.value.name.trim())
+                }
                 return@launch
             }
             _uiState.update { it.copy(isTesting = true, error = null) }
@@ -543,7 +557,12 @@ class AddEditDeviceViewModel @Inject constructor(
             capabilities = caps,
             switchIds = channels,
         )
-        if (added == 0) {
+        val addedLights = if (caps.lightChannels.isNotEmpty()) {
+            lightRepository.addLightChannels(state.name.trim(), state.ipAddress.trim(), caps)
+        } else {
+            0
+        }
+        if (added + addedLights == 0) {
             _uiState.update {
                 it.copy(isTesting = false, channelSelection = null, error = UserMessage(R.string.error_device_exists))
             }
@@ -631,3 +650,6 @@ class AddEditDeviceViewModel @Inject constructor(
         const val CONFIRMATION_DELAY_MS = 3_000L
     }
 }
+
+/** Prise / relais et Variateur partagent la même sonde : ce sont les composants qui décident. */
+private fun DeviceType.usesProbe(): Boolean = this == DeviceType.PLUG || this == DeviceType.LAMP

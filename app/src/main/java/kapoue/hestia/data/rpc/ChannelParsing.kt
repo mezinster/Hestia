@@ -23,3 +23,6 @@ internal fun parseChannelNames(components: List<ComponentEntry>, prefix: String)
         id to name
     }.toMap()
 }
+
+/** Vrai si l'appareil n'a que des canaux variateur : l'ajout passe alors par le dépôt Light. */
+internal fun DeviceCapabilities.isLightOnly(): Boolean = switchChannels.isEmpty() && lightChannels.isNotEmpty()
