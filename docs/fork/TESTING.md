@@ -35,6 +35,22 @@ Download the newer APK from the same link and install it over the old one. Your 
 are kept. There are no automatic updates: check the link from time to time, or watch the repository
 on Codeberg.
 
+### If installation is blocked
+
+- **"App blocked to protect your device" (Google Play Protect):** Play Protect warns about any app
+  from a developer it doesn't know yet — it doesn't mean something is wrong with the app. Tap
+  **More details → Install anyway**. If that option isn't offered: Play Store → your profile picture
+  → **Play Protect** → ⚙️ → temporarily turn off **Scan apps with Play Protect**, install, then turn
+  it back on.
+- **"App not installed":**
+  - make sure you open the **newest** file (`hestia-<version>.apk` from the latest release): Android
+    refuses to install an *older* version over a newer one;
+  - if it still fails and « Hestia (test) » is already installed, uninstall it (Settings → Apps) and
+    install again — you'll need to add your devices again;
+  - check that the download is complete (about 5 MB) and that the phone has free space.
+
+The official Hestia from F-Droid is never affected: it's a separate app.
+
 ### Android 17
 
 The first time Hestia contacts a device, Android asks for permission to reach **devices on your
@@ -99,6 +115,22 @@ Open an issue at <https://codeberg.org/mezinster/Hestia/issues> with:
 Скачай более новый APK по той же ссылке и установи поверх старого. Устройства и настройки
 сохранятся. Автоматических обновлений нет: время от времени заглядывай по ссылке или подпишись на
 репозиторий на Codeberg.
+
+### Если установка блокируется
+
+- **«Приложение заблокировано для защиты устройства» (Google Play Защита):** Play Защита
+  предупреждает о любом приложении от разработчика, которого она ещё не знает, — это не значит, что
+  с приложением что-то не так. Нажми **Подробнее → Всё равно установить**. Если такого варианта нет:
+  Play Маркет → значок профиля → **Play Защита** → ⚙️ → временно выключи **Проверять приложения с
+  помощью Play Защиты**, установи приложение и снова включи проверку.
+- **«Приложение не установлено»:**
+  - убедись, что открываешь **самый новый** файл (`hestia-<версия>.apk` из последнего релиза):
+    Android не ставит *более старую* версию поверх новой;
+  - если ошибка остаётся, а «Hestia (test)» уже установлена, удали её (Настройки → Приложения) и
+    установи заново — устройства придётся добавить ещё раз;
+  - проверь, что файл скачался полностью (около 5 МБ) и на телефоне есть свободное место.
+
+Официальная Hestia из F-Droid при этом не затрагивается: это отдельное приложение.
 
 ### Android 17
 
