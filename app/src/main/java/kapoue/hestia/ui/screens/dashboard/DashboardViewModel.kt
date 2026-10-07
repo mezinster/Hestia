@@ -235,6 +235,9 @@ class DashboardViewModel @Inject constructor(
                             // Rattrapage best-effort du nom (variateurs C1) : même principe que pour un
                             // relais, détaché du cycle de relevé.
                             if (lightStatus is LightStatus.Online) {
+                                // Rattrapage ntfy des plannings du variateur (leurs tâches embarquent
+                                // l'appel ntfy), comme pour un relais.
+                                viewModelScope.launch { repository.ntfyCatchUpIfNeeded(device) }
                                 viewModelScope.launch { repository.nameCatchUpIfNeeded(device) }
                             }
                             device.id to lightStatus

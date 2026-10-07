@@ -71,4 +71,12 @@ class ChannelControlTest {
         assertEquals(true, planningRequestAllowed(plug, cutoffThresholdW = 100, marginMinutes = null))
         assertEquals(true, planningRequestAllowed(plug, cutoffThresholdW = null, marginMinutes = 30))
     }
+
+    @Test
+    fun `relais et variateur ont des plannings natifs, pas un detecteur de fumee`() {
+        val smoke = Device(name = "S", ipAddress = "1.2.3.4", type = DeviceType.SMOKE_DETECTOR, supportsSwitch = false)
+        assertEquals(true, hasNativePlannings(plug))
+        assertEquals(true, hasNativePlannings(light))
+        assertEquals(false, hasNativePlannings(smoke))
+    }
 }

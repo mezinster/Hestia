@@ -48,3 +48,10 @@ internal fun ScheduleJob.actionFor(control: ChannelControl, channelId: Int): Sch
 /** Présence et coupure sur seuil reposent sur des scripts `Switch` : jamais pour un variateur. */
 internal fun planningRequestAllowed(device: Device, cutoffThresholdW: Int?, marginMinutes: Int?): Boolean =
     !device.isLight || (cutoffThresholdW == null && marginMinutes == null)
+
+/**
+ * Vrai si l'appareil porte des plannings natifs (`Schedule.*`) : relais ou variateur. Sert de
+ * garde à la resynchronisation ntfy, qui doit réécrire aussi les tâches des variateurs (leur
+ * `HTTP.Request` vers ntfy) quand l'utilisateur désactive ntfy ou change de sujet.
+ */
+internal fun hasNativePlannings(device: Device): Boolean = device.supportsSwitch || device.isLight

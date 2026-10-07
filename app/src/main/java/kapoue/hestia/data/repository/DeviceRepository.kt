@@ -27,6 +27,7 @@ import kapoue.hestia.data.rpc.LightRpcClient
 import kapoue.hestia.data.rpc.ShellyRpcClient
 import kapoue.hestia.data.rpc.actionFor
 import kapoue.hestia.data.rpc.channelControlFor
+import kapoue.hestia.data.rpc.hasNativePlannings
 import kapoue.hestia.data.rpc.planningRequestAllowed
 import kapoue.hestia.data.rpc.errorOrNull
 import kapoue.hestia.data.rpc.getOrNull
@@ -2457,7 +2458,7 @@ class DeviceRepository @Inject constructor(
     private suspend fun resyncNtfyForDevice(device: Device): Boolean {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return true
         var reachable = true
-        if (device.supportsSwitch) {
+        if (hasNativePlannings(device)) {
             // getPlannings fusionne plannings précis et simulations de présence : ce seul relevé
             // couvre désormais les deux (plus besoin d'un second passage par getPresenceWindows).
             when (val r = getPlannings(device)) {
@@ -2467,7 +2468,7 @@ class DeviceRepository @Inject constructor(
                 is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
             }
         }
-        if (device.hasScripting) {
+        if (device.hasScripting && !device.isLight) {
             if (reachable) {
                 val buttonConfig = getButtonTimerConfig(device)
                 if (buttonConfig.enabled) {

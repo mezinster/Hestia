@@ -350,13 +350,13 @@ class ShellyRpcClient @Inject constructor(
 
     /**
      * Crée un programme cron : à [timespec], bascule le canal [channelId] sur [on]. Un seul appel
-     * d'action du canal ([ChannelControl]) par défaut
-     * — c'est ce qui permet de reconstruire les plannings côté repository.
+     * d'action du canal ([ChannelControl]) par défaut — c'est ce
+     * qui permet de reconstruire les plannings côté repository.
      * [scriptCallMethod]/[scriptId] ajoutent un second appel (`Script.Start`/`Script.Stop`) dans
      * le même programme — validé sur Plug M Gen3 : les deux appels s'exécutent bien l'un après
      * l'autre (planning Unique avec coupure sur seuil). [ntfyTopic]/[ntfyTitle]/[ntfyBody]
-     * ajoutent un appel `HTTP.Request` (POST) vers ntfy — toujours **après** `Switch.Set` pour ne
-     * jamais retarder l'action réelle si ntfy.sh est lent ou injoignable (timeout court, 5 s).
+     * ajoutent un appel `HTTP.Request` (POST) vers ntfy — toujours **après** l'action du canal pour
+     * ne jamais retarder l'action réelle si ntfy.sh est lent ou injoignable (timeout court, 5 s).
      * `HTTP.POST` ne permet pas d'en-têtes personnalisés (pas de titre) : `HTTP.Request` si.
      */
     suspend fun scheduleCreate(

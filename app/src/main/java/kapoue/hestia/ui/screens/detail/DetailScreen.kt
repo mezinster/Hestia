@@ -219,8 +219,10 @@ fun DetailScreen(
             DeviceHeader(dev, activeIp ?: dev.ipAddress)
 
             if (dev.isLight) {
-                // Variateur (2026-10-07) : chemin séparé, aucune section relais (minuteur,
-                // planning, présence) — même principe que le détecteur de fumée ci-dessous.
+                // Variateur (2026-10-07) : chemin séparé. Il a son propre minuteur
+                // (LightSection) et la section Plannings, mais ni présence, ni coupure sur
+                // seuil, ni préréglages, ni minuteur bouton (scripts Switch) — même principe
+                // que le détecteur de fumée ci-dessous.
                 HorizontalDivider()
                 LightSection(
                     status = lightStatus,

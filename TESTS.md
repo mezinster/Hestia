@@ -272,7 +272,7 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Tuile : « Allumée · N % » / « Éteinte » / « Indisponible » ; bouton marche/arrêt OK ; tap → Détail.
 - [ ] Détail : curseur, envoi au relâchement seulement ; lampe éteinte + curseur → s'allume à ce niveau.
 - [ ] Appareil débranché pendant un réglage : message « injoignable », curseur revient à la valeur réelle.
-- [ ] Aucun minuteur / planning / présence proposé pour un variateur.
+- [ ] Ni présence ni coupure sur seuil proposées pour un variateur.
 - [ ] Réglages : variateur « En ligne » quand il répond.
 - [ ] RGBW en mode light : une seule ligne de 4 cercles (nom du groupe, état de chaque canal en texte, décompte du minuteur) ; tap sur un cercle → Détail du canal.
 - [ ] Mise à jour par-dessus une version sans variateurs (base v17) : aucun appareil perdu.
@@ -281,4 +281,7 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Tuile / ligne multi-light : « Allumée · 40 % · programmée jusqu'à 22:00 » pendant le planning ; un minuteur en cours affiche son décompte à la place.
 - [ ] Extinction depuis l'appli ou le bouton mural pendant un planning récurrent → désactivé pour aujourd'hui (repris demain).
 - [ ] Pause / reprise / modification / suppression d'un planning de variateur ; suppression pendant le créneau → la lampe s'éteint.
+- [ ] ntfy activé → planning de variateur → ntfy désactivé (ou sujet changé) : la tâche dans l'interface web de l'appareil ne contient plus d'appel `HTTP.Request` (ou pointe vers le nouveau sujet).
+- [ ] Bouton mural / interrupteur d'un variateur : noter la valeur `source` observée dans le journal de diagnostic (détection « désactivé aujourd'hui » à confirmer sur matériel réel).
+- [ ] Planning créé dans l'appli Shelly avec une luminosité : le modifier depuis Hestia le recrée sans luminosité (dernier niveau) — comportement voulu.
 - [ ] Non-régression : plannings du Plug M de référence (relais) inchangés — création, relecture, extinction, coupure sur seuil, présence.
