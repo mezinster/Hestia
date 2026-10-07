@@ -268,6 +268,9 @@ class DashboardViewModel @Inject constructor(
                         async {
                             val coverStatus = coverRepository.getStatus(device).toCoverStatus()
                             if (coverStatus is CoverStatus.Online) {
+                                // Rattrapage ntfy des plannings du volet (leurs tâches embarquent
+                                // l'appel ntfy), comme pour un variateur.
+                                viewModelScope.launch { repository.ntfyCatchUpIfNeeded(device) }
                                 viewModelScope.launch { repository.nameCatchUpIfNeeded(device) }
                                 refreshCoverEventsIfDue(device)
                             }

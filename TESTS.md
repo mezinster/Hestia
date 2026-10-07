@@ -308,6 +308,7 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Pause puis reprise : la tâche disparaît puis revient sur l'appareil.
 - [ ] Tâche créée dans l'appli Shelly officielle : apparaît dans la liste de Hestia.
 - [ ] ntfy activé → notification à l'exécution ; ntfy désactivé → la tâche ne contient plus d'`HTTP.Request`.
+- [ ] ntfy désactivé pendant que le volet est hors ligne → au retour en ligne, ses tâches ne contiennent plus d'`HTTP.Request` (rattrapage).
 - [ ] Notifications locales (si activées) au moment de chaque événement.
 - [ ] Tuile : « Fermé · ouvre à 07:30 », « ouvre lun 07:30 » quand ce n'est pas aujourd'hui.
 - [ ] **Langues** : hors mode démo, EN / FR / RU / système : section, dialogue, tuile et notifications dans la bonne langue.
