@@ -114,7 +114,11 @@ fun SettingsScreen(
     // Relue à chaque changement de configuration : sur Android 13+, changer la langue (ici ou dans
     // les Paramètres système) recrée l'Activity mais conserve le ViewModel.
     val configuration = LocalConfiguration.current
-    val appLanguage = remember(configuration) { viewModel.appLanguage() }
+    // État Compose, relu à chaque changement de configuration ET mis à jour au choix : passer de
+    // « Русский » forcé à « Langue du système » sur un téléphone en russe ne change pas la
+    // configuration effective, Android ne recrée donc pas l'écran (Android 13+) — sans cela, le
+    // bouton radio restait sur l'ancien choix alors que le réglage était bien enregistré.
+    var appLanguage by remember(configuration) { mutableStateOf(viewModel.appLanguage()) }
     // LocalActivity et non LocalContext : en mode démo, LocalContext est un wrapper de langue.
     val activity = LocalActivity.current
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
@@ -319,7 +323,9 @@ fun SettingsScreen(
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item {
                 LanguageSection(appLanguage) { language ->
-                    if (viewModel.setAppLanguage(language)) activity?.recreate()
+                    val recreate = viewModel.setAppLanguage(language)
+                    appLanguage = viewModel.appLanguage()
+                    if (recreate) activity?.recreate()
                 }
             }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
