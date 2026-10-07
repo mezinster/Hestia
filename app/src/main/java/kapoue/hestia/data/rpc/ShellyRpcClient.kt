@@ -483,18 +483,25 @@ class ShellyRpcClient @Inject constructor(
                 entry.status?.containsKey("apower") == true
         }
 
-        return RpcResult.Success(
-            DeviceCapabilities(
-                generation = generation,
-                model = info.model,
-                reportedName = info.name,
-                switchChannels = switchChannels,
-                channelNames = channelNames,
-                // Le moteur de scripts est standard sur Gen2+.
-                hasScripting = generation >= 2,
-                hasPowerMetering = hasPowerMetering,
-            ),
+        val capabilities = DeviceCapabilities(
+            generation = generation,
+            model = info.model,
+            reportedName = info.name,
+            switchChannels = switchChannels,
+            channelNames = channelNames,
+            // Le moteur de scripts est standard sur Gen2+.
+            hasScripting = generation >= 2,
+            hasPowerMetering = hasPowerMetering,
+            componentKeys = components.map { it.key },
         )
+        // Composants bruts au journal : d'un rapport de bug, savoir exactement de quel appareil il
+        // s'agit (relais, volet, variateur…) sans avoir à le demander à l'utilisateur.
+        logger.info(
+            DiagnosticLogger.RPC,
+            "Sonde @ $ip → ${info.model} gen$generation, composants : ${capabilities.componentKeys.joinToString()}" +
+                (capabilities.unsupportedKind?.let { " (aucun relais : $it)" } ?: ""),
+        )
+        return RpcResult.Success(capabilities)
     }
 
     /** Récupère tous les composants en paginant via `offset` jusqu'à `total` (borné). */

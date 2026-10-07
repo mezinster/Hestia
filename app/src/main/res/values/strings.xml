@@ -215,6 +215,13 @@
     <string name="error_timeout">The device didn\'t respond in time. Check the network and try again.</string>
     <string name="error_not_shelly">This address doesn\'t respond like a Shelly Gen2 or later device.</string>
     <string name="error_gen1_unsupported">This device is a Shelly Gen1, which isn\'t supported. Only Gen2 and later are.</string>
+    <string name="error_unsupported_cover">This device is set up as a shutter controller, which Hestia doesn\'t support yet. If it\'s a 2PM, you can switch it to relay mode in its web interface.</string>
+    <string name="error_unsupported_light">This device is a dimmer or light controller, which Hestia doesn\'t support yet. Only on/off relays and plugs are supported.</string>
+    <string name="error_unsupported_energy_meter">This device is an energy meter without a relay, which Hestia doesn\'t support yet.</string>
+    <string name="error_unsupported_smoke_detector">This device is a smoke detector. Choose the Smoke detector type above to add it.</string>
+    <string name="error_unsupported_sensor">This device is a sensor, which Hestia doesn\'t support yet. Only on/off relays and plugs are supported.</string>
+    <string name="error_unsupported_input_only">This device only has inputs and no relay to switch, so Hestia can\'t control it.</string>
+    <string name="error_unsupported_unknown">This device has no on/off relay that Hestia can control.</string>
     <string name="error_rpc_generic">The device returned an error (code %1$d). Try again.</string>
     <string name="error_permission_denied_action">Local network permission is required to reach the device. You can re-enable it in system settings.</string>
 

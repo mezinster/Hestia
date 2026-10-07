@@ -18,6 +18,7 @@ import kapoue.hestia.domain.model.DriverType
 import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.LedNightModeState
 import kapoue.hestia.ui.common.UserMessage
+import kapoue.hestia.ui.common.toUserMessage
 import kapoue.hestia.ui.common.toUserMessageOrNull
 import kapoue.hestia.ui.navigation.StackedRoutes
 import kapoue.hestia.ui.permission.LocalNetworkPermission
@@ -449,9 +450,14 @@ class AddEditDeviceViewModel @Inject constructor(
                     }
                 }
             }
+            // Aucun relais (volet, variateur, capteur…) : refus expliqué plutôt qu'un canal 0
+            // supposé dont toutes les commandes échoueraient ensuite.
+            caps.unsupportedKind?.let { kind ->
+                _uiState.update { it.copy(isTesting = false, error = kind.toUserMessage()) }
+                return@launch
+            }
             _uiState.update { it.copy(isTesting = true, error = null) }
-            // Repli : si aucun canal switch n'est remonté, supposer le canal 0.
-            val channels = caps.switchChannels.ifEmpty { listOf(0) }
+            val channels = caps.switchChannels
             if (channels.size == 1) {
                 addChannels(channels)
             } else {

@@ -17,6 +17,12 @@ data class DeviceCapabilities(
     val channelNames: Map<Int, String> = emptyMap(),
     val hasScripting: Boolean,
     val hasPowerMetering: Boolean,
+    /** Clés brutes de `Shelly.GetComponents` (`switch:0`, `cover:0`, `sys`…), pour le diagnostic. */
+    val componentKeys: List<String> = emptyList(),
 ) {
     val isMultiChannel: Boolean get() = switchChannels.size > 1
+
+    /** Nature de l'appareil s'il n'a aucun relais pilotable par Hestia, null sinon. */
+    val unsupportedKind: UnsupportedKind?
+        get() = if (switchChannels.isEmpty()) classifyUnsupported(componentKeys) else null
 }
