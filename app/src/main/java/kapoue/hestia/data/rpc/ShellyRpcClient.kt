@@ -470,6 +470,8 @@ class ShellyRpcClient @Inject constructor(
             channelNames = channelNames,
             lightChannels = parseChannels(components, "light"),
             lightChannelNames = parseChannelNames(components, "light"),
+            coverChannels = parseChannels(components, "cover"),
+            coverChannelNames = parseChannelNames(components, "cover"),
             // Le moteur de scripts est standard sur Gen2+.
             hasScripting = generation >= 2,
             hasPowerMetering = hasPowerMetering,
