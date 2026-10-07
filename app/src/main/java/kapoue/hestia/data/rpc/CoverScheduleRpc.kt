@@ -110,6 +110,8 @@ internal fun coverEventsFrom(jobs: List<ScheduleJob>, coverId: Int): List<CoverE
             else -> return@mapNotNull null
         }
         val parsed = ScheduleCodec.parse(job.timespec) ?: return@mapNotNull null
+        // Tâche créée hors Hestia avec des valeurs hors limites : l'ignorer (LocalTime.of lèverait).
+        if (parsed.hour !in 0..23 || parsed.minute !in 0..59 || parsed.days.any { it !in 0..6 }) return@mapNotNull null
         // Convention de CoverEvent : « tous les jours » = jours vides (le cron `*` est décodé en 0..6)
         val days = if (parsed.date == null && parsed.days.size >= 7) emptySet() else parsed.days
         CoverEvent(parsed.hour, parsed.minute, days, parsed.date, action, job.id)

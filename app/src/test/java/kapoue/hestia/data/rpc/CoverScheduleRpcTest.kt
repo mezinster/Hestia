@@ -106,6 +106,17 @@ class CoverScheduleRpcTest {
     }
 
     @Test
+    fun `heure minute ou jour hors limites ignores sans exception`() {
+        val jobs = listOf("0 0 25 * * *", "0 60 7 * * *").mapIndexed { i, ts ->
+            ScheduleJob(i + 1, true, ts, listOf(call("Cover.Open", "id" to 0)))
+        }
+        assertEquals(emptyList<CoverEvent>(), coverEventsFrom(jobs, 0))
+        // Les jours hors 0..6 sont déjà ramenés modulo 7 par ScheduleCodec : jamais d'exception.
+        val day9 = ScheduleJob(3, true, "0 0 7 * * 9", listOf(call("Cover.Open", "id" to 0)))
+        assertEquals(setOf(2), coverEventsFrom(listOf(day9), 0).single().days)
+    }
+
+    @Test
     fun `position hors 0-100 ignoree`() {
         val jobs = listOf(
             ScheduleJob(1, true, "0 0 9 * * *", listOf(call("Cover.GoToPosition", "id" to 0, "pos" to 150))),
