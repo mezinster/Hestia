@@ -25,8 +25,10 @@ import kapoue.hestia.data.local.MIGRATION_15_16
 import kapoue.hestia.data.local.MIGRATION_16_17
 import kapoue.hestia.data.local.MIGRATION_17_18
 import kapoue.hestia.data.local.MIGRATION_18_19
+import kapoue.hestia.data.local.MIGRATION_19_20
 import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.dao.DiagnosticLogDao
+import kapoue.hestia.data.local.dao.PausedCoverEventDao
 import kapoue.hestia.data.local.dao.PausedPlanningDao
 import javax.inject.Singleton
 
@@ -44,6 +46,7 @@ object DatabaseModule {
                 MIGRATION_11_12, MIGRATION_12_14, MIGRATION_14_15, MIGRATION_15_16, MIGRATION_16_17,
                 MIGRATION_17_18,
                 MIGRATION_18_19,
+                MIGRATION_19_20,
             )
             .build()
 
@@ -55,4 +58,7 @@ object DatabaseModule {
 
     @Provides
     fun providePausedPlanningDao(db: HestiaDatabase): PausedPlanningDao = db.pausedPlanningDao()
+
+    @Provides
+    fun providePausedCoverEventDao(db: HestiaDatabase): PausedCoverEventDao = db.pausedCoverEventDao()
 }

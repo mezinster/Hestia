@@ -216,3 +216,16 @@ val MIGRATION_18_19 = object : Migration(18, 19) {
         db.execSQL("ALTER TABLE devices ADD COLUMN isCover INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/** v19 → v20 : événements de volet en pause (programmation des volets, lot S2, fork). */
+val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `paused_cover_events` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`deviceId` INTEGER NOT NULL, `hour` INTEGER NOT NULL, `minute` INTEGER NOT NULL, `days` TEXT NOT NULL, " +
+                "`date` TEXT, `action` TEXT NOT NULL, `position` INTEGER, `pausedAt` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`deviceId`) REFERENCES `devices`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_paused_cover_events_deviceId` ON `paused_cover_events` (`deviceId`)")
+    }
+}
