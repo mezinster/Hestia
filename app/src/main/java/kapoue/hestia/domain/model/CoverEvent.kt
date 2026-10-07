@@ -92,3 +92,10 @@ internal fun windowEvents(
     val close = CoverEvent(closeHour, closeMinute, days, date, CoverEventAction.Close)
     return if (inverted) close to open else open to close
 }
+
+/** Intervalle minimal entre deux relectures des événements pendant le relevé périodique. */
+internal const val COVER_EVENTS_RELOAD_MS = 30_000L
+
+/** Vrai au premier relevé, puis au plus une fois toutes les 30 s (les actions relisent d'elles-mêmes). */
+internal fun shouldReloadCoverEvents(lastLoadMs: Long?, nowMs: Long): Boolean =
+    lastLoadMs == null || nowMs - lastLoadMs >= COVER_EVENTS_RELOAD_MS

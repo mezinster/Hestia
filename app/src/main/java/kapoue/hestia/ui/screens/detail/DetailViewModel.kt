@@ -22,6 +22,7 @@ import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.shouldReloadCoverEvents
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.common.toUserMessageOrNull

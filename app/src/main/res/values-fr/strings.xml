@@ -554,6 +554,13 @@
     <string name="cover_state_stopped">Arrêté</string>
     <string name="cover_state_stopped_at">Arrêté à %1$d %%</string>
     <string name="cover_state_calibrating">Calibration…</string>
+    <string name="cover_next_open_today">ouvre à %1$s</string>
+    <string name="cover_next_open_day">ouvre %1$s %2$s</string>
+    <string name="cover_next_close_today">ferme à %1$s</string>
+    <string name="cover_next_close_day">ferme %1$s %2$s</string>
+    <string name="cover_next_goto_today">%1$d %% à %2$s</string>
+    <string name="cover_next_goto_day">%1$d %% %2$s %3$s</string>
+    <string name="cover_state_with_next">%1$s · %2$s</string>
     <string name="cover_open">Ouvrir</string>
     <string name="cover_stop">Arrêter</string>
     <string name="cover_close">Fermer</string>

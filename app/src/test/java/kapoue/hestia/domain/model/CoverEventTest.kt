@@ -59,4 +59,12 @@ class CoverEventTest {
         val sunOnce = CoverEvent(5, 0, date = LocalDate.of(2026, 10, 11), action = CoverEventAction.Open)
         assertEquals(listOf(everyDay, mon, sunOnce, sun), listOf(sun, sunOnce, mon, everyDay).sortedWith(coverEventDisplayOrder))
     }
+
+    @Test
+    fun `rechargement des evenements - premier relevé, 30 s ecoulees ou non`() {
+        assertTrue(shouldReloadCoverEvents(null, 1_000L))
+        assertFalse(shouldReloadCoverEvents(1_000L, 30_999L))
+        assertTrue(shouldReloadCoverEvents(1_000L, 31_000L))
+        assertTrue(shouldReloadCoverEvents(1_000L, 90_000L))
+    }
 }

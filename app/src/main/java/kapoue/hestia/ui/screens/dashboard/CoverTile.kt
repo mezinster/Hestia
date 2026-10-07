@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.time.LocalDateTime
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.ui.theme.stateColors
@@ -59,7 +60,8 @@ fun CoverTile(
         status is CoverStatus.Offline -> colors.offlineBg to colors.offlineText
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val label = coverStateLabel(status)
+    val next = nextCoverEvent(tile.coverEvents, LocalDateTime.now())
+    val label = coverStateLabel(status, next)
     Surface(color = bg, shape = RoundedCornerShape(12.dp), onClick = onOpenDetail, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(tile.device.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

@@ -110,13 +110,6 @@ internal fun coverEventResultMessage(result: CoverEventResult): Int? = when (res
     CoverEventResult.Error -> R.string.cover_event_error_generic
 }
 
-/** Intervalle minimal entre deux relectures des événements pendant le relevé périodique. */
-internal const val COVER_EVENTS_RELOAD_MS = 30_000L
-
-/** Vrai au premier relevé, puis au plus une fois toutes les 30 s (les actions relisent d'elles-mêmes). */
-internal fun shouldReloadCoverEvents(lastLoadMs: Long?, nowMs: Long): Boolean =
-    lastLoadMs == null || nowMs - lastLoadMs >= COVER_EVENTS_RELOAD_MS
-
 /** Position non disponible (volet non calibré) : on ne peut pas enregistrer cette action. */
 internal fun canSaveCoverEvent(action: CoverActionChoice, canPosition: Boolean): Boolean =
     action != CoverActionChoice.Position || canPosition

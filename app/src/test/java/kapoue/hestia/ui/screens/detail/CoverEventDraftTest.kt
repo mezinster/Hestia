@@ -106,14 +106,6 @@ class CoverEventDraftTest {
     }
 
     @Test
-    fun `rechargement des evenements - premier relevé, 30 s ecoulees ou non`() {
-        assertTrue(shouldReloadCoverEvents(null, 1_000L))
-        assertFalse(shouldReloadCoverEvents(1_000L, 30_999L))
-        assertTrue(shouldReloadCoverEvents(1_000L, 31_000L))
-        assertTrue(shouldReloadCoverEvents(1_000L, 90_000L))
-    }
-
-    @Test
     fun `enregistrement - position indisponible bloque seulement l'action position`() {
         assertFalse(canSaveCoverEvent(CoverActionChoice.Position, canPosition = false))
         assertTrue(canSaveCoverEvent(CoverActionChoice.Position, canPosition = true))
