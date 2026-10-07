@@ -3,6 +3,7 @@ package kapoue.hestia.data.repository
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.LocalDateTime
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 import kapoue.hestia.R
@@ -30,6 +31,8 @@ import kapoue.hestia.domain.model.CoverEventAction
 import kapoue.hestia.domain.model.coverEventDisplayOrder
 import kapoue.hestia.domain.model.splitForRead
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Nombre maximal d'événements de programmation par volet (une plage en compte deux). */
 internal const val MAX_COVER_EVENTS = 10
@@ -90,6 +93,18 @@ internal fun coverResyncCalls(job: ScheduleJob, expected: JsonObject?): List<Jso
 }
 
 /**
+ * Un verrou par appareil : les opérations de programmation d'un même volet (lecture puis
+ * création/suppression/mise à jour) ne s'entrelacent jamais. Non réentrant : seuls les points
+ * d'entrée publics le prennent, jamais les fonctions privées qu'ils appellent.
+ */
+internal class DeviceLocks {
+    private val locks = ConcurrentHashMap<Long, Mutex>()
+
+    suspend fun <T> withLock(deviceId: Long, block: suspend () -> T): T =
+        locks.computeIfAbsent(deviceId) { Mutex() }.withLock { block() }
+}
+
+/**
  * Programmation des volets (lot S2, 2026-10-07, fork) : les événements sont des plannings natifs
  * exécutés par l'appareil ; Hestia ne les stocke pas, hormis le mémo des événements en pause.
  * Le canal cover:N est le `switchId` de l'appareil (voir [CoverRepository]).
@@ -103,6 +118,8 @@ class CoverScheduleRepository @Inject constructor(
     private val logger: DiagnosticLogger,
     @ApplicationContext private val context: Context,
 ) {
+    private val locks = DeviceLocks()
+
     private fun isDemo(device: Device) = device.ipAddress.startsWith(DeviceRepository.DEMO_IP_PREFIX)
 
     /** Même condition que `DeviceRepository.ntfyTopic` : ntfy activé ET un sujet existe. */
@@ -119,7 +136,7 @@ class CoverScheduleRepository @Inject constructor(
     fun observePaused(deviceId: Long): Flow<List<PausedCoverEvent>> = pausedDao.observeForDevice(deviceId)
 
     /** Oublie un événement en pause : mémo local seulement, rien à retirer de l'appareil. */
-    suspend fun deletePaused(paused: PausedCoverEvent) = pausedDao.delete(paused)
+    suspend fun deletePaused(paused: PausedCoverEvent) = locks.withLock(paused.deviceId) { pausedDao.delete(paused) }
 
     /**
      * Relit les événements du volet. Chaque lecture (affichage, validation avant création,
@@ -150,7 +167,8 @@ class CoverScheduleRepository @Inject constructor(
 
     suspend fun getEvents(device: Device): RpcResult<List<CoverEvent>> {
         if (isDemo(device)) return RpcResult.Success(listOf(CoverEvent(21, 0, action = CoverEventAction.Close)))
-        return deviceRepository.withIp(device) { ip -> readEvents(ip, device) }.second
+        // Sous verrou : la lecture normale purge les uniques échus.
+        return locks.withLock(device.id) { deviceRepository.withIp(device) { ip -> readEvents(ip, device) }.second }
     }
 
     private fun fail(device: Device, what: String, r: RpcResult<*>): CoverEventResult {
@@ -165,7 +183,7 @@ class CoverScheduleRepository @Inject constructor(
     /**
      * Lit l'existant (seul appel passant par la bascule entre adresses IP), puis exécute [block] sur
      * l'IP qui a répondu, sans relance sur la seconde adresse : un échec en cours de séquence donne
-     * [CoverEventResult.Error], jamais un faux doublon.
+     * [CoverEventResult.Error], jamais un faux doublon. Ne prend pas le verrou (l'appelant le tient).
      */
     private suspend fun run(
         device: Device,
@@ -188,14 +206,16 @@ class CoverScheduleRepository @Inject constructor(
             is RpcResult.Failure -> r
         }
 
-    suspend fun add(device: Device, event: CoverEvent): CoverEventResult = run(device, "ajout d'événement") { ip, existing ->
+    suspend fun add(device: Device, event: CoverEvent): CoverEventResult = locks.withLock(device.id) { addUnlocked(device, event) }
+
+    private suspend fun addUnlocked(device: Device, event: CoverEvent): CoverEventResult = run(device, "ajout d'événement") { ip, existing ->
         validateNewEvents(existing, listOf(event), LocalDateTime.now())?.let { return@run it }
         val c = create(ip, device, event)
         if (c is RpcResult.Success) CoverEventResult.Success else fail(device, "ajout d'événement", c)
     }
 
     /** Crée [first] puis [second] ; si [second] échoue, [first] est supprimé (plage tout ou rien). */
-    suspend fun addWindow(device: Device, first: CoverEvent, second: CoverEvent): CoverEventResult =
+    suspend fun addWindow(device: Device, first: CoverEvent, second: CoverEvent): CoverEventResult = locks.withLock(device.id) {
         run(device, "ajout de plage") { ip, existing ->
             validateNewEvents(existing, listOf(first, second), LocalDateTime.now())?.let { return@run it }
             val firstId = when (val c = create(ip, device, first)) {
@@ -209,12 +229,13 @@ class CoverScheduleRepository @Inject constructor(
             }
             fail(device, "ajout de plage", c)
         }
+    }
 
     /**
      * Crée le nouvel événement puis supprime l'ancien : un échec ne perd jamais l'existant. Si la
      * création a réussi, c'est un succès même quand la suppression échoue (comme `updatePlanning`).
      */
-    suspend fun update(device: Device, old: CoverEvent, new: CoverEvent): CoverEventResult =
+    suspend fun update(device: Device, old: CoverEvent, new: CoverEvent): CoverEventResult = locks.withLock(device.id) {
         run(device, "modification d'événement") { ip, existing ->
             val oldId = old.jobId ?: return@run CoverEventResult.Error
             validateNewEvents(existing, listOf(new), LocalDateTime.now(), ignoring = old)?.let { return@run it }
@@ -225,8 +246,11 @@ class CoverScheduleRepository @Inject constructor(
             }
             CoverEventResult.Success
         }
+    }
 
-    suspend fun delete(device: Device, event: CoverEvent): CoverEventResult {
+    suspend fun delete(device: Device, event: CoverEvent): CoverEventResult = locks.withLock(device.id) { deleteUnlocked(device, event) }
+
+    private suspend fun deleteUnlocked(device: Device, event: CoverEvent): CoverEventResult {
         if (isDemo(device)) return CoverEventResult.Success
         val id = event.jobId ?: return CoverEventResult.Error
         // Un seul appel : la bascule entre adresses est sans risque ici.
@@ -235,23 +259,23 @@ class CoverScheduleRepository @Inject constructor(
     }
 
     /** Supprime le job de l'appareil, puis mémorise l'événement localement (seulement si succès). */
-    suspend fun pause(device: Device, event: CoverEvent): CoverEventResult {
-        val result = delete(device, event)
+    suspend fun pause(device: Device, event: CoverEvent): CoverEventResult = locks.withLock(device.id) {
+        val result = deleteUnlocked(device, event)
         if (result == CoverEventResult.Success && !isDemo(device)) {
             pausedDao.insert(event.toPaused(device.id, System.currentTimeMillis()))
         }
-        return result
+        result
     }
 
     /** Recrée l'événement en pause ; la ligne locale n'est effacée qu'en cas de succès. */
-    suspend fun resume(device: Device, paused: PausedCoverEvent): CoverEventResult {
+    suspend fun resume(device: Device, paused: PausedCoverEvent): CoverEventResult = locks.withLock(device.id) {
         val event = runCatching { paused.toEvent() }.getOrElse {
             logger.warn(DiagnosticLogger.DB, "Volet ${device.id} : événement en pause illisible (ligne ${paused.id})")
-            return CoverEventResult.Error
+            return@withLock CoverEventResult.Error
         }
-        val result = add(device, event)
+        val result = addUnlocked(device, event)
         if (result == CoverEventResult.Success) pausedDao.delete(paused)
-        return result
+        result
     }
 
     /**
@@ -262,6 +286,10 @@ class CoverScheduleRepository @Inject constructor(
      */
     suspend fun resyncNtfy(device: Device): Boolean {
         if (isDemo(device)) return true
+        return locks.withLock(device.id) { resyncNtfyUnlocked(device) }
+    }
+
+    private suspend fun resyncNtfyUnlocked(device: Device): Boolean {
         val (ip, listed) = deviceRepository.withIp(device) { ip -> scheduleRpc.list(ip) }
         val jobs = when (listed) {
             is RpcResult.Success -> listed.value.jobs
