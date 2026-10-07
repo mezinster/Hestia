@@ -190,6 +190,7 @@ class DashboardViewModel @Inject constructor(
         // automatique).
         if (!userInitiated && !force && refreshJob?.isActive == true) return
         if (userInitiated || force) refreshJob?.cancel()
+        if (userInitiated) coverEventsLoadedAt.clear()
         refreshJob = viewModelScope.launch {
             if (!_permissionUsable.value) {
                 // Aucune interrogation tentée, aucune tuile affichée : le bandeau global du
@@ -293,6 +294,10 @@ class DashboardViewModel @Inject constructor(
                 val previousLightStatuses = lightStatuses.value
                 lightStatuses.value = lightResults.await().toMap()
                 coverStatuses.value = coverResults.await().toMap()
+                // Ne garde que les volets actuels (appareil supprimé ou changé de type).
+                val coverIds = devices.filter { it.isCover }.map { it.id }.toSet()
+                coverEvents.value = coverEvents.value.filterKeys { it in coverIds }
+                coverEventsLoadedAt.keys.retainAll(coverIds)
                 presences.value = presenceResults.await()
                     .mapNotNull { (id, info) -> info?.let { id to it } }
                     .toMap()
@@ -604,6 +609,9 @@ class DashboardViewModel @Inject constructor(
 
     /** Arrête un volet en mouvement depuis sa tuile. */
     fun coverStop(device: Device) = coverAction(device, "arrêt") { coverRepository.stop(device) }
+
+    /** Au retour sur le Tableau (ex. depuis le Détail) : les événements sont relus au prochain relevé, sans attendre 30 s. */
+    fun invalidateCoverEvents() = coverEventsLoadedAt.clear()
 
     /** Relit les événements du volet s'ils datent de plus de 30 s ; en cas d'échec, garde la liste précédente. */
     private suspend fun refreshCoverEventsIfDue(device: Device) {

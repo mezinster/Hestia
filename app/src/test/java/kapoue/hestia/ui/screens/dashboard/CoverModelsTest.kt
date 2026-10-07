@@ -122,4 +122,25 @@ class CoverModelsTest {
         assertFalse(coverShowsNext(CoverStatus.Offline))
         assertFalse(coverShowsNext(CoverStatus.Loading))
     }
+
+    @Test
+    fun `prochain evenement - passage de minuit`() {
+        val late = LocalDateTime.of(2026, 10, 7, 23, 50)
+        val next = nextCoverEvent(listOf(CoverEvent(0, 10, action = CoverEventAction.Open)), late)!!
+        assertEquals(LocalDateTime.of(2026, 10, 8, 0, 10), next.at)
+        assertFalse(next.today)
+    }
+
+    @Test
+    fun `prochain evenement - hebdomadaire le plus proche l'emporte`() {
+        // now = mercredi 7 ; vendredi (5) avant dimanche (0) ; lundi (1) plus loin
+        val events = listOf(
+            CoverEvent(8, 0, setOf(0), action = CoverEventAction.Open),
+            CoverEvent(8, 0, setOf(5), action = CoverEventAction.Close),
+            CoverEvent(8, 0, setOf(1), action = CoverEventAction.Open),
+        )
+        val next = nextCoverEvent(events, now)!!
+        assertEquals(CoverEventAction.Close, next.action)
+        assertEquals(LocalDateTime.of(2026, 10, 9, 8, 0), next.at)
+    }
 }

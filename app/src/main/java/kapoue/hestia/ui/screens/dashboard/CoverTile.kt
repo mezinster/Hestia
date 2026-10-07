@@ -18,6 +18,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -27,6 +29,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.delay
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.ui.theme.stateColors
@@ -60,7 +64,14 @@ fun CoverTile(
         status is CoverStatus.Offline -> colors.offlineBg to colors.offlineText
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val next = nextCoverEvent(tile.coverEvents, LocalDateTime.now())
+    // Recalculé chaque minute même si rien d'autre ne recompose la tuile.
+    val now by produceState(LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)) {
+        while (true) {
+            delay(60_000L)
+            value = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
+        }
+    }
+    val next = nextCoverEvent(tile.coverEvents, now)
     val label = coverStateLabel(status, next)
     Surface(color = bg, shape = RoundedCornerShape(12.dp), onClick = onOpenDetail, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -78,6 +89,7 @@ fun CoverTile(
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Center,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(),
             )
             online?.powerWatts?.takeIf { tile.device.hasPowerMetering }?.let {
