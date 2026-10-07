@@ -32,11 +32,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -595,7 +593,6 @@ class ShellyRpcClient @Inject constructor(
     }
 
     private companion object {
-
         /**
          * Lectures de routine relevées en boucle (Tableau toutes les ~5 s, Réglages toutes les 60 s,
          * une fois par canal d'un même appareil) : les journaliser en succès faisait tourner tout

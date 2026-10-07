@@ -2068,7 +2068,8 @@ class DeviceRepository @Inject constructor(
             } else {
                 null
             }
-            val resolvedName = channelName ?: physicalName.takeIf { monoChannel }
+            // Un variateur garde le nom de son canal lu à l'ajout : pas de repli sur le nom physique.
+            val resolvedName = channelName ?: physicalName.takeIf { monoChannel && !device.isLight }
             if (resolvedName != null && resolvedName != updated.name) {
                 updated = updated.copy(name = resolvedName)
             }

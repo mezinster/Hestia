@@ -350,11 +350,11 @@ class AddEditDeviceViewModel @Inject constructor(
     }
 
     /**
-     * Mode ajout uniquement : choix (ou changement d'avis) Prise/Détecteur via les deux tuiles,
+     * Mode ajout uniquement : choix (ou changement d'avis) Prise/Variateur/Détecteur via les trois tuiles,
      * toujours visibles — celle non retenue se grise plutôt que de disparaître (retour David,
      * 2026-09-23). Un vrai changement de type efface tout ce que la sonde automatique avait pu
      * trouver pour l'autre type (n'a plus de sens), et relance tout de suite une sonde fraîche si
-     * on bascule vers Prise avec une IP déjà valide — comme si elle venait d'être tapée.
+     * on bascule vers Prise ou Variateur avec une IP déjà valide — comme si elle venait d'être tapée.
      */
     fun onTypeChosen(value: DeviceType) {
         val current = _uiState.value
@@ -453,7 +453,7 @@ class AddEditDeviceViewModel @Inject constructor(
                     }
                 }
             }
-            // Aucun relais (volet, variateur, capteur…) : refus expliqué plutôt qu'un canal 0
+            // Ni relais ni light (volet, capteur…) : refus expliqué plutôt qu'un canal 0
             // supposé dont toutes les commandes échoueraient ensuite.
             caps.unsupportedKind?.let { kind ->
                 _uiState.update { it.copy(isTesting = false, error = kind.toUserMessage()) }
@@ -466,6 +466,7 @@ class AddEditDeviceViewModel @Inject constructor(
                 if (added == 0) {
                     _uiState.update { it.copy(isTesting = false, error = UserMessage(R.string.error_device_exists)) }
                 } else {
+                    repository.resyncSmokeRelay()
                     confirmThenClose(caps.reportedName?.takeIf { it.isNotBlank() } ?: _uiState.value.name.trim())
                 }
                 return@launch
@@ -553,7 +554,9 @@ class AddEditDeviceViewModel @Inject constructor(
         val added = repository.addChannels(
             name = state.name.trim(),
             ip = state.ipAddress.trim(),
-            type = state.type,
+            // Un relais ajouté via la tuile Variateur reste une prise : la tuile choisie ne change pas
+            // le résultat (spec § 2) — LAMP est réservé aux canaux light.
+            type = if (state.type == DeviceType.LAMP) DeviceType.PLUG else state.type,
             capabilities = caps,
             switchIds = channels,
         )

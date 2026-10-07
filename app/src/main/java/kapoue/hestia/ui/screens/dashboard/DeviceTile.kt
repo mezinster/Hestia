@@ -200,7 +200,7 @@ fun DeviceTile(
  * section Firmware. Même bleu que l'état Présence, décliné en fond ([StateColorSet.presenceBg]).
  */
 @Composable
-private fun FirmwareUpdateBanner(onClick: () -> Unit) {
+internal fun FirmwareUpdateBanner(onClick: () -> Unit) {
     val colors = MaterialTheme.stateColors
     Row(
         verticalAlignment = Alignment.CenterVertically,

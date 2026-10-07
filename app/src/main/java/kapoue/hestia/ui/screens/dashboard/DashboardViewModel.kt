@@ -118,13 +118,12 @@ class DashboardViewModel @Inject constructor(
         combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, extras ->
             val ordered = repository.groupedForDisplay(devices)
             val byIp = ordered.filter { it.isGroupable() }.groupBy { it.ipAddress }
-            var lastIp: String? = null
+            val flags = computeGroupFlags(ordered)
             DashboardUiState(
-                tiles = ordered.map { device ->
+                tiles = ordered.mapIndexed { index, device ->
                     val members = if (device.isGroupable()) byIp.getValue(device.ipAddress) else listOf(device)
-                    val isMultiChannel = members.size > 1
-                    val isFirstInGroup = device.ipAddress != lastIp
-                    lastIp = device.ipAddress
+                    val isMultiChannel = flags[index].isMultiChannel
+                    val isFirstInGroup = flags[index].isFirstInGroup
                     TileUiState(
                         device = device,
                         status = statusMap[device.id] ?: TileStatus.Loading,
@@ -235,7 +234,7 @@ class DashboardViewModel @Inject constructor(
                     }.awaitAll()
                 }
                 val presenceResults = async {
-                    devices.filter { it.hasScripting }.map { device ->
+                    devices.filter { it.hasScripting && !it.isLight }.map { device ->
                         async { device.id to loadPresence(device) }
                     }.awaitAll()
                 }
@@ -288,7 +287,7 @@ class DashboardViewModel @Inject constructor(
                 // pour tous les canaux à chaque cycle. Même garde [wasOn] que ci-dessus, pour la
                 // même raison (sans elle, `stopPresenceForToday` était rappelé en boucle dès qu'une
                 // présence fraîchement créée croisait une vieille source bouton).
-                devices.filter { it.hasScripting }.forEach { device ->
+                devices.filter { it.hasScripting && !it.isLight }.forEach { device ->
                     val status = statuses.value[device.id] as? TileStatus.Online ?: return@forEach
                     if (status.output || !isButtonSource(status.source)) return@forEach
                     val wasOn = (previousStatuses[device.id] as? TileStatus.Online)?.output == true
@@ -313,7 +312,7 @@ class DashboardViewModel @Inject constructor(
                 // pour ceux-là, jamais pour tous les canaux à chaque cycle (voir
                 // DeviceRepository.getActiveChargeThreshold/getActiveButtonThreshold, mécanismes
                 // validés en direct le 2026-08-22).
-                val activeChargeThresholds = devices.filter { it.hasScripting }.map { device ->
+                val activeChargeThresholds = devices.filter { it.hasScripting && !it.isLight }.map { device ->
                     async {
                         val status = statuses.value[device.id] as? TileStatus.Online
                         val hasActivePlanning = plannings.value[device.id]?.any { it.isActiveNow() } == true

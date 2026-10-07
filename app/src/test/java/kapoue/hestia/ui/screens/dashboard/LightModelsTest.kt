@@ -34,4 +34,30 @@ class LightModelsTest {
         assertFalse(Device(name = "L", ipAddress = "1.2.3.4", type = DeviceType.LAMP, isLight = true).isGroupable())
         assertTrue(Device(name = "P", ipAddress = "1.2.3.4", type = DeviceType.PLUG).isGroupable())
     }
+
+    private fun plug(id: Int, ip: String = "1.2.3.4") = Device(name = "P$id", ipAddress = ip, switchId = id, type = DeviceType.PLUG)
+    private fun light(ip: String = "1.2.3.4") = Device(name = "L", ipAddress = ip, switchId = 0, type = DeviceType.LAMP, isLight = true)
+
+    @Test
+    fun `appareil mixte avec le light en premier garde le bandeau des relais`() {
+        val flags = computeGroupFlags(listOf(light(), plug(0), plug(1)))
+        assertEquals(GroupFlags(isFirstInGroup = true, isMultiChannel = false), flags[0])
+        assertEquals(GroupFlags(isFirstInGroup = true, isMultiChannel = true), flags[1])
+        assertEquals(GroupFlags(isFirstInGroup = false, isMultiChannel = true), flags[2])
+    }
+
+    @Test
+    fun `appareil mixte avec le light en dernier garde le bandeau des relais`() {
+        val flags = computeGroupFlags(listOf(plug(0), plug(1), light()))
+        assertEquals(GroupFlags(isFirstInGroup = true, isMultiChannel = true), flags[0])
+        assertEquals(GroupFlags(isFirstInGroup = false, isMultiChannel = true), flags[1])
+        assertEquals(GroupFlags(isFirstInGroup = true, isMultiChannel = false), flags[2])
+    }
+
+    @Test
+    fun `un relais seul avec un light reste une tuile simple`() {
+        val flags = computeGroupFlags(listOf(plug(0), light()))
+        assertFalse(flags[0].isMultiChannel)
+        assertFalse(flags[1].isMultiChannel)
+    }
 }

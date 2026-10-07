@@ -225,7 +225,7 @@ fun DashboardScreen(
                                 // Bloc multi-canaux : une seule ligne de cercles pour tout le
                                 // groupe (façon vraie multiprise), pas une tuile par canal — le
                                 // détail de chaque canal s'ouvre dans une modale au tap.
-                                val members = uiState.tiles.filter { it.device.ipAddress == tile.device.ipAddress }
+                                val members = uiState.tiles.filter { it.device.isGroupable() && it.device.ipAddress == tile.device.ipAddress }
                                 item(
                                     key = "strip-${tile.device.id}",
                                     span = { GridItemSpan(maxLineSpan) },
@@ -248,6 +248,7 @@ fun DashboardScreen(
                                             tile = tile,
                                             onToggle = { viewModel.toggleLight(tile.device, it) },
                                             onOpenDetail = { onOpenDetail(tile.device.id) },
+                                            onOpenFirmware = { onOpenFirmware(tile.device.id) },
                                         )
                                     } else if (tile.device.type == DeviceType.SMOKE_DETECTOR) {
                                         SmokeDetectorTile(

@@ -178,7 +178,7 @@
     <string name="add_device_ip_location_delete_confirm_message">It\'s only actually removed once you tap Save at the bottom of the screen.</string>
     <string name="add_device_type_label">Type</string>
     <string name="add_device_type_prompt">What kind of device?</string>
-    <string name="add_device_found_name">Name found on the outlet: %1$s</string>
+    <string name="add_device_found_name">Name found on the device: %1$s</string>
     <string name="add_device_smoke_wake_hint">Press the detector\'s button 3 times briefly to wake it up (setup mode, 2 minutes), then confirm below.</string>
     <string name="add_device_confirmed_name">Added: %1$s</string>
     <string name="add_device_led_title">LED</string>

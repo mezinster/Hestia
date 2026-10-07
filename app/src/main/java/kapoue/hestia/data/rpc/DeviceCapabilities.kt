@@ -26,7 +26,7 @@ data class DeviceCapabilities(
 ) {
     val isMultiChannel: Boolean get() = switchChannels.size > 1
 
-    /** Nature de l'appareil s'il n'a aucun relais pilotable par Hestia, null sinon. */
+    /** Nature de l'appareil s'il n'a ni relais ni variateur pilotable par Hestia, null sinon. */
     val unsupportedKind: UnsupportedKind?
         get() = if (switchChannels.isEmpty() && lightChannels.isEmpty()) classifyUnsupported(componentKeys) else null
 }

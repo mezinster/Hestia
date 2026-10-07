@@ -172,7 +172,7 @@
     <string name="add_device_ip_location_delete_confirm_message">Elle ne sera vraiment retirée qu\'en tapant Enregistrer en bas de l\'écran.</string>
     <string name="add_device_type_label">Type</string>
     <string name="add_device_type_prompt">Quel type d\'appareil ?</string>
-    <string name="add_device_found_name">Nom trouvé sur la prise : %1$s</string>
+    <string name="add_device_found_name">Nom trouvé sur l\'appareil : %1$s</string>
     <string name="add_device_smoke_wake_hint">Appuie 3 fois brièvement sur le bouton du détecteur pour le réveiller (mode configuration, 2 minutes), puis valide ci-dessous.</string>
     <string name="add_device_confirmed_name">Ajouté : %1$s</string>
     <string name="add_device_led_title">LED</string>

@@ -126,6 +126,7 @@ class DetailViewModel @Inject constructor(
             // Aucune interrogation tentée : le bandeau global du Tableau porte le message de
             // permission manquante, pas cet écran (voir DashboardScreen).
             _status.value = TileStatus.Offline
+            _lightStatus.value = LightStatus.Offline
             return
         }
         viewModelScope.launch { fetch() }
@@ -311,6 +312,7 @@ class DetailViewModel @Inject constructor(
 
     /** Marche/arrêt ou luminosité d'un variateur ; relit l'état réel ensuite, succès ou non. */
     fun setLight(on: Boolean?, brightness: Int?) {
+        if (!permissionUsable) return
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
             logger.info(DiagnosticLogger.UI, "Variateur ${dev.ipAddress}#${dev.switchId} → on=$on luminosité=${brightness ?: "-"}")

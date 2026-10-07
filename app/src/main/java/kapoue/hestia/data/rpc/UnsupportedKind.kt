@@ -1,8 +1,8 @@
 package kapoue.hestia.data.rpc
 
 /**
- * Nature d'un appareil Gen2+ qui n'expose **aucun** canal `switch:N`, déduite de ses composants
- * (`Shelly.GetComponents`) — seul le relais marche/arrêt est piloté par Hestia. Sert à expliquer
+ * Nature d'un appareil Gen2+ qui n'expose **ni** canal `switch:N` **ni** canal `light:N`, déduite de ses composants
+ * (`Shelly.GetComponents`) — seuls le relais et le variateur sont pilotés par Hestia. Sert à expliquer
  * à l'utilisateur pourquoi l'appareil est refusé à l'ajout, plutôt que de l'ajouter quand même
  * comme canal 0 et de laisser toutes les commandes échouer ensuite.
  */

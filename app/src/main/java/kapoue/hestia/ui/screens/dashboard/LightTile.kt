@@ -38,6 +38,7 @@ fun LightTile(
     tile: TileUiState,
     onToggle: (Boolean) -> Unit,
     onOpenDetail: () -> Unit,
+    onOpenFirmware: () -> Unit,
 ) {
     val colors = MaterialTheme.stateColors
     val status = tile.lightStatus ?: LightStatus.Loading
@@ -81,6 +82,9 @@ fun LightTile(
                 )
                 Spacer(Modifier.weight(1f))
                 RoundToggleButton(enabled = online != null, checked = online?.on == true, onClick = { onToggle(online?.on != true) })
+            }
+            if (tile.device.firmwareUpdateAvailable) {
+                FirmwareUpdateBanner(onClick = onOpenFirmware)
             }
         }
     }
