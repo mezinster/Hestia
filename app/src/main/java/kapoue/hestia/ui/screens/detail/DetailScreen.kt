@@ -229,6 +229,7 @@ fun DetailScreen(
                     elapsedNow = elapsedNow,
                     onSet = { on, brightness -> viewModel.setLight(on, brightness) },
                     onStartTimer = { seconds -> viewModel.setLight(on = true, brightness = null, toggleAfterSec = seconds) },
+                    activePlanning = plannings.firstOrNull { !it.isPresence && it.isReallyActive() },
                 )
                 // Plannings (lot C3) : mêmes composants que pour un relais ; présence et coupure
                 // masquées (scripts Switch), voir hasPresence/hasCutoff d'AddPlanningDialog.

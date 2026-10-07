@@ -4,6 +4,8 @@ import android.os.SystemClock
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.model.LightStatusResult
+import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.isActiveNow
 import kotlin.math.roundToInt
 
 /** État d'un canal variateur (2026-10-07) — distinct de [TileStatus], construit pour les relais. */
@@ -16,6 +18,8 @@ sealed interface LightStatus {
         val brightness: Int,
         val powerWatts: Double?,
         val timerEndsAtElapsed: Long? = null,
+        /** Origine du dernier changement d'état (`button`, `WS_in`…) : sert à détecter un appui mural. */
+        val source: String? = null,
     ) : LightStatus
 }
 
@@ -24,6 +28,7 @@ fun RpcResult<LightStatusResult>.toLightStatus(): LightStatus = when (this) {
         on = value.output,
         brightness = (value.brightness ?: 100.0).roundToInt().coerceIn(0, 100),
         powerWatts = value.apower,
+        source = value.source,
         // Horloges lues seulement si un minuteur tourne (tests JVM sans Android sinon).
         timerEndsAtElapsed = if (value.timerStartedAt != null && value.timerDuration != null) {
             lightTimerEndsAt(value.timerStartedAt, value.timerDuration, System.currentTimeMillis() / 1000.0, SystemClock.elapsedRealtime())
@@ -75,3 +80,27 @@ internal fun lightTimerRemainingSec(timerEndsAtElapsed: Long?, elapsedNow: Long)
     val remaining = (timerEndsAtElapsed - elapsedNow) / 1000
     return remaining.takeIf { it > 0 }
 }
+
+/** Ce que la ligne d'état d'un variateur allumé ajoute : décompte du minuteur, sinon fin du planning (C3). */
+sealed interface LightOnDetail {
+    data class Timer(val remainingSec: Long) : LightOnDetail
+    data class Planned(val endMinutes: Int) : LightOnDetail
+    data object None : LightOnDetail
+}
+
+internal fun lightOnDetail(timerRemainingSec: Long?, activePlanning: Planning?): LightOnDetail = when {
+    timerRemainingSec != null -> LightOnDetail.Timer(timerRemainingSec)
+    activePlanning != null -> LightOnDetail.Planned(activePlanning.endMinutes)
+    else -> LightOnDetail.None
+}
+
+/** Planning précis réellement en cours (présence exclue ; récurrent désactivé aujourd'hui exclu). */
+internal fun activeLightPlanning(
+    plannings: List<Planning>,
+    planningDisabledToday: Boolean,
+    isActive: (Planning) -> Boolean = { it.isActiveNow() },
+): Planning? = plannings.firstOrNull { !it.isPresence && isActive(it) && !(!it.once && planningDisabledToday) }
+
+/** Appui bouton mural pendant un planning récurrent : vraie transition allumé→éteint (relais et variateurs). */
+internal fun disablesPlanningToday(onNow: Boolean, buttonSource: Boolean, wasOn: Boolean, activeRecurringPlanning: Boolean): Boolean =
+    !onNow && buttonSource && wasOn && activeRecurringPlanning

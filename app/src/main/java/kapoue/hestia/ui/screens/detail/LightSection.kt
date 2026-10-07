@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatPower
+import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.ui.screens.dashboard.LightStatus
 import kapoue.hestia.ui.screens.dashboard.lightStateLabel
 import kotlin.math.roundToInt
@@ -39,6 +40,8 @@ fun LightSection(
     onSet: (on: Boolean?, brightness: Int?) -> Unit,
     /** Allume pour [seconds] secondes : l'appareil s'éteint seul ensuite (`toggle_after`). */
     onStartTimer: (seconds: Int) -> Unit,
+    /** Planning précis en cours (hors présence, hors désactivé aujourd'hui) : fin affichée dans l'état (C3). */
+    activePlanning: Planning? = null,
 ) {
     val online = status as? LightStatus.Online
     var sliderValue by remember { mutableFloatStateOf(online?.brightness?.toFloat() ?: 100f) }
@@ -50,7 +53,7 @@ fun LightSection(
     var showCustomTimer by remember { mutableStateOf(false) }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(text = lightStateLabel(status, elapsedNow), style = MaterialTheme.typography.titleMedium)
+        Text(text = lightStateLabel(status, elapsedNow, activePlanning), style = MaterialTheme.typography.titleMedium)
         if (showPower) online?.powerWatts?.let { Text(formatPower(it), style = MaterialTheme.typography.bodyMedium) }
         if (online?.on == true) {
             OutlinedButton(onClick = { onSet(false, null) }) { Text(stringResource(R.string.light_turn_off)) }

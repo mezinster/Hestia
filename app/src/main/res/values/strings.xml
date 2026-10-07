@@ -304,6 +304,7 @@
     <string name="state_loading">Loading…</string>
     <string name="light_state_on">On · %1$d%%</string>
     <string name="light_state_on_timer">On · %1$d%% · off in %2$s</string>
+    <string name="light_state_on_planned">On · %1$d%% · scheduled until %2$s</string>
     <string name="light_state_off">Off</string>
     <string name="light_brightness">Brightness: %1$d%%</string>
     <string name="light_turn_on">Turn on</string>

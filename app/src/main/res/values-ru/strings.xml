@@ -288,6 +288,7 @@
     <string name="state_loading">Загрузка…</string>
     <string name="light_state_on">Вкл · %1$d %%</string>
     <string name="light_state_on_timer">Вкл · %1$d %% · выкл. через %2$s</string>
+    <string name="light_state_on_planned">Вкл · %1$d %% · по расписанию до %2$s</string>
     <string name="light_state_off">Выкл</string>
     <string name="light_brightness">Яркость: %1$d %%</string>
     <string name="light_turn_on">Включить</string>

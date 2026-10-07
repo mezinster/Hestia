@@ -298,6 +298,7 @@
     <string name="state_loading">Lecture…</string>
     <string name="light_state_on">Allumée · %1$d %%</string>
     <string name="light_state_on_timer">Allumée · %1$d %% · extinction dans %2$s</string>
+    <string name="light_state_on_planned">Allumée · %1$d %% · programmée jusqu\'à %2$s</string>
     <string name="light_state_off">Éteinte</string>
     <string name="light_brightness">Luminosité : %1$d %%</string>
     <string name="light_turn_on">Allumer</string>
