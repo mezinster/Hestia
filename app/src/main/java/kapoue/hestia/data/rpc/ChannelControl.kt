@@ -1,8 +1,12 @@
 package kapoue.hestia.data.rpc
 
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.rpc.model.ScheduleCall
+import kapoue.hestia.data.rpc.model.ScheduleJob
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
@@ -30,4 +34,13 @@ internal fun scheduleActionCall(control: ChannelControl, channelId: Int, on: Boo
             put("on", on)
         },
     )
+}
+
+/**
+ * Appel d'action de cette tâche pour ce canal et cette nature (`Switch.Set` ou `Light.Set`, même
+ * id), ou null : un relais et un variateur d'une même IP ne voient jamais les tâches de l'autre.
+ */
+internal fun ScheduleJob.actionFor(control: ChannelControl, channelId: Int): ScheduleCall? {
+    val call = calls.firstOrNull { it.method == control.setMethod } ?: return null
+    return call.takeIf { it.params?.get("id")?.jsonPrimitive?.intOrNull == channelId }
 }

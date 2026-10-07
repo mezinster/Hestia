@@ -18,12 +18,14 @@ import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
 import kapoue.hestia.data.presence.SmokeRelayScriptGenerator
 import kapoue.hestia.data.presence.TimerNotifyScriptGenerator
+import kapoue.hestia.data.rpc.ChannelControl
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.data.rpc.LightRpcClient
 import kapoue.hestia.data.rpc.ShellyRpcClient
+import kapoue.hestia.data.rpc.actionFor
 import kapoue.hestia.data.rpc.channelControlFor
 import kapoue.hestia.data.rpc.errorOrNull
 import kapoue.hestia.data.rpc.getOrNull
@@ -1240,7 +1242,7 @@ class DeviceRepository @Inject constructor(
         val (ip, r) = withIp(device) { i -> rpcClient.scheduleList(i) }
         val native = when (r) {
             is RpcResult.Success -> {
-                val all = reconstructPlannings(r.value.jobs, device.switchId)
+                val all = reconstructPlannings(r.value.jobs, channelControlFor(device), device.switchId)
                 val (expired, active) = all.partition { it.isExpiredOnce() }
                 if (expired.isNotEmpty()) {
                     logger.info(DiagnosticLogger.RPC, "Nettoyage de ${expired.size} planning(s) Unique expiré(s)")
@@ -1291,7 +1293,7 @@ class DeviceRepository @Inject constructor(
 
     /**
      * Reconstruit les plannings à partir des programmes cron. On ne retient que les jobs
-     * « Switch.Set » du bon canal, puis on apparie chaque allumage à son extinction :
+     * de l'action du canal ([ChannelControl]), puis on apparie chaque allumage à son extinction :
      * - **créneau récurrent de journée** : même jeu de jours, extinction plus tard dans la journée ;
      * - **récurrent de nuit** (passe minuit) : extinction le matin, sur les jours **décalés au
      *   lendemain** (voir la création) ;
@@ -1301,12 +1303,11 @@ class DeviceRepository @Inject constructor(
      * (garanti à la création), l'appariement reste sans ambiguïté pour les plannings créés par Hestia.
      * Un éventuel second appel `Script.Start` (job allumage) donne [Planning.cutoffScriptId].
      */
-    private fun reconstructPlannings(jobs: List<ScheduleJob>, switchId: Int): List<Planning> {
+    private fun reconstructPlannings(jobs: List<ScheduleJob>, control: ChannelControl, channelId: Int): List<Planning> {
         data class Ev(val jobId: Int, val minutes: Int, val on: Boolean, val days: Set<Int>, val date: LocalDate?, val scriptId: Int?)
         val events = jobs.mapNotNull { job ->
-            val call = job.calls.firstOrNull { it.method == "Switch.Set" } ?: return@mapNotNull null
+            val call = job.actionFor(control, channelId) ?: return@mapNotNull null
             val params = call.params ?: return@mapNotNull null
-            if (params["id"]?.jsonPrimitive?.intOrNull != switchId) return@mapNotNull null
             val on = params["on"]?.jsonPrimitive?.booleanOrNull ?: return@mapNotNull null
             val parsed = ScheduleCodec.parse(job.timespec) ?: return@mapNotNull null
             val scriptCall = job.calls.firstOrNull { it.method == "Script.Start" || it.method == "Script.Stop" }

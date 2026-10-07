@@ -2,6 +2,7 @@ package kapoue.hestia.data.rpc
 
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.domain.model.DeviceType
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -29,4 +30,29 @@ class ChannelControlTest {
         """{"method":"Light.Set","params":{"id":2,"on":false}}""",
         scheduleActionCall(ChannelControl.LIGHT, 2, on = false).toString(),
     )
+
+    private fun job(id: Int, method: String, channel: Int, on: Boolean) = kapoue.hestia.data.rpc.model.ScheduleJob(
+        id = id,
+        timespec = "0 0 18 * * *",
+        calls = listOf(
+            kapoue.hestia.data.rpc.model.ScheduleCall(
+                method = method,
+                params = kotlinx.serialization.json.buildJsonObject { put("id", channel); put("on", on) },
+            ),
+        ),
+    )
+
+    @Test
+    fun `relais et variateur de meme id ne se melangent pas`() {
+        val jobs = listOf(job(1, "Switch.Set", 0, true), job(2, "Light.Set", 0, true), job(3, "Light.Set", 1, false))
+        assertEquals(listOf(1), jobs.filter { it.actionFor(ChannelControl.SWITCH, 0) != null }.map { it.id })
+        assertEquals(listOf(2), jobs.filter { it.actionFor(ChannelControl.LIGHT, 0) != null }.map { it.id })
+        assertEquals(listOf(3), jobs.filter { it.actionFor(ChannelControl.LIGHT, 1) != null }.map { it.id })
+    }
+
+    @Test
+    fun `une tache sans action de canal est ignoree`() {
+        val other = kapoue.hestia.data.rpc.model.ScheduleJob(id = 9, calls = listOf(kapoue.hestia.data.rpc.model.ScheduleCall(method = "Script.Start")))
+        assertEquals(null, other.actionFor(ChannelControl.SWITCH, 0))
+    }
 }
