@@ -109,3 +109,22 @@ internal fun coverEventResultMessage(result: CoverEventResult): Int? = when (res
     CoverEventResult.LimitReached -> R.string.cover_event_error_limit
     CoverEventResult.Error -> R.string.cover_event_error_generic
 }
+
+/** Intervalle minimal entre deux relectures des événements pendant le relevé périodique. */
+internal const val COVER_EVENTS_RELOAD_MS = 30_000L
+
+/** Vrai au premier relevé, puis au plus une fois toutes les 30 s (les actions relisent d'elles-mêmes). */
+internal fun shouldReloadCoverEvents(lastLoadMs: Long?, nowMs: Long): Boolean =
+    lastLoadMs == null || nowMs - lastLoadMs >= COVER_EVENTS_RELOAD_MS
+
+/** Position non disponible (volet non calibré) : on ne peut pas enregistrer cette action. */
+internal fun canSaveCoverEvent(action: CoverActionChoice, canPosition: Boolean): Boolean =
+    action != CoverActionChoice.Position || canPosition
+
+/** Nombre maximal d'événements actifs par volet (les événements en pause ne comptent pas). */
+internal const val COVER_EVENT_MAX = 10
+
+internal fun canAddCoverEvent(activeCount: Int): Boolean = activeCount + 1 <= COVER_EVENT_MAX
+
+/** Une plage crée deux événements : elle exige deux places libres. */
+internal fun canAddCoverWindow(activeCount: Int): Boolean = activeCount + 2 <= COVER_EVENT_MAX

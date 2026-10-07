@@ -41,9 +41,6 @@ import kapoue.hestia.data.repository.CoverEventResult
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
 
-/** Nombre maximal d'événements par volet (une plage en compte deux), miroir de la limite du dépôt. */
-private const val COVER_EVENT_LIMIT = 10
-
 /**
  * État d'interface de la programmation d'un volet (dialogue ouvert, confirmations en attente),
  * hissé hors de la section pour que dialogues et confirmations soient rendus hors de la `Column`
@@ -85,18 +82,17 @@ internal fun CoverEventSection(
         events.forEach { e ->
             CoverEventRow(e, onEdit = { onEdit(e) }, onPause = { onPause(e) }, onDelete = { onDelete(e) })
         }
-        OutlinedButton(onClick = onAdd, enabled = events.size < COVER_EVENT_LIMIT) {
+        OutlinedButton(onClick = onAdd, enabled = canAddCoverEvent(events.size)) {
             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.size(4.dp))
             Text(stringResource(R.string.cover_event_add))
         }
-        // Une plage crée deux événements : elle exige deux places libres.
-        OutlinedButton(onClick = onAddWindow, enabled = events.size + 2 <= COVER_EVENT_LIMIT) {
+        OutlinedButton(onClick = onAddWindow, enabled = canAddCoverWindow(events.size)) {
             Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.size(4.dp))
             Text(stringResource(R.string.cover_event_add_window))
         }
-        if (events.size >= COVER_EVENT_LIMIT - 1) {
+        if (events.size >= COVER_EVENT_MAX) {
             Text(
                 text = stringResource(R.string.cover_event_error_limit),
                 style = MaterialTheme.typography.bodySmall,

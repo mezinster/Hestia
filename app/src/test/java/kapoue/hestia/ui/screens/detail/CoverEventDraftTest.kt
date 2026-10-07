@@ -104,4 +104,28 @@ class CoverEventDraftTest {
     fun `libelle des jours - la date prime`() {
         assertEquals(CoverDaysLabel.OnDate(date), coverDaysLabel(CoverEvent(1, 0, setOf(1), date, CoverEventAction.Open)))
     }
+
+    @Test
+    fun `rechargement des evenements - premier relevé, 30 s ecoulees ou non`() {
+        assertTrue(shouldReloadCoverEvents(null, 1_000L))
+        assertFalse(shouldReloadCoverEvents(1_000L, 30_999L))
+        assertTrue(shouldReloadCoverEvents(1_000L, 31_000L))
+        assertTrue(shouldReloadCoverEvents(1_000L, 90_000L))
+    }
+
+    @Test
+    fun `enregistrement - position indisponible bloque seulement l'action position`() {
+        assertFalse(canSaveCoverEvent(CoverActionChoice.Position, canPosition = false))
+        assertTrue(canSaveCoverEvent(CoverActionChoice.Position, canPosition = true))
+        assertTrue(canSaveCoverEvent(CoverActionChoice.Open, canPosition = false))
+        assertTrue(canSaveCoverEvent(CoverActionChoice.Close, canPosition = false))
+    }
+
+    @Test
+    fun `limite - une plage exige deux places, un evenement une seule`() {
+        assertTrue(canAddCoverEvent(9))
+        assertFalse(canAddCoverEvent(10))
+        assertTrue(canAddCoverWindow(8))
+        assertFalse(canAddCoverWindow(9))
+    }
 }

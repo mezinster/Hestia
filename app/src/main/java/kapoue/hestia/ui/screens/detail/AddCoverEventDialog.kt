@@ -101,9 +101,15 @@ internal fun AddCoverEventDialog(
 
     // Empêche un double envoi pendant l'aller-retour réseau ; repasse à faux dès qu'un résultat arrive.
     var submitting by remember { mutableStateOf(false) }
-    LaunchedEffect(result) { if (result != null) submitting = false }
+    // Le refus affiché disparaît (et le bouton se réactive) dès que l'utilisateur change une valeur.
+    var showResult by remember { mutableStateOf(true) }
+    LaunchedEffect(result) { if (result != null) { submitting = false; showResult = true } }
+    LaunchedEffect(hour, minute, secondHour, secondMinute, inverted, everyDay, days, once, onceDate, action, position) {
+        submitting = false
+        showResult = false
+    }
 
-    val resultMessage = result?.let(::coverEventResultMessage)?.let { stringResource(it) }
+    val resultMessage = result?.takeIf { showResult }?.let(::coverEventResultMessage)?.let { stringResource(it) }
     val errorText = resultMessage ?: if (!valid) stringResource(R.string.planning_error_no_day) else null
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
@@ -251,7 +257,7 @@ internal fun AddCoverEventDialog(
             }
 
             Button(
-                enabled = valid && !submitting,
+                enabled = valid && !submitting && canSaveCoverEvent(action, canPosition),
                 onClick = {
                     submitting = true
                     if (window) {

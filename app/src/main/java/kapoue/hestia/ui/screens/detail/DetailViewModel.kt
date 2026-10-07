@@ -322,7 +322,8 @@ class DetailViewModel @Inject constructor(
         if (dev.isCover) {
             _coverStatus.value = coverRepository.getStatus(dev).toCoverStatus()
             _activeIp.value = repository.activeIp(dev)
-            loadCoverEvents(dev)
+            // Relevé périodique : événements relus au plus toutes les 30 s (modifs faites sur l'appareil).
+            if (shouldReloadCoverEvents(lastCoverEventsLoadMs, System.currentTimeMillis())) loadCoverEvents(dev)
             return
         }
         if (dev.isLight) {
@@ -398,7 +399,11 @@ class DetailViewModel @Inject constructor(
     val coverEventResult: StateFlow<CoverEventResult?> = _coverEventResult.asStateFlow()
     fun clearCoverEventResult() { _coverEventResult.value = null }
 
+    /** Instant de la dernière relecture des événements (nul tant qu'elle n'a pas eu lieu). */
+    private var lastCoverEventsLoadMs: Long? = null
+
     private suspend fun loadCoverEvents(dev: Device) {
+        lastCoverEventsLoadMs = System.currentTimeMillis()
         coverScheduleRepository.getEvents(dev).getOrNull()?.let { _coverEvents.value = it }
     }
 
@@ -417,6 +422,8 @@ class DetailViewModel @Inject constructor(
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
             logger.info(DiagnosticLogger.UI, "Volet ${dev.ipAddress}#${dev.switchId} → programmation : $label")
+            // Remis à nul avant l'appel : deux refus identiques de suite doivent chacun être émis.
+            _coverEventResult.value = null
             val result = call(dev)
             logger.info(DiagnosticLogger.UI, "Volet ${dev.ipAddress}#${dev.switchId} → programmation : $label : ${result::class.simpleName}")
             _coverEventResult.value = result
