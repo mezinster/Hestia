@@ -139,8 +139,8 @@ class CoverScheduleRepository @Inject constructor(
     suspend fun deletePaused(paused: PausedCoverEvent) = locks.withLock(paused.deviceId) { pausedDao.delete(paused) }
 
     /**
-     * Relit les événements du volet. Chaque lecture (affichage, validation avant création,
-     * resynchronisation) purge au passage les uniques échus, journalisé : ils ne s'exécuteront plus.
+     * Relit les événements du volet. Chaque lecture normale (affichage, validation avant création)
+     * masque les uniques échus et purge au passage ceux échus depuis plus de 30 min, journalisé.
      */
     private suspend fun readEvents(ip: String, device: Device, keepExpired: Boolean = false): RpcResult<List<CoverEvent>> {
         val jobs = when (val r = scheduleRpc.list(ip)) {

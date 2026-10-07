@@ -125,9 +125,24 @@ internal fun coverEventInstantsBetween(event: CoverEvent, from: LocalDateTime, t
 }
 
 /**
- * Sépare les événements lus en (renvoyés, à purger). Lecture normale : les uniques échus sont
- * purgés et non renvoyés. Lecture du worker de notifications ([keepExpired]) : ils sont gardés
- * (ils viennent justement de s'exécuter) et rien n'est purgé, la prochaine lecture normale s'en charge.
+ * Délai de grâce avant de purger un unique échu de l'appareil : même valeur que la fenêtre de
+ * rattrapage du worker de notifications (`NotificationWorker.MAX_LOOKBACK_MS`), pour qu'il ait
+ * encore le temps de le lire et de le notifier.
+ */
+internal const val COVER_ONCE_PURGE_GRACE_MS = 30L * 60 * 1000
+
+/** Vrai si l'unique est échu depuis plus de [COVER_ONCE_PURGE_GRACE_MS] (purge autorisée). */
+internal fun CoverEvent.isPurgeableOnce(now: LocalDateTime): Boolean {
+    val d = date ?: return false
+    val at = LocalDateTime.of(d, LocalTime.of(hour, minute))
+    return at.plusNanos(COVER_ONCE_PURGE_GRACE_MS * 1_000_000).isBefore(now)
+}
+
+/**
+ * Sépare les événements lus en (renvoyés, à purger). Lecture normale : les uniques échus ne sont
+ * plus renvoyés, et sont purgés seulement 30 min après leur échéance ([COVER_ONCE_PURGE_GRACE_MS]).
+ * Lecture du worker de notifications ([keepExpired]) : ils sont gardés (ils viennent justement de
+ * s'exécuter) et rien n'est purgé, une lecture normale ultérieure s'en charge.
  */
 internal fun splitForRead(
     all: List<CoverEvent>,
@@ -135,6 +150,5 @@ internal fun splitForRead(
     keepExpired: Boolean,
 ): Pair<List<CoverEvent>, List<CoverEvent>> {
     if (keepExpired) return all to emptyList()
-    val (expired, alive) = all.partition { it.isExpiredOnce(now) }
-    return alive to expired
+    return all.filterNot { it.isExpiredOnce(now) } to all.filter { it.isPurgeableOnce(now) }
 }
