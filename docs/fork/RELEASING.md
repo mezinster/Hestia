@@ -87,10 +87,14 @@ git tag -a fork/<x.y.z>-fork.<N> -m "<résumé>"
 ANDROID_HOME=~/Android/Sdk CI_COMMIT_TAG=fork/<x.y.z>-fork.<N> scripts/fork/ci-build.sh
 git push origin fork/main fork/<x.y.z>-fork.<N>   # sans accès Woodpecker, aucun pipeline ne démarre
 tea releases create --login codeberg --repo mezinster/Hestia --tag fork/<x.y.z>-fork.<N> \
-  --title "$(cat build/fork-release/title.txt)" --note-file build/fork-release/notes.md \
-  --asset build/fork-release/dist/hestia-<x.y.z>-fork.<N>.apk \
-  --asset build/fork-release/dist/hestia-<x.y.z>-fork.<N>.apk.sha256
+  --title "$(cat build/fork-release/title.txt)" --note-file build/fork-release/notes.md
+for f in build/fork-release/dist/*; do
+  tea releases assets create --login codeberg --repo mezinster/Hestia fork/<x.y.z>-fork.<N> "$f"
+done
 ```
+
+`--asset` directement sur `tea releases create` (tea 0.16) échoue sans message et ne crée rien
+(constaté sur `fork/2.16.1-fork.1`) : créer la Release d'abord, puis joindre les fichiers.
 
 La signature locale lit `HESTIA_FORK_*` dans `~/.gradle/gradle.properties`.
 
