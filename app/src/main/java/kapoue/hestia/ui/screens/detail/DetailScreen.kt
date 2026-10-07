@@ -74,6 +74,7 @@ import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
+import kapoue.hestia.data.repository.CoverEventResult
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.domain.model.CreatePlanningResult
@@ -85,6 +86,7 @@ import kapoue.hestia.ui.components.TimeWheelPicker
 import kapoue.hestia.ui.components.ValueWheelPicker
 import kapoue.hestia.ui.icons.SmokeDetectorIcon
 import kapoue.hestia.ui.permission.LocalNetworkPermission
+import kapoue.hestia.ui.screens.dashboard.CoverStatus
 import kapoue.hestia.ui.screens.dashboard.PresenceInfo
 import kapoue.hestia.ui.screens.dashboard.SensorStatus
 import kapoue.hestia.ui.screens.dashboard.TileStatus
@@ -108,6 +110,10 @@ fun DetailScreen(
     val coverStatus by viewModel.coverStatus.collectAsStateWithLifecycle()
     val coverRevision by viewModel.coverRevision.collectAsStateWithLifecycle()
     val coverError by viewModel.coverError.collectAsStateWithLifecycle()
+    val coverEvents by viewModel.coverEvents.collectAsStateWithLifecycle()
+    val pausedCoverEvents by viewModel.pausedCoverEvents.collectAsStateWithLifecycle()
+    val coverEventResult by viewModel.coverEventResult.collectAsStateWithLifecycle()
+    val coverEventUi = remember { CoverEventUiState() }
     val cutoffState by viewModel.cutoffState.collectAsStateWithLifecycle()
     val cutoffCandidates by viewModel.cutoffCandidates.collectAsStateWithLifecycle()
     val cutoffMessage by viewModel.cutoffMessage.collectAsStateWithLifecycle()
@@ -127,6 +133,16 @@ fun DetailScreen(
         cutoffMessage?.let {
             Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
             viewModel.consumeCutoffMessage()
+        }
+    }
+
+    // Programmation du volet : le dialogue se ferme sur succès, les refus restent affichés dedans.
+    LaunchedEffect(coverEventResult) {
+        if (coverEventResult is CoverEventResult.Success) {
+            coverEventUi.showAdd = false
+            coverEventUi.showWindow = false
+            coverEventUi.editing = null
+            viewModel.clearCoverEventResult()
         }
     }
 
@@ -230,7 +246,8 @@ fun DetailScreen(
             DeviceHeader(dev, activeIp ?: dev.ipAddress)
 
             if (dev.isCover) {
-                // Volet (2026-10-07) : chemin séparé, ni plannings ni présence dans ce lot.
+                // Volet (2026-10-07) : chemin séparé, ni plannings relais ni présence ; sa propre
+                // programmation (CoverEventSection, lot S2) est exécutée par l'appareil.
                 HorizontalDivider()
                 CoverSection(
                     status = coverStatus,
@@ -241,6 +258,18 @@ fun DetailScreen(
                     onClose = { viewModel.coverClose() },
                     onGoTo = { pos -> viewModel.coverGoTo(pos) },
                     onCalibrate = { viewModel.coverCalibrate() },
+                )
+                HorizontalDivider()
+                CoverEventSection(
+                    events = coverEvents,
+                    paused = pausedCoverEvents,
+                    onAdd = { viewModel.clearCoverEventResult(); coverEventUi.showAdd = true },
+                    onAddWindow = { viewModel.clearCoverEventResult(); coverEventUi.showWindow = true },
+                    onEdit = { viewModel.clearCoverEventResult(); coverEventUi.editing = it },
+                    onPause = { coverEventUi.toPause = it },
+                    onDelete = { coverEventUi.toDelete = it },
+                    onResume = { viewModel.resumeCoverEvent(it) },
+                    onDeletePaused = { coverEventUi.pausedToDelete = it },
                 )
                 return@Column
             }
@@ -413,6 +442,18 @@ fun DetailScreen(
         )
     }
 
+
+    CoverEventDialogs(
+        state = coverEventUi,
+        result = coverEventResult,
+        canPosition = (coverStatus as? CoverStatus.Online)?.positionControl == true,
+        onSaveEvent = { old, new -> if (old != null) viewModel.updateCoverEvent(old, new) else viewModel.addCoverEvent(new) },
+        onSaveWindow = { first, second -> viewModel.addCoverWindow(first, second) },
+        onDismissDialog = { viewModel.clearCoverEventResult() },
+        onDelete = { viewModel.deleteCoverEvent(it) },
+        onPause = { viewModel.pauseCoverEvent(it) },
+        onDeletePaused = { viewModel.deletePausedCoverEvent(it) },
+    )
 
     if (showAddPlanning || editingPlanning != null) {
         AddPlanningDialog(

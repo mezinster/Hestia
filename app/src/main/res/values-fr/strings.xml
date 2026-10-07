@@ -571,4 +571,35 @@
     <string name="cover_notif_opened">Ouvert par la programmation</string>
     <string name="cover_notif_closed">Fermé par la programmation</string>
     <string name="cover_notif_moved">Déplacé à %1$d %% par la programmation</string>
+    <!-- Programmation des volets (lot S2) : événements exécutés par l'appareil -->
+    <string name="cover_events_title">Programmation</string>
+    <string name="cover_event_add">Ajouter un événement</string>
+    <string name="cover_event_add_window">Ajouter une plage</string>
+    <string name="cover_event_row">%1$s · %2$s · %3$s</string>
+    <string name="cover_event_days_list">%1$s, %2$s</string>
+    <string name="cover_event_every_day">Tous les jours</string>
+    <string name="cover_event_once">Une fois</string>
+    <string name="cover_event_goto">Aller à %1$d %%</string>
+    <string name="cover_action_position">Position</string>
+    <string name="cover_event_position_needs_calibration">Calibre le volet pour utiliser les positions.</string>
+    <string name="cover_window_open_at">Ouvrir à</string>
+    <string name="cover_window_close_at">Fermer à</string>
+    <string name="cover_window_inverted">Fermer d\'abord, puis ouvrir</string>
+    <string name="cover_event_error_past">Cette date et cette heure sont déjà passées.</string>
+    <string name="cover_event_error_duplicate">Un événement existe déjà à cette heure.</string>
+    <string name="cover_event_error_limit">Limite atteinte : 10 événements par volet.</string>
+    <string name="cover_event_error_generic">Le volet n\'a pas répondu. Vérifie qu\'il est allumé et sur le même Wi-Fi.</string>
+    <string name="cover_event_delete_title">Supprimer cet événement ?</string>
+    <string name="cover_event_delete_message">Il sera retiré du volet.</string>
+    <string name="cover_event_pause_title">Mettre cet événement en pause ?</string>
+    <string name="cover_event_pause_message">Il sera retiré du volet et gardé dans Hestia jusqu\'à sa reprise.</string>
+    <string name="cover_event_paused">En pause</string>
+    <string name="cover_event_resume">Reprendre</string>
+    <string name="cover_event_dialog_title">Nouvel événement</string>
+    <string name="cover_window_dialog_title">Nouvelle plage</string>
+    <string name="cover_event_edit_title">Modifier l\'événement</string>
+    <string name="cover_event_edit">Modifier l\'événement</string>
+    <string name="cover_event_action">Action</string>
+    <string name="cover_event_forget_title">Oublier cet événement en pause ?</string>
+    <string name="cover_event_forget_message">Il sera définitivement oublié, sans possibilité de le reprendre.</string>
 </resources>

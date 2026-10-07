@@ -577,4 +577,35 @@
     <string name="cover_notif_opened">Opened by schedule</string>
     <string name="cover_notif_closed">Closed by schedule</string>
     <string name="cover_notif_moved">Moved to %1$d%% by schedule</string>
+    <!-- Programmation des volets (lot S2) : événements exécutés par l'appareil -->
+    <string name="cover_events_title">Schedule</string>
+    <string name="cover_event_add">Add an event</string>
+    <string name="cover_event_add_window">Add a window</string>
+    <string name="cover_event_row">%1$s · %2$s · %3$s</string>
+    <string name="cover_event_days_list">%1$s, %2$s</string>
+    <string name="cover_event_every_day">Every day</string>
+    <string name="cover_event_once">Once</string>
+    <string name="cover_event_goto">Go to %1$d%%</string>
+    <string name="cover_action_position">Position</string>
+    <string name="cover_event_position_needs_calibration">Calibrate the shutter to use positions.</string>
+    <string name="cover_window_open_at">Open at</string>
+    <string name="cover_window_close_at">Close at</string>
+    <string name="cover_window_inverted">Close first, then open</string>
+    <string name="cover_event_error_past">This date and time have already passed.</string>
+    <string name="cover_event_error_duplicate">An event already exists at this time.</string>
+    <string name="cover_event_error_limit">Limit reached: 10 events per shutter.</string>
+    <string name="cover_event_error_generic">The shutter didn\'t respond. Check that it\'s on and on the same Wi-Fi.</string>
+    <string name="cover_event_delete_title">Delete this event?</string>
+    <string name="cover_event_delete_message">It will be removed from the shutter.</string>
+    <string name="cover_event_pause_title">Pause this event?</string>
+    <string name="cover_event_pause_message">It will be removed from the shutter and kept in Hestia until you resume it.</string>
+    <string name="cover_event_paused">Paused</string>
+    <string name="cover_event_resume">Resume</string>
+    <string name="cover_event_dialog_title">New event</string>
+    <string name="cover_window_dialog_title">New window</string>
+    <string name="cover_event_edit_title">Edit event</string>
+    <string name="cover_event_edit">Edit event</string>
+    <string name="cover_event_action">Action</string>
+    <string name="cover_event_forget_title">Forget this paused event?</string>
+    <string name="cover_event_forget_message">It will be permanently forgotten, with no way to resume it.</string>
 </resources>

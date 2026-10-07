@@ -134,6 +134,9 @@ class CoverScheduleRepository @Inject constructor(
 
     fun observePaused(deviceId: Long): Flow<List<PausedCoverEvent>> = pausedDao.observeForDevice(deviceId)
 
+    /** Oublie un événement en pause : mémo local seulement, rien à retirer de l'appareil. */
+    suspend fun deletePaused(paused: PausedCoverEvent) = pausedDao.delete(paused)
+
     /**
      * Relit les événements du volet. Chaque lecture (affichage, validation avant création,
      * resynchronisation) purge au passage les uniques échus, journalisé : ils ne s'exécuteront plus.
