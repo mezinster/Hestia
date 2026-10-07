@@ -117,11 +117,11 @@ class DashboardViewModel @Inject constructor(
     val uiState: StateFlow<DashboardUiState> =
         combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, extras ->
             val ordered = repository.groupedForDisplay(devices)
-            val byIp = ordered.filter { it.isGroupable() }.groupBy { it.ipAddress }
+            val byKey = ordered.groupBy { it.groupKey() }
             val flags = computeGroupFlags(ordered)
             DashboardUiState(
                 tiles = ordered.mapIndexed { index, device ->
-                    val members = if (device.isGroupable()) byIp.getValue(device.ipAddress) else listOf(device)
+                    val members = byKey.getValue(device.groupKey())
                     val isMultiChannel = flags[index].isMultiChannel
                     val isFirstInGroup = flags[index].isFirstInGroup
                     TileUiState(
