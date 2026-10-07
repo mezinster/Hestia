@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fork (mezinster/Hestia) : libellé de la version de test, superposé au manifeste principal pour
+     le seul variant release — le manifeste amont n'est pas modifié. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:label="Hestia (test)"
+        tools:replace="android:label">
+        <activity
+            android:name=".MainActivity"
+            android:label="Hestia (test)"
+            tools:replace="android:label" />
+    </application>
+</manifest>

@@ -111,3 +111,53 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }
+
+// ---------------------------------------------------------------------------------------------
+// Configuration de publication du FORK (mezinster/Hestia, branche fork/main uniquement).
+// Entièrement additive et regroupée ici, en fin de fichier, pour ne jamais entrer en conflit avec
+// l'amont : defaultConfig (versionCode/versionName littéraux lus par F-Droid) n'est pas touché.
+// Voir docs/fork/RELEASING.md.
+// ---------------------------------------------------------------------------------------------
+
+/** Secret de signature : propriété Gradle (local, ~/.gradle/gradle.properties) ou variable d'environnement (CI). */
+fun forkSecret(name: String): String? =
+    providers.gradleProperty(name).orElse(providers.environmentVariable(name)).orNull
+
+android {
+    signingConfigs {
+        create("fork") {
+            storeFile = forkSecret("HESTIA_FORK_STORE_FILE")?.let { file(it) }
+            storePassword = forkSecret("HESTIA_FORK_STORE_PASSWORD")
+            keyAlias = forkSecret("HESTIA_FORK_KEY_ALIAS")
+            keyPassword = forkSecret("HESTIA_FORK_KEY_PASSWORD")
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            // Identifiant distinct : s'installe à côté de la version F-Droid, sans conflit de signature.
+            applicationIdSuffix = ".mezinster"
+            signingConfig = signingConfigs.getByName("fork")
+        }
+    }
+}
+
+androidComponents {
+    // Android 10 (API 29) pour la version du fork ; l'amont reste à 30.
+    beforeVariants(selector().withBuildType("release")) { it.minSdk = 29 }
+
+    // Version du fork : -PforkBuild=N → versionName "<amont>-fork.N", versionCode 1000 + N. Lu
+    // paresseusement : seul un build release sans N échoue, jamais un build debug ni les tests.
+    val upstreamVersionName = android.defaultConfig.versionName
+    val forkBuild = providers.gradleProperty("forkBuild").map { it.toInt() }
+        .orElse(
+            providers.provider<Int> {
+                throw GradleException("Build release du fork : -PforkBuild=N obligatoire (voir docs/fork/RELEASING.md).")
+            },
+        )
+    onVariants(selector().withBuildType("release")) { variant ->
+        variant.outputs.forEach { output ->
+            output.versionCode.set(forkBuild.map { 1000 + it })
+            output.versionName.set(forkBuild.map { "$upstreamVersionName-fork.$it" })
+        }
+    }
+}
