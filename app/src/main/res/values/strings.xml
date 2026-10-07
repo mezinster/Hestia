@@ -51,7 +51,10 @@
     <string name="settings_devices_empty">No devices yet.\nAdd your first Shelly device with the + button.</string>
     <string name="settings_add_device">Add a device</string>
     <string name="settings_device_channel">Channel %1$d</string>
-    <string name="settings_group_channels">%1$d channels</string>
+    <plurals name="settings_group_channels">
+        <item quantity="one">%1$d channel</item>
+        <item quantity="other">%1$d channels</item>
+    </plurals>
     <string name="settings_open_web">Open web interface</string>
     <string name="settings_edit_device">Edit</string>
     <string name="settings_delete_device">Delete</string>
@@ -61,7 +64,10 @@
     <string name="settings_smoke_relay_badge">Relays smoke detector alerts — may change automatically</string>
     <string name="settings_smoke_relay_explanation">A smoke detector can\'t send its alerts to ntfy directly — another device has to pass them along instead. Hestia picks which one automatically, nothing to set up. The icon next to a name shows which one is handling it right now; that can change on its own if another setting needs the room.</string>
     <string name="delete_group_title">Delete this device?</string>
-    <string name="delete_group_message">\"%1$s\" and its %2$d channels will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</string>
+    <plurals name="delete_group_message">
+        <item quantity="one">\"%1$s\" and its %2$d channel will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</item>
+        <item quantity="other">\"%1$s\" and its %2$d channels will be removed from Hestia. This doesn\'t affect the device itself or its configuration.</item>
+    </plurals>
     <string name="settings_permission_section">Local network permission</string>
     <string name="settings_permission_granted">Granted</string>
     <string name="settings_permission_denied">Denied</string>
@@ -71,6 +77,12 @@
     <string name="settings_theme_system">Follow system theme</string>
     <string name="settings_theme_light">Light theme</string>
     <string name="settings_theme_dark">Dark theme</string>
+    <string name="settings_language_section">Language</string>
+    <string name="settings_language_system">Follow system language</string>
+    <!-- Noms des langues dans leur propre langue : identiques quelle que soit la langue de l'interface. -->
+    <string name="language_name_en" translatable="false">English</string>
+    <string name="language_name_fr" translatable="false">Français</string>
+    <string name="language_name_ru" translatable="false">Русский</string>
 
     <!-- Notifications de bornes de programmation -->
     <string name="settings_notifications_section">Notifications</string>
@@ -166,14 +178,17 @@
     <string name="add_device_ip_location_delete_confirm_message">It\'s only actually removed once you tap Save at the bottom of the screen.</string>
     <string name="add_device_type_label">Type</string>
     <string name="add_device_type_prompt">What kind of device?</string>
-    <string name="add_device_found_name">Name found on the outlet: %1$s</string>
+    <string name="add_device_found_name">Name found on the device: %1$s</string>
     <string name="add_device_smoke_wake_hint">Press the detector\'s button 3 times briefly to wake it up (setup mode, 2 minutes), then confirm below.</string>
     <string name="add_device_confirmed_name">Added: %1$s</string>
     <string name="add_device_led_title">LED</string>
-    <string name="add_device_led_hint">Lit at normal brightness during the day, dimmed to 30% from 10pm to 8am. Off toggles it off permanently.</string>
+    <string name="add_device_led_hint" formatted="false">Lit at normal brightness during the day, dimmed to 30% from 10pm to 8am. Off toggles it off permanently.</string>
     <string name="add_device_led_loading">Checking…</string>
     <string name="add_device_led_unavailable">Unavailable on this device, or unreachable.</string>
     <string name="device_type_plug">Plug</string>
+    <!-- Choix du type à l'ajout : un relais (1PM, Pro…) passe aussi par ce type -->
+    <string name="device_type_plug_or_relay">Plug / relay</string>
+    <string name="device_type_dimmer">Dimmer</string>
     <string name="device_type_lamp">Lamp</string>
     <string name="device_type_sensor">Sensor</string>
     <string name="device_type_smoke_detector">Smoke detector</string>
@@ -203,6 +218,13 @@
     <string name="error_timeout">The device didn\'t respond in time. Check the network and try again.</string>
     <string name="error_not_shelly">This address doesn\'t respond like a Shelly Gen2 or later device.</string>
     <string name="error_gen1_unsupported">This device is a Shelly Gen1, which isn\'t supported. Only Gen2 and later are.</string>
+    <string name="error_unsupported_cover">This device is set up as a shutter controller, which Hestia doesn\'t support yet. If it\'s a 2PM, you can switch it to relay mode in its web interface.</string>
+    <string name="error_unsupported_color_light">This light controller is set to a colour mode, which Hestia doesn\'t support yet. Dimmers (white light) are supported.</string>
+    <string name="error_unsupported_energy_meter">This device is an energy meter without a relay, which Hestia doesn\'t support yet.</string>
+    <string name="error_unsupported_smoke_detector">This device is a smoke detector. Choose the Smoke detector type above to add it.</string>
+    <string name="error_unsupported_sensor">This device is a sensor, which Hestia doesn\'t support yet. Only on/off relays and plugs are supported.</string>
+    <string name="error_unsupported_input_only">This device only has inputs and no relay to switch, so Hestia can\'t control it.</string>
+    <string name="error_unsupported_unknown">This device has no on/off relay that Hestia can control.</string>
     <string name="error_rpc_generic">The device returned an error (code %1$d). Try again.</string>
     <string name="error_permission_denied_action">Local network permission is required to reach the device. You can re-enable it in system settings.</string>
 
@@ -280,6 +302,11 @@
     <string name="sensor_relay_body_alarm_test">Test triggered (3 beeps).</string>
     <string name="state_offline">Unavailable</string>
     <string name="state_loading">Loading…</string>
+    <string name="light_state_on">On · %1$d%%</string>
+    <string name="light_state_off">Off</string>
+    <string name="light_brightness">Brightness: %1$d%%</string>
+    <string name="light_turn_on">Turn on</string>
+    <string name="light_turn_off">Turn off</string>
 
     <!-- Bandeau global du Tableau (pas de tuile dédiée) quand la permission réseau local manque -->
     <string name="dashboard_permission_banner">Local network permission is required to reach your devices.</string>

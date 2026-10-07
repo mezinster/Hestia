@@ -227,6 +227,14 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Grande police système : aucun texte tronqué ni chevauchement
 - [ ] Rotation de l'écran sur tous les écrans : pas de perte d'état
 - [ ] Écran de petite taille (Sony) : grille lisible, boutons atteignables au pouce
+- [ ] Réglages → Langue : bascule Système → English → Français → Русский → Système, appliquée immédiatement sur tous les écrans
+- [ ] Re-sélectionner la langue déjà active : rien ne se passe (pas de clignotement)
+- [ ] Android 13+ (Pixel) : changer la langue de Hestia dans Paramètres → Langue de l'appli ; Réglages → Langue reflète le choix
+- [ ] Android 11–12 (Sony) : langue forcée conservée après rotation, bascule du thème sombre et redémarrage de l'appli
+- [ ] Android 11–12 (Sony) : retour à « Suivre la langue du système » → langue du téléphone, pas la dernière langue forcée
+- [ ] Notification Android (worker) et texte ntfy d'un minuteur nouvellement armé : dans la langue choisie, pas celle du système
+- [ ] Mode démo : toujours en anglais ; en sortant, retour à la langue choisie
+- [ ] Russe : pluriels corrects dans Réglages (2 канала, 5 каналов) et textes ntfy en cyrillique lisibles sur le téléphone
 
 ## 11. Navigation
 
@@ -246,3 +254,19 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Mention d'indépendance présente dans l'À propos, le README et la fiche F-Droid
 - [ ] Aucun mot de passe ni donnée sensible dans le journal de diagnostic
 - [ ] Installation propre de l'APK release sur les deux appareils, parcours complet refait
+
+## Variateurs (fork, 2026-10-07)
+
+- [ ] Ajout d'un variateur (Dimmer Gen3/Gen4, Plus Wall Dimmer…) via la tuile « Variateur » : ajouté, nom lu sur l'appareil.
+- [ ] Même appareil ajouté via « Prise / relais » : même résultat (ce sont les composants qui décident).
+- [ ] Relais (Plug M) ajouté via la tuile « Variateur » : enregistré et affiché comme « Prise / relais » (pas Variateur).
+- [ ] Appareil mixte (≥ 2 relais + un light, même IP) : bandeau multi-canaux des relais intact, light en tuile séparée, quel que soit l'ordre.
+- [ ] Mise à jour firmware disponible : bandeau sur la tuile du variateur.
+- [ ] Plus RGBW PM en mode light : 4 tuiles séparées. En mode rgb/rgbw : refus « mode couleur ».
+- [ ] Tuile : « Allumée · N % » / « Éteinte » / « Indisponible » ; bouton marche/arrêt OK ; tap → Détail.
+- [ ] Détail : curseur, envoi au relâchement seulement ; lampe éteinte + curseur → s'allume à ce niveau.
+- [ ] Appareil débranché pendant un réglage : message « injoignable », curseur revient à la valeur réelle.
+- [ ] Aucun minuteur / planning / présence proposé pour un variateur.
+- [ ] Réglages : variateur « En ligne » quand il répond.
+- [ ] Mise à jour par-dessus une version sans variateurs (base v17) : aucun appareil perdu.
+- [ ] Mode démo : « Bedroom Dimmer » allumé à 40 % au départ ; bouton et curseur changent l'état.

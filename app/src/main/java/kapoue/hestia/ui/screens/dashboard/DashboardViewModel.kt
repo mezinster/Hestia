@@ -16,6 +16,7 @@ import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.repository.DeviceStatusResult
+import kapoue.hestia.data.repository.LightRepository
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.isActiveNow
@@ -41,6 +42,7 @@ class DashboardViewModel @Inject constructor(
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
     private val ntfyClient: NtfyClient,
+    private val lightRepository: LightRepository,
 ) : ViewModel() {
 
     init {
@@ -97,6 +99,7 @@ class DashboardViewModel @Inject constructor(
     // État des détecteurs de fumée (voir SMOKE-DETECTOR.md) — jamais mélangé à [statuses], qui
     // ne concerne que les canaux avec relais (Switch.GetStatus).
     private val sensorStatuses = MutableStateFlow<Map<Long, SensorStatus>>(emptyMap())
+    private val lightStatuses = MutableStateFlow<Map<Long, LightStatus>>(emptyMap())
 
     // Renseigné par la couche UI (qui seule connaît le Context) à chaque reprise d'écran.
     private val _permissionUsable = MutableStateFlow(true)
@@ -106,19 +109,21 @@ class DashboardViewModel @Inject constructor(
 
     // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils + on_since +
     // capteurs en un seul.
-    private val extras = combine(presences, plannings, pendingThresholds, onSinceElapsed, sensorStatuses) { p, pl, th, os, ss -> Extras(p, pl, th, os, ss) }
+    private val extras = combine(
+        combine(presences, plannings, pendingThresholds, onSinceElapsed, sensorStatuses) { p, pl, th, os, ss -> Extras(p, pl, th, os, ss) },
+        lightStatuses,
+    ) { e, ls -> e.copy(lightStatuses = ls) }
 
     val uiState: StateFlow<DashboardUiState> =
         combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, extras ->
             val ordered = repository.groupedForDisplay(devices)
-            val byIp = ordered.groupBy { it.ipAddress }
-            var lastIp: String? = null
+            val byIp = ordered.filter { it.isGroupable() }.groupBy { it.ipAddress }
+            val flags = computeGroupFlags(ordered)
             DashboardUiState(
-                tiles = ordered.map { device ->
-                    val members = byIp.getValue(device.ipAddress)
-                    val isMultiChannel = members.size > 1
-                    val isFirstInGroup = device.ipAddress != lastIp
-                    lastIp = device.ipAddress
+                tiles = ordered.mapIndexed { index, device ->
+                    val members = if (device.isGroupable()) byIp.getValue(device.ipAddress) else listOf(device)
+                    val isMultiChannel = flags[index].isMultiChannel
+                    val isFirstInGroup = flags[index].isFirstInGroup
                     TileUiState(
                         device = device,
                         status = statusMap[device.id] ?: TileStatus.Loading,
@@ -127,6 +132,7 @@ class DashboardViewModel @Inject constructor(
                         } else {
                             null
                         },
+                        lightStatus = if (device.isLight) extras.lightStatuses[device.id] ?: LightStatus.Loading else null,
                         presence = extras.presence[device.id],
                         plannings = extras.plannings[device.id].orEmpty(),
                         pendingThresholdW = extras.pendingThresholds[device.id],
@@ -220,8 +226,15 @@ class DashboardViewModel @Inject constructor(
                         }
                     }.awaitAll()
                 }
+                val lightResults = async {
+                    // Variateurs (light:N, 2026-10-07) : chemin séparé du relevé switch, comme les
+                    // détecteurs de fumée.
+                    devices.filter { it.isLight }.map { device ->
+                        async { device.id to lightRepository.getStatus(device).toLightStatus() }
+                    }.awaitAll()
+                }
                 val presenceResults = async {
-                    devices.filter { it.hasScripting }.map { device ->
+                    devices.filter { it.hasScripting && !it.isLight }.map { device ->
                         async { device.id to loadPresence(device) }
                     }.awaitAll()
                 }
@@ -235,6 +248,7 @@ class DashboardViewModel @Inject constructor(
                 val previousStatuses = statuses.value
                 statuses.value = statusResults.await().toMap()
                 sensorStatuses.value = sensorResults.await().toMap()
+                lightStatuses.value = lightResults.await().toMap()
                 presences.value = presenceResults.await()
                     .mapNotNull { (id, info) -> info?.let { id to it } }
                     .toMap()
@@ -273,7 +287,7 @@ class DashboardViewModel @Inject constructor(
                 // pour tous les canaux à chaque cycle. Même garde [wasOn] que ci-dessus, pour la
                 // même raison (sans elle, `stopPresenceForToday` était rappelé en boucle dès qu'une
                 // présence fraîchement créée croisait une vieille source bouton).
-                devices.filter { it.hasScripting }.forEach { device ->
+                devices.filter { it.hasScripting && !it.isLight }.forEach { device ->
                     val status = statuses.value[device.id] as? TileStatus.Online ?: return@forEach
                     if (status.output || !isButtonSource(status.source)) return@forEach
                     val wasOn = (previousStatuses[device.id] as? TileStatus.Online)?.output == true
@@ -298,7 +312,7 @@ class DashboardViewModel @Inject constructor(
                 // pour ceux-là, jamais pour tous les canaux à chaque cycle (voir
                 // DeviceRepository.getActiveChargeThreshold/getActiveButtonThreshold, mécanismes
                 // validés en direct le 2026-08-22).
-                val activeChargeThresholds = devices.filter { it.hasScripting }.map { device ->
+                val activeChargeThresholds = devices.filter { it.hasScripting && !it.isLight }.map { device ->
                     async {
                         val status = statuses.value[device.id] as? TileStatus.Online
                         val hasActivePlanning = plannings.value[device.id]?.any { it.isActiveNow() } == true
@@ -514,6 +528,16 @@ class DashboardViewModel @Inject constructor(
         statuses.value = statuses.value + (deviceId to status)
     }
 
+    /** Marche/arrêt d'un variateur depuis sa tuile — garde la luminosité courante. */
+    fun toggleLight(device: Device, turnOn: Boolean) {
+        if (!_permissionUsable.value) return
+        viewModelScope.launch {
+            logger.info(DiagnosticLogger.UI, "Variateur ${device.ipAddress}#${device.switchId} → ${if (turnOn) "allumé" else "éteint"}")
+            lightRepository.set(device, on = turnOn, brightness = null)
+            lightStatuses.value = lightStatuses.value + (device.id to lightRepository.getStatus(device).toLightStatus())
+        }
+    }
+
     private companion object {
         /** Tolérance pour considérer qu'un souvenir local de minuteur correspond bien au minuteur
          * natif actuellement en cours sur l'appareil (voir le calcul dans [fetch]). */
@@ -546,4 +570,5 @@ private data class Extras(
     val pendingThresholds: Map<Long, Int>,
     val onSinceElapsed: Map<Long, Long>,
     val sensorStatuses: Map<Long, SensorStatus>,
+    val lightStatuses: Map<Long, LightStatus> = emptyMap(),
 )

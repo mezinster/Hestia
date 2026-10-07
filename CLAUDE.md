@@ -42,18 +42,23 @@ silencieuse.
 - Package / applicationId : `kapoue.hestia`
 - Distribution cible : **F-Droid** (build reproductible, aucune dépendance propriétaire,
   aucun service Google, aucune bibliothèque de tracking)
-- Langue : **bilingue depuis le 2026-07-27**. `values/strings.xml` (défaut, sans qualificatif)
-  contient l'**anglais** — c'est la langue prioritaire, utilisée pour tout appareil dont la
-  langue système n'est ni le français ni l'anglais. `values-fr/strings.xml` contient le
-  **français**, utilisé uniquement si la langue système de l'appareil est le français. Android
-  choisit automatiquement entre les deux (aucun code de sélection à écrire).
+- Langue : **trilingue depuis le 2026-10-04** (bilingue depuis le 2026-07-27, russe ajouté
+  ensuite). `values/strings.xml` (défaut, sans qualificatif) contient l'**anglais** — c'est la
+  langue prioritaire, utilisée quand aucune des langues préférées de l'appareil ne correspond.
+  `values-fr/strings.xml` contient le **français**, `values-ru/strings.xml` le **russe**.
+  Android choisit la ressource d'après la liste ordonnée des langues préférées de l'appareil ;
+  Réglages → Langue permet aussi d'en forcer une (sur Android 13+, c'est le réglage système
+  « Langue de l'appli », voir `AppLocaleManager`).
   **Règle permanente à partir de maintenant : toute chaîne visible par l'utilisateur, nouvelle
-  ou modifiée, doit être ajoutée dans les DEUX fichiers, systématiquement, dans la même
-  livraison — jamais une chaîne anglaise sans son équivalent français ou l'inverse.** Aucune
-  chaîne en dur dans le code (`stringResource`/`getString` uniquement). Les mêmes clés doivent
-  porter les mêmes espaces de format (`%1$s`, `%2$d`…) dans les deux fichiers.
+  ou modifiée, doit être ajoutée dans les TROIS fichiers, systématiquement, dans la même
+  livraison — jamais une chaîne dans une langue sans son équivalent dans les deux autres.**
+  Aucune chaîne en dur dans le code (`stringResource`/`getString` uniquement). Les mêmes clés
+  doivent porter les mêmes espaces de format (`%1$s`, `%2$d`…) dans les trois fichiers. Le test
+  unitaire `StringResourcesConsistencyTest` fait respecter cette règle (mêmes clés, mêmes
+  espaces de format, pluriels complets).
   Les captures d'écran F-Droid restent en français pour l'instant (voir `fastlane/metadata/`,
-  déjà bilingue côté texte depuis la revue linsui — non retouché ici).
+  déjà bilingue côté texte depuis la revue linsui, avec une fiche russe `ru-RU` ajoutée le
+  2026-10-04 — captures non retouchées).
 
 ## Indépendance vis-à-vis de Shelly
 

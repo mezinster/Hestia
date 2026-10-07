@@ -106,6 +106,7 @@ private fun Device.toBackup() = DeviceBackup(
     ip2Address = ip2Address,
     ipName = ipName,
     ip2Name = ip2Name,
+    isLight = isLight,
 )
 
 private fun DeviceBackup.toEntity() = Device(
@@ -130,4 +131,5 @@ private fun DeviceBackup.toEntity() = Device(
     ip2Address = ip2Address,
     ipName = ipName,
     ip2Name = ip2Name,
+    isLight = isLight,
 )

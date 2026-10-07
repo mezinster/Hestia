@@ -128,7 +128,7 @@ class DeviceRepository @Inject constructor(
      * les appels suivants. Retourne l'IP effectivement utilisée, pour que l'appelant enchaîne
      * dessus le reste d'une séquence d'appels sans repasser par cette résolution à chaque fois.
      */
-    private suspend fun <T> withIp(device: Device, call: suspend (ip: String) -> RpcResult<T>): Pair<String, RpcResult<T>> {
+    internal suspend fun <T> withIp(device: Device, call: suspend (ip: String) -> RpcResult<T>): Pair<String, RpcResult<T>> {
         val slots = if (currentSlot(device) == 2 && device.ip2Address != null) {
             listOf(2 to device.ip2Address, 1 to device.ipAddress)
         } else {
@@ -2068,7 +2068,8 @@ class DeviceRepository @Inject constructor(
             } else {
                 null
             }
-            val resolvedName = channelName ?: physicalName.takeIf { monoChannel }
+            // Un variateur garde le nom de son canal lu à l'ajout : pas de repli sur le nom physique.
+            val resolvedName = channelName ?: physicalName.takeIf { monoChannel && !device.isLight }
             if (resolvedName != null && resolvedName != updated.name) {
                 updated = updated.copy(name = resolvedName)
             }
@@ -2754,6 +2755,17 @@ class DeviceRepository @Inject constructor(
             position++
         }
 
+        // Variateur démo (fork, 2026-10-07) — voir LightRepository/demoLightStatus. Le « Living
+        // Room Lamp » ci-dessus reste une prise : il sert aux captures F-Droid de l'amont.
+        deviceDao.insert(
+            Device(
+                name = "Bedroom Dimmer", deviceName = "Bedroom Dimmer", ipAddress = "203.0.113.7", switchId = 0,
+                type = DeviceType.LAMP, model = "Demo", supportsSwitch = false, isLight = true,
+                hasScripting = true, hasPowerMetering = true, position = position,
+            ),
+        )
+        position++
+
         // Bloc multi-canaux (façon vraie multiprise) — mix d'états sur les 4 canaux, voir
         // demoStripStatus.
         val stripIp = "203.0.113.10"
@@ -2854,7 +2866,7 @@ class DeviceRepository @Inject constructor(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val DEMO_IP_PREFIX = "203.0.113." // RFC 5737 TEST-NET-3, jamais routable
         // Chaque planning = 2 programmes cron ; la prise en tient ~20, on plafonne à 10 plannings.
         const val MAX_PLANNINGS = 10

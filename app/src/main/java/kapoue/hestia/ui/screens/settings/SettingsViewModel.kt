@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.R
+import kapoue.hestia.core.locale.AppLocaleManager
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.backup.BackupManager
 import kapoue.hestia.data.backup.ImportResult
@@ -16,7 +17,9 @@ import kapoue.hestia.data.notifications.NotificationScheduler
 import kapoue.hestia.data.notifications.NtfyClient
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.repository.LightRepository
 import kapoue.hestia.data.rpc.RpcResult
+import kapoue.hestia.domain.model.AppLanguage
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.ThemeMode
 import kapoue.hestia.ui.common.UserMessage
@@ -34,8 +37,10 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val repository: DeviceRepository,
+    private val lightRepository: LightRepository,
     private val backupManager: BackupManager,
     private val appPreferences: AppPreferences,
+    private val appLocaleManager: AppLocaleManager,
     private val logger: DiagnosticLogger,
     private val ntfyClient: NtfyClient,
     private val cloudClient: ShellyCloudClient,
@@ -54,6 +59,15 @@ class SettingsViewModel @Inject constructor(
     val themeMode: StateFlow<ThemeMode> = appPreferences.themeMode
 
     fun setThemeMode(mode: ThemeMode) = appPreferences.setThemeMode(mode)
+
+    /** Lue à la demande (pas de Flow) : sur Android 13+ elle peut changer depuis les Paramètres système. */
+    fun appLanguage(): AppLanguage = appLocaleManager.current()
+
+    /** @return true si l'écran doit recréer l'Activity (Android 11–12). */
+    fun setAppLanguage(language: AppLanguage): Boolean {
+        logger.info(DiagnosticLogger.UI, "Langue de l'appli → ${language.tag ?: "système"}")
+        return appLocaleManager.set(language)
+    }
 
     val notificationsEnabled: StateFlow<Boolean> = appPreferences.notificationsEnabled
 
@@ -251,10 +265,11 @@ class SettingsViewModel @Inject constructor(
                 // Détecteur de fumée : Switch.GetStatus n'a aucun sens pour ce type (voir
                 // SMOKE-DETECTOR.md), retournait toujours faux — chemin dédié, même principe que
                 // partout ailleurs pour ce type d'appareil.
-                val online = if (device.type == DeviceType.SMOKE_DETECTOR) {
-                    repository.getSensorStatus(device).result is RpcResult.Success
-                } else {
-                    repository.getStatus(device).result is RpcResult.Success
+                val online = when {
+                    device.type == DeviceType.SMOKE_DETECTOR -> repository.getSensorStatus(device).result is RpcResult.Success
+                    // Variateur (2026-10-07) : Switch.GetStatus n'a aucun sens pour un light.
+                    device.isLight -> lightRepository.getStatus(device) is RpcResult.Success
+                    else -> repository.getStatus(device).result is RpcResult.Success
                 }
                 _connectivity.value = _connectivity.value + (device.id to online)
                 _activeIp.value = _activeIp.value + (device.id to repository.activeIp(device))

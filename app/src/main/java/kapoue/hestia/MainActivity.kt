@@ -1,5 +1,6 @@
 package kapoue.hestia
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +11,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
+import kapoue.hestia.core.locale.AppLocaleManager
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.core.log.LocalDiagnosticLogger
 import kapoue.hestia.data.prefs.AppPreferences
@@ -28,6 +30,13 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var appPreferences: AppPreferences
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(newBase)
+        // Android 11–12 : langue choisie dans Réglages (null sur 13+, géré par le système).
+        // À faire ici, avant tout accès aux ressources de l'Activity.
+        AppLocaleManager.activityOverride(newBase)?.let { applyOverrideConfiguration(it) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()

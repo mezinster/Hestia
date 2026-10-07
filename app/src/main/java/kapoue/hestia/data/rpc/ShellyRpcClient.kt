@@ -32,11 +32,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -461,40 +459,39 @@ class ShellyRpcClient @Inject constructor(
             is RpcResult.Failure -> return r
         }
 
-        val switchChannels = components
-            .mapNotNull { entry -> SWITCH_KEY.matchEntire(entry.key)?.groupValues?.get(1)?.toIntOrNull() }
-            .sorted()
+        val switchChannels = parseChannels(components, "switch")
 
         // Nom déjà configuré sur l'appareil pour chaque canal (Switch.GetConfig.name via le même
         // Shelly.GetComponents ci-dessus, aucun appel RPC de plus) — sert à proposer le vrai nom
         // du canal à l'ajout plutôt qu'un générique « <nom saisi> · N » (nom des prises, 2026-09-07).
-        val channelNames = components
-            .mapNotNull { entry ->
-                val switchId = SWITCH_KEY.matchEntire(entry.key)?.groupValues?.get(1)?.toIntOrNull()
-                    ?: return@mapNotNull null
-                val name = (entry.config?.get("name") as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-                    ?: return@mapNotNull null
-                switchId to name
-            }
-            .toMap()
+        val channelNames = parseChannelNames(components, "switch")
 
         val hasPowerMetering = components.any { entry ->
             entry.key.startsWith("pm") || entry.key.startsWith("em") ||
                 entry.status?.containsKey("apower") == true
         }
 
-        return RpcResult.Success(
-            DeviceCapabilities(
-                generation = generation,
-                model = info.model,
-                reportedName = info.name,
-                switchChannels = switchChannels,
-                channelNames = channelNames,
-                // Le moteur de scripts est standard sur Gen2+.
-                hasScripting = generation >= 2,
-                hasPowerMetering = hasPowerMetering,
-            ),
+        val capabilities = DeviceCapabilities(
+            generation = generation,
+            model = info.model,
+            reportedName = info.name,
+            switchChannels = switchChannels,
+            channelNames = channelNames,
+            lightChannels = parseChannels(components, "light"),
+            lightChannelNames = parseChannelNames(components, "light"),
+            // Le moteur de scripts est standard sur Gen2+.
+            hasScripting = generation >= 2,
+            hasPowerMetering = hasPowerMetering,
+            componentKeys = components.map { it.key },
         )
+        // Composants bruts au journal : d'un rapport de bug, savoir exactement de quel appareil il
+        // s'agit (relais, volet, variateur…) sans avoir à le demander à l'utilisateur.
+        logger.info(
+            DiagnosticLogger.RPC,
+            "Sonde @ $ip → ${info.model} gen$generation, composants : ${capabilities.componentKeys.joinToString()}" +
+                (capabilities.unsupportedKind?.let { " (aucun relais : $it)" } ?: ""),
+        )
+        return RpcResult.Success(capabilities)
     }
 
     /** Récupère tous les composants en paginant via `offset` jusqu'à `total` (borné). */
@@ -526,7 +523,7 @@ class ShellyRpcClient @Inject constructor(
     }
 
     /** Appel générique typé. Journalise méthode, cible, code et durée. */
-    private suspend fun <T> call(
+    internal suspend fun <T> call(
         ip: String,
         method: String,
         params: JsonElement?,
@@ -596,8 +593,6 @@ class ShellyRpcClient @Inject constructor(
     }
 
     private companion object {
-        val SWITCH_KEY = Regex("""switch:(\d+)""")
-
         /**
          * Lectures de routine relevées en boucle (Tableau toutes les ~5 s, Réglages toutes les 60 s,
          * une fois par canal d'un même appareil) : les journaliser en succès faisait tourner tout
@@ -606,7 +601,7 @@ class ShellyRpcClient @Inject constructor(
          * ouvert). Les échecs restent journalisés dans tous les cas.
          */
         val QUIET_ON_SUCCESS = setOf(
-            "Switch.GetStatus", "Schedule.List", "Script.List", "Script.GetCode", "Shelly.GetStatus",
+            "Switch.GetStatus", "Light.GetStatus", "Schedule.List", "Script.List", "Script.GetCode", "Shelly.GetStatus",
         )
         const val MAX_COMPONENT_PAGES = 32
     }

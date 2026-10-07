@@ -10,14 +10,17 @@ import kapoue.hestia.R
 import kapoue.hestia.core.util.isValidIpv4
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.repository.LightRepository
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcResult
+import kapoue.hestia.data.rpc.isLightOnly
 import kapoue.hestia.domain.model.CloudInfo
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
 import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.LedNightModeState
 import kapoue.hestia.ui.common.UserMessage
+import kapoue.hestia.ui.common.toUserMessage
 import kapoue.hestia.ui.common.toUserMessageOrNull
 import kapoue.hestia.ui.navigation.StackedRoutes
 import kapoue.hestia.ui.permission.LocalNetworkPermission
@@ -106,6 +109,7 @@ data class AddEditUiState(
 @HiltViewModel
 class AddEditDeviceViewModel @Inject constructor(
     private val repository: DeviceRepository,
+    private val lightRepository: LightRepository,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -305,7 +309,7 @@ class AddEditDeviceViewModel @Inject constructor(
         // permission réseau local manque encore, on se tait, le tap explicite sur Ajouter reste le
         // seul déclencheur de la demande, comme avant ce lot (voir onPrimaryAction côté écran).
         val state = _uiState.value
-        if (!state.isEditMode && state.type == DeviceType.PLUG && isValidIpv4(value) && LocalNetworkPermission.isUsable(context)) {
+        if (!state.isEditMode && state.type.usesProbe() && isValidIpv4(value) && LocalNetworkPermission.isUsable(context)) {
             probeJob = viewModelScope.launch {
                 delay(AUTO_PROBE_DEBOUNCE_MS)
                 runAutoProbe(value)
@@ -316,7 +320,7 @@ class AddEditDeviceViewModel @Inject constructor(
     /** Touche Suivant/OK du clavier sur le champ IP : sonde immédiate, sans attendre le débounce. */
     fun onIpImeAction() {
         val state = _uiState.value
-        if (state.isEditMode || state.type != DeviceType.PLUG) return
+        if (state.isEditMode || !state.type.usesProbe()) return
         val ip = state.ipAddress
         if (!isValidIpv4(ip) || !LocalNetworkPermission.isUsable(context)) return
         probeJob?.cancel()
@@ -346,11 +350,11 @@ class AddEditDeviceViewModel @Inject constructor(
     }
 
     /**
-     * Mode ajout uniquement : choix (ou changement d'avis) Prise/Détecteur via les deux tuiles,
+     * Mode ajout uniquement : choix (ou changement d'avis) Prise/Variateur/Détecteur via les trois tuiles,
      * toujours visibles — celle non retenue se grise plutôt que de disparaître (retour David,
      * 2026-09-23). Un vrai changement de type efface tout ce que la sonde automatique avait pu
      * trouver pour l'autre type (n'a plus de sens), et relance tout de suite une sonde fraîche si
-     * on bascule vers Prise avec une IP déjà valide — comme si elle venait d'être tapée.
+     * on bascule vers Prise ou Variateur avec une IP déjà valide — comme si elle venait d'être tapée.
      */
     fun onTypeChosen(value: DeviceType) {
         val current = _uiState.value
@@ -371,7 +375,7 @@ class AddEditDeviceViewModel @Inject constructor(
             next.copy(isDirty = isDirty(next))
         }
         val ip = _uiState.value.ipAddress
-        if (switching && value == DeviceType.PLUG && isValidIpv4(ip) && LocalNetworkPermission.isUsable(context)) {
+        if (switching && value.usesProbe() && isValidIpv4(ip) && LocalNetworkPermission.isUsable(context)) {
             probeJob = viewModelScope.launch {
                 delay(AUTO_PROBE_DEBOUNCE_MS)
                 runAutoProbe(ip)
@@ -449,9 +453,26 @@ class AddEditDeviceViewModel @Inject constructor(
                     }
                 }
             }
+            // Ni relais ni light (volet, capteur…) : refus expliqué plutôt qu'un canal 0
+            // supposé dont toutes les commandes échoueraient ensuite.
+            caps.unsupportedKind?.let { kind ->
+                _uiState.update { it.copy(isTesting = false, error = kind.toUserMessage()) }
+                return@launch
+            }
+            // Variateur seul (light:N, 2026-10-07) : tous ses canaux ajoutés d'un coup, sans écran
+            // de sélection en v1.
+            if (caps.isLightOnly()) {
+                val added = lightRepository.addLightChannels(_uiState.value.name.trim(), ip, caps)
+                if (added == 0) {
+                    _uiState.update { it.copy(isTesting = false, error = UserMessage(R.string.error_device_exists)) }
+                } else {
+                    repository.resyncSmokeRelay()
+                    confirmThenClose(caps.reportedName?.takeIf { it.isNotBlank() } ?: _uiState.value.name.trim())
+                }
+                return@launch
+            }
             _uiState.update { it.copy(isTesting = true, error = null) }
-            // Repli : si aucun canal switch n'est remonté, supposer le canal 0.
-            val channels = caps.switchChannels.ifEmpty { listOf(0) }
+            val channels = caps.switchChannels
             if (channels.size == 1) {
                 addChannels(channels)
             } else {
@@ -533,11 +554,18 @@ class AddEditDeviceViewModel @Inject constructor(
         val added = repository.addChannels(
             name = state.name.trim(),
             ip = state.ipAddress.trim(),
-            type = state.type,
+            // Un relais ajouté via la tuile Variateur reste une prise : la tuile choisie ne change pas
+            // le résultat (spec § 2) — LAMP est réservé aux canaux light.
+            type = if (state.type == DeviceType.LAMP) DeviceType.PLUG else state.type,
             capabilities = caps,
             switchIds = channels,
         )
-        if (added == 0) {
+        val addedLights = if (caps.lightChannels.isNotEmpty()) {
+            lightRepository.addLightChannels(state.name.trim(), state.ipAddress.trim(), caps)
+        } else {
+            0
+        }
+        if (added + addedLights == 0) {
             _uiState.update {
                 it.copy(isTesting = false, channelSelection = null, error = UserMessage(R.string.error_device_exists))
             }
@@ -625,3 +653,6 @@ class AddEditDeviceViewModel @Inject constructor(
         const val CONFIRMATION_DELAY_MS = 3_000L
     }
 }
+
+/** Prise / relais et Variateur partagent la même sonde : ce sont les composants qui décident. */
+private fun DeviceType.usesProbe(): Boolean = this == DeviceType.PLUG || this == DeviceType.LAMP

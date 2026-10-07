@@ -42,8 +42,10 @@ quitte votre réseau, par défaut.
 
 ## Langue
 
-Application disponible en **français** et en **anglais**, adaptée à la langue du système
-(anglais par défaut, français si l'appareil est en français).
+Application disponible en **anglais** (par défaut), en **français** et en **russe**. Android
+choisit d'après la liste ordonnée des langues préférées de l'appareil, et retombe sur l'anglais
+si aucune ne correspond. Réglages → Langue permet aussi d'en forcer une (sur Android 13+, c'est
+le réglage système « Langue de l'appli »).
 
 ## Licence
 

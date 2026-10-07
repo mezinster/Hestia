@@ -17,7 +17,7 @@ import kapoue.hestia.data.local.entity.PausedPlanning
  */
 @Database(
     entities = [Device::class, DiagnosticLog::class, PausedPlanning::class],
-    version = 17, // jamais 13, voir CLAUDE.md
+    version = 18, // jamais 13, voir CLAUDE.md
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

@@ -200,7 +200,7 @@ fun DeviceTile(
  * section Firmware. Même bleu que l'état Présence, décliné en fond ([StateColorSet.presenceBg]).
  */
 @Composable
-private fun FirmwareUpdateBanner(onClick: () -> Unit) {
+internal fun FirmwareUpdateBanner(onClick: () -> Unit) {
     val colors = MaterialTheme.stateColors
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -431,7 +431,7 @@ private fun ConnectivityBadge(status: TileStatus, modifier: Modifier = Modifier)
  * d'état que le reste de l'appli, voir StateColors) quand elle est réellement allumée.
  */
 @Composable
-private fun RoundToggleButton(enabled: Boolean, checked: Boolean, onClick: () -> Unit) {
+internal fun RoundToggleButton(enabled: Boolean, checked: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.stateColors
     Surface(
         shape = CircleShape,

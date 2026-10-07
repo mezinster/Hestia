@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -68,8 +69,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -86,6 +89,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kapoue.hestia.R
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.domain.model.AppLanguage
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.data.notifications.ProgrammationNotifier
 import kapoue.hestia.domain.model.ThemeMode
@@ -107,6 +111,12 @@ fun SettingsScreen(
     val smokeRelayDevices by viewModel.smokeRelayDevices.collectAsStateWithLifecycle()
     val backupMessage by viewModel.backupMessage.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    // Relue à chaque changement de configuration : sur Android 13+, changer la langue (ici ou dans
+    // les Paramètres système) recrée l'Activity mais conserve le ViewModel.
+    val configuration = LocalConfiguration.current
+    val appLanguage = remember(configuration) { viewModel.appLanguage() }
+    // LocalActivity et non LocalContext : en mode démo, LocalContext est un wrapper de langue.
+    val activity = LocalActivity.current
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsStateWithLifecycle()
     val ntfyEnabled by viewModel.ntfyEnabled.collectAsStateWithLifecycle()
     val ntfyTopic by viewModel.ntfyTopic.collectAsStateWithLifecycle()
@@ -306,6 +316,12 @@ fun SettingsScreen(
             item { PermissionSection() }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item { AppearanceSection(themeMode, viewModel::setThemeMode) }
+            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+            item {
+                LanguageSection(appLanguage) { language ->
+                    if (viewModel.setAppLanguage(language)) activity?.recreate()
+                }
+            }
             item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
             item {
                 NotificationsSection(
@@ -579,7 +595,7 @@ private fun DeviceGroupHeaderRow(
                     if (isSmokeRelay) SmokeRelayBadge()
                 }
                 Text(
-                    text = "$displayIp · ${stringResource(R.string.settings_group_channels, channelCount)} · $connectivityLabel",
+                    text = "$displayIp · ${pluralStringResource(R.plurals.settings_group_channels, channelCount, channelCount)} · $connectivityLabel",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontFamily = FontFamily.Monospace,
@@ -658,7 +674,7 @@ private fun DeleteDeviceGroupDialog(deviceName: String, channelCount: Int, onCon
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.delete_group_title)) },
-        text = { Text(stringResource(R.string.delete_group_message, deviceName, channelCount)) },
+        text = { Text(pluralStringResource(R.plurals.delete_group_message, channelCount, deviceName, channelCount)) },
         confirmButton = {
             TextButton(onClick = onConfirm) { Text(stringResource(R.string.delete_device_confirm)) }
         },
@@ -799,6 +815,34 @@ private fun themeModeLabel(mode: ThemeMode): Int = when (mode) {
     ThemeMode.SYSTEM -> R.string.settings_theme_system
     ThemeMode.LIGHT -> R.string.settings_theme_light
     ThemeMode.DARK -> R.string.settings_theme_dark
+}
+
+/** Choix de la langue de l'interface. Re-sélectionner la langue active ne fait rien (pas de recréation). */
+@Composable
+private fun LanguageSection(current: AppLanguage, onSelect: (AppLanguage) -> Unit) {
+    Column {
+        SectionTitle(stringResource(R.string.settings_language_section))
+        AppLanguage.entries.forEach { language ->
+            val select = { if (language != current) onSelect(language) }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = select)
+                    .padding(vertical = 4.dp),
+            ) {
+                RadioButton(selected = language == current, onClick = select)
+                Text(stringResource(appLanguageLabel(language)), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+private fun appLanguageLabel(language: AppLanguage): Int = when (language) {
+    AppLanguage.SYSTEM -> R.string.settings_language_system
+    AppLanguage.EN -> R.string.language_name_en
+    AppLanguage.FR -> R.string.language_name_fr
+    AppLanguage.RU -> R.string.language_name_ru
 }
 
 /**
