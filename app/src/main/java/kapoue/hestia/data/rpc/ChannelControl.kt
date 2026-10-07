@@ -44,3 +44,7 @@ internal fun ScheduleJob.actionFor(control: ChannelControl, channelId: Int): Sch
     val call = calls.firstOrNull { it.method == control.setMethod } ?: return null
     return call.takeIf { it.params?.get("id")?.jsonPrimitive?.intOrNull == channelId }
 }
+
+/** Présence et coupure sur seuil reposent sur des scripts `Switch` : jamais pour un variateur. */
+internal fun planningRequestAllowed(device: Device, cutoffThresholdW: Int?, marginMinutes: Int?): Boolean =
+    !device.isLight || (cutoffThresholdW == null && marginMinutes == null)

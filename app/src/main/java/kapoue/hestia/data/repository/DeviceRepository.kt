@@ -27,6 +27,7 @@ import kapoue.hestia.data.rpc.LightRpcClient
 import kapoue.hestia.data.rpc.ShellyRpcClient
 import kapoue.hestia.data.rpc.actionFor
 import kapoue.hestia.data.rpc.channelControlFor
+import kapoue.hestia.data.rpc.planningRequestAllowed
 import kapoue.hestia.data.rpc.errorOrNull
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.rpc.model.ScheduleJob
@@ -1263,7 +1264,8 @@ class DeviceRepository @Inject constructor(
             is RpcResult.RpcError -> return r
             is RpcResult.Failure -> return r
         }
-        if (!device.hasScripting) return RpcResult.Success(native)
+        // Présence = script `Switch` : jamais pour un variateur (lot C3).
+        if (!device.hasScripting || device.isLight) return RpcResult.Success(native)
         val presence = getPresenceWindows(device).getOrNull().orEmpty().map { w ->
             Planning(
                 startHour = w.startHour, startMinute = w.startMinute,
@@ -1368,6 +1370,8 @@ class DeviceRepository @Inject constructor(
         cutoffThresholdW: Int? = null,
         marginMinutes: Int? = null,
     ): CreatePlanningResult {
+        // Filet de sécurité (lot C3) : l'interface ne propose jamais présence ni coupure pour un variateur.
+        if (!planningRequestAllowed(device, cutoffThresholdW, marginMinutes)) return CreatePlanningResult.Error
         // Un Unique déjà révolu serait créé sur l'appareil puis supprimé quelques secondes après
         // par le nettoyage automatique (getPlannings) — sans retour à l'utilisateur. On le refuse net.
         if (date != null && !onceEndAt(startHour, startMinute, endHour, endMinute, date).isAfter(LocalDateTime.now())) {
@@ -1479,8 +1483,15 @@ class DeviceRepository @Inject constructor(
         date: LocalDate?,
     ) {
         val nowActive = Planning(startHour, startMinute, endHour, endMinute, days, date = date).isActiveNow()
-        if (nowActive) rpcClient.setSwitch(ip, device.switchId, on = true)
+        if (nowActive) setChannelAt(ip, device, on = true)
     }
+
+    /** Allume/éteint le canal selon sa nature (lot C3) : `Switch.Set` ou `Light.Set` (dernier niveau). */
+    private suspend fun setChannelAt(ip: String, device: Device, on: Boolean): RpcResult<*> =
+        when (channelControlFor(device)) {
+            ChannelControl.SWITCH -> rpcClient.setSwitch(ip, device.switchId, on = on)
+            ChannelControl.LIGHT -> lightRpc.setLight(ip, device.switchId, on = on, brightness = null)
+        }
 
     private data class NtfyPlanningTexts(val topic: String, val title: String, val startBody: String, val endBody: String)
 
@@ -1568,6 +1579,8 @@ class DeviceRepository @Inject constructor(
         cutoffThresholdW: Int? = null,
         marginMinutes: Int? = null,
     ): CreatePlanningResult {
+        // Filet de sécurité (lot C3) : l'interface ne propose jamais présence ni coupure pour un variateur.
+        if (!planningRequestAllowed(device, cutoffThresholdW, marginMinutes)) return CreatePlanningResult.Error
         if (date != null && !onceEndAt(startHour, startMinute, endHour, endMinute, date).isAfter(LocalDateTime.now())) {
             return CreatePlanningResult.PastOnce
         }
@@ -1718,7 +1731,7 @@ class DeviceRepository @Inject constructor(
             val windows = getPresenceWindows(device).getOrNull().orEmpty()
             val result = setPresenceWindows(device, windows.filterNot { it.matchesPlanning(planning) })
             if (result is RpcResult.Success && planning.isActiveNow()) {
-                val (_, set) = withIp(device) { i -> rpcClient.setSwitch(i, device.switchId, on = false) }
+                val (_, set) = withIp(device) { i -> setChannelAt(i, device, on = false) }
                 set.errorOrNull()?.let { return it }
             }
             return result
@@ -1730,7 +1743,7 @@ class DeviceRepository @Inject constructor(
         rpcClient.scheduleDelete(ip, offJobId).errorOrNull()?.let { return it }
         planning.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
         if (planning.isActiveNow()) {
-            rpcClient.setSwitch(ip, device.switchId, on = false)
+            setChannelAt(ip, device, on = false)
         }
         return RpcResult.Success(Unit)
     }

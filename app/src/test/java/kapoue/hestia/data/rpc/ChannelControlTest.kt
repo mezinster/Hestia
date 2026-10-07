@@ -55,4 +55,20 @@ class ChannelControlTest {
         val other = kapoue.hestia.data.rpc.model.ScheduleJob(id = 9, calls = listOf(kapoue.hestia.data.rpc.model.ScheduleCall(method = "Script.Start")))
         assertEquals(null, other.actionFor(ChannelControl.SWITCH, 0))
     }
+
+    private val light = Device(name = "L", ipAddress = "1.2.3.4", type = DeviceType.LAMP, isLight = true, supportsSwitch = false)
+    private val plug = Device(name = "P", ipAddress = "1.2.3.4", type = DeviceType.PLUG)
+
+    @Test
+    fun `un variateur refuse presence et coupure`() {
+        assertEquals(true, planningRequestAllowed(light, cutoffThresholdW = null, marginMinutes = null))
+        assertEquals(false, planningRequestAllowed(light, cutoffThresholdW = 100, marginMinutes = null))
+        assertEquals(false, planningRequestAllowed(light, cutoffThresholdW = null, marginMinutes = 30))
+    }
+
+    @Test
+    fun `un relais accepte tout comme avant`() {
+        assertEquals(true, planningRequestAllowed(plug, cutoffThresholdW = 100, marginMinutes = null))
+        assertEquals(true, planningRequestAllowed(plug, cutoffThresholdW = null, marginMinutes = 30))
+    }
 }
