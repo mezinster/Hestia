@@ -24,6 +24,7 @@ import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.data.rpc.LightRpcClient
 import kapoue.hestia.data.rpc.ShellyRpcClient
+import kapoue.hestia.data.rpc.channelControlFor
 import kapoue.hestia.data.rpc.errorOrNull
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.rpc.model.ScheduleJob
@@ -1426,7 +1427,7 @@ class DeviceRepository @Inject constructor(
         }
         val ntfy = ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)
         val onId = rpcClient.scheduleCreate(
-            ip, onTimespec, device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
+            ip, onTimespec, channelControlFor(device), device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
             ntfyTopic = ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.startBody,
         ).getOrNull()?.id
         if (onId == null) {
@@ -1434,7 +1435,7 @@ class DeviceRepository @Inject constructor(
             return CreatePlanningResult.Error
         }
         val offId = rpcClient.scheduleCreate(
-            ip, offTimespec, device.switchId, on = false,
+            ip, offTimespec, channelControlFor(device), device.switchId, on = false,
             // Avec seuil : le script décide lui-même de notifier la fin (planEnd) — pas de ntfy
             // dans le programme, qui préviendrait à 18 h même après une coupure sur seuil
             // (retour David, 2026-09-28). Sans seuil : inchangé, le programme notifie seul.
@@ -1629,7 +1630,7 @@ class DeviceRepository @Inject constructor(
         }
         val ntfy = ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)
         val onId = rpcClient.scheduleCreate(
-            ip, onTimespec, device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
+            ip, onTimespec, channelControlFor(device), device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
             ntfyTopic = ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.startBody,
         ).getOrNull()?.id
         if (onId == null) {
@@ -1637,7 +1638,7 @@ class DeviceRepository @Inject constructor(
             return CreatePlanningResult.Error
         }
         val offId = rpcClient.scheduleCreate(
-            ip, offTimespec, device.switchId, on = false,
+            ip, offTimespec, channelControlFor(device), device.switchId, on = false,
             // Avec seuil : le script décide lui-même de notifier la fin (planEnd) — pas de ntfy
             // dans le programme, qui préviendrait à 18 h même après une coupure sur seuil
             // (retour David, 2026-09-28). Sans seuil : inchangé, le programme notifie seul.

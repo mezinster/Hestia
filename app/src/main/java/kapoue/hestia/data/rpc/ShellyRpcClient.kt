@@ -349,8 +349,9 @@ class ShellyRpcClient @Inject constructor(
         call(ip, "Schedule.List", null, ScheduleListResult.serializer())
 
     /**
-     * Crée un programme cron : à [timespec], bascule le canal [switchId] sur [on]. Un seul appel
-     * Switch.Set par défaut — c'est ce qui permet de reconstruire les plannings côté repository.
+     * Crée un programme cron : à [timespec], bascule le canal [channelId] sur [on]. Un seul appel
+     * d'action du canal ([ChannelControl]) par défaut
+     * — c'est ce qui permet de reconstruire les plannings côté repository.
      * [scriptCallMethod]/[scriptId] ajoutent un second appel (`Script.Start`/`Script.Stop`) dans
      * le même programme — validé sur Plug M Gen3 : les deux appels s'exécutent bien l'un après
      * l'autre (planning Unique avec coupure sur seuil). [ntfyTopic]/[ntfyTitle]/[ntfyBody]
@@ -361,7 +362,8 @@ class ShellyRpcClient @Inject constructor(
     suspend fun scheduleCreate(
         ip: String,
         timespec: String,
-        switchId: Int,
+        control: ChannelControl,
+        channelId: Int,
         on: Boolean,
         scriptCallMethod: String? = null,
         scriptId: Int? = null,
@@ -382,18 +384,7 @@ class ShellyRpcClient @Inject constructor(
             put(
                 "calls",
                 buildJsonArray {
-                    add(
-                        buildJsonObject {
-                            put("method", "Switch.Set")
-                            put(
-                                "params",
-                                buildJsonObject {
-                                    put("id", switchId)
-                                    put("on", on)
-                                },
-                            )
-                        },
-                    )
+                    add(scheduleActionCall(control, channelId, on))
                     if (scriptCallMethod != null && scriptId != null) {
                         add(
                             buildJsonObject {
