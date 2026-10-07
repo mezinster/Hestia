@@ -143,4 +143,18 @@ class CoverModelsTest {
         assertEquals(CoverEventAction.Close, next.action)
         assertEquals(LocalDateTime.of(2026, 10, 9, 8, 0), next.at)
     }
+
+    @Test
+    fun `jour du prochain - aujourd'hui, jour de semaine, date au-dela de 6 jours`() {
+        val today = nextCoverEvent(listOf(CoverEvent(15, 0, action = CoverEventAction.Open)), now)!!
+        assertEquals(CoverNextDay.TODAY, coverNextDay(today))
+        val tomorrow = nextCoverEvent(listOf(CoverEvent(7, 30, action = CoverEventAction.Open)), now)!!
+        assertEquals(CoverNextDay.WEEKDAY, coverNextDay(tomorrow))
+        // Mardi 13 octobre : 6 jours plus tard, encore le nom du jour.
+        val sixDays = CoverEvent(7, 0, date = LocalDate.of(2026, 10, 13), action = CoverEventAction.Close)
+        assertEquals(CoverNextDay.WEEKDAY, coverNextDay(nextCoverEvent(listOf(sixDays), now)!!))
+        // Unique à Noël : la date, pas « jeu ».
+        val christmas = CoverEvent(13, 0, date = LocalDate.of(2026, 12, 24), action = CoverEventAction.GoTo(50))
+        assertEquals(CoverNextDay.DATE, coverNextDay(nextCoverEvent(listOf(christmas), now)!!))
+    }
 }

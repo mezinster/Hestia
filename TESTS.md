@@ -310,6 +310,6 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] ntfy activé → notification à l'exécution ; ntfy désactivé → la tâche ne contient plus d'`HTTP.Request`.
 - [ ] ntfy désactivé pendant que le volet est hors ligne → au retour en ligne, ses tâches ne contiennent plus d'`HTTP.Request` (rattrapage).
 - [ ] Notifications locales (si activées) au moment de chaque événement.
-- [ ] Tuile : « Fermé · ouvre à 07:30 », « ouvre lun 07:30 » quand ce n'est pas aujourd'hui.
+- [ ] Tuile : « Fermé · ouvre à 07:30 », « ouvre lun 07:30 » quand ce n'est pas aujourd'hui, « ouvre 24/12/2026 13:00 » (date courte) pour un unique à plus de 6 jours.
 - [ ] **Langues** : hors mode démo, EN / FR / RU / système : section, dialogue, tuile et notifications dans la bonne langue.
 - [ ] Non-régression : plannings du Plug M (relais) et d'un variateur inchangés.

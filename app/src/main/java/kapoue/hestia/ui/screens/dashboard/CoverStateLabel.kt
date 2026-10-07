@@ -6,6 +6,7 @@ import androidx.compose.ui.res.stringResource
 import java.time.format.TextStyle
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatClockTime
+import kapoue.hestia.core.util.formatDate
 import kapoue.hestia.domain.model.CoverEventAction
 
 /**
@@ -17,7 +18,11 @@ internal fun coverStateLabel(status: CoverStatus, next: NextCoverEvent? = null):
     val state = coverPlainStateLabel(status)
     if (next == null || !coverShowsNext(status)) return state
     val time = formatClockTime(next.at.hour, next.at.minute)
-    val day = next.at.dayOfWeek.getDisplayName(TextStyle.SHORT, LocalConfiguration.current.locales[0])
+    // Unique à plus de 6 jours : date courte (comme dans la liste des événements), sinon nom du jour.
+    val day = when (coverNextDay(next)) {
+        CoverNextDay.DATE -> formatDate(next.at.toLocalDate())
+        else -> next.at.dayOfWeek.getDisplayName(TextStyle.SHORT, LocalConfiguration.current.locales[0])
+    }
     val nextText = when (val a = next.action) {
         is CoverEventAction.GoTo ->
             if (next.today) stringResource(coverNextStringRes(next), a.position, time)

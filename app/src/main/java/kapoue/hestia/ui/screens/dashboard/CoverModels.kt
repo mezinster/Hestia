@@ -5,6 +5,7 @@ import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.model.CoverStatusResult
 import kapoue.hestia.domain.model.CoverEventAction
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import kapoue.hestia.domain.model.CoverEvent
 
 /** Mouvement d'un volet tel que rapporté par `Cover.GetStatus.state`. */
@@ -80,8 +81,26 @@ internal fun coverNextStringRes(next: NextCoverEvent): Int = when (next.action) 
     is CoverEventAction.GoTo -> if (next.today) R.string.cover_next_goto_today else R.string.cover_next_goto_day
 }
 
-/** Prochain événement à afficher sur la tuile : [today] vrai si [at] tombe le jour même. */
-internal data class NextCoverEvent(val action: CoverEventAction, val at: LocalDateTime, val today: Boolean)
+/**
+ * Prochain événement à afficher sur la tuile : [today] vrai si [at] tombe le jour même, [farOff]
+ * vrai s'il tombe plus de 6 jours plus tard (le nom du jour serait alors ambigu).
+ */
+internal data class NextCoverEvent(
+    val action: CoverEventAction,
+    val at: LocalDateTime,
+    val today: Boolean,
+    val farOff: Boolean = false,
+)
+
+/** Comment désigner le jour du prochain événement sur la tuile. */
+internal enum class CoverNextDay { TODAY, WEEKDAY, DATE }
+
+/** « à HH:MM » aujourd'hui, nom du jour dans les 6 jours, date courte au-delà (unique lointain). */
+internal fun coverNextDay(next: NextCoverEvent): CoverNextDay = when {
+    next.today -> CoverNextDay.TODAY
+    next.farOff -> CoverNextDay.DATE
+    else -> CoverNextDay.WEEKDAY
+}
 
 /**
  * Événement le plus proche dans le temps parmi [events] (les uniques expirés sont ignorés par
@@ -90,4 +109,7 @@ internal data class NextCoverEvent(val action: CoverEventAction, val at: LocalDa
 internal fun nextCoverEvent(events: List<CoverEvent>, now: LocalDateTime): NextCoverEvent? =
     events.mapNotNull { e -> e.nextOccurrence(now)?.let { e to it } }
         .minByOrNull { it.second }
-        ?.let { (e, at) -> NextCoverEvent(e.action, at, at.toLocalDate() == now.toLocalDate()) }
+        ?.let { (e, at) ->
+            val days = ChronoUnit.DAYS.between(now.toLocalDate(), at.toLocalDate())
+            NextCoverEvent(e.action, at, today = days == 0L, farOff = days > 6)
+        }
