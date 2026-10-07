@@ -7,13 +7,15 @@ n="$(scripts/fork/check-tag.sh "$tag")"
 
 # Outils Android épinglés et vérifiés (sauf si un SDK est déjà fourni, ex. en local).
 if [[ -z "${ANDROID_HOME:-}" ]]; then
-    export ANDROID_HOME=/opt/android-sdk
+    export ANDROID_HOME="${FORK_SDK_DIR:-/opt/android-sdk}"   # FORK_SDK_DIR : essai local du chemin CI
     zip=commandlinetools-linux-15859902_latest.zip
     curl -fsSL -o "/tmp/$zip" "https://dl.google.com/android/repository/$zip"
     echo "4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583  /tmp/$zip" | sha256sum -c -
     mkdir -p "$ANDROID_HOME/cmdline-tools"
     unzip -q "/tmp/$zip" -d "$ANDROID_HOME/cmdline-tools" && mv "$ANDROID_HOME/cmdline-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
-    yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
+    # `yes` meurt de SIGPIPE (141) dès que sdkmanager a fini : avec pipefail, cela ferait échouer
+    # le script ; seul le code de sdkmanager compte.
+    { yes || true; } | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null
     "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" >/dev/null
 fi
 

@@ -58,9 +58,11 @@ Open an issue at <https://codeberg.org/mezinster/Hestia/issues> with:
 - your Android version and phone model;
 - the Shelly model (and generation, if you know it);
 - what you did, what you expected, what happened;
-- the diagnostic log: on the **Dashboard**, tap the title at the top **5 times quickly** to open
-  **Diagnostic log**, then **Share**. It contains no passwords and is only sent when you choose to
-  share it.
+- the diagnostic log, if you're comfortable sharing it: on the **Dashboard**, tap the title at the
+  top **5 times quickly** to open **Diagnostic log**, then **Share**. It contains no passwords, but it
+  does contain your **local IP addresses and device names**, and an issue is **public**. Look through
+  it before posting and remove anything you don't want to show, or ask in the issue for another way
+  to send it.
 
 ---
 
@@ -120,6 +122,8 @@ Open an issue at <https://codeberg.org/mezinster/Hestia/issues> with:
 - версию Android и модель телефона;
 - модель Shelly (и поколение, если знаешь);
 - что ты сделал, что ожидал и что произошло;
-- журнал диагностики: на экране **Панель** быстро нажми **5 раз** на заголовок вверху — откроется
-  **Журнал диагностики**, затем **Поделиться**. В нём нет паролей, и он отправляется только если ты
-  сам им поделишься.
+- журнал диагностики, если ты готов им поделиться: на экране **Панель** быстро нажми **5 раз** на
+  заголовок вверху — откроется **Журнал диагностики**, затем **Поделиться**. В нём нет паролей, но
+  есть твои **локальные IP-адреса и названия устройств**, а issue видны **всем**. Просмотри журнал
+  перед публикацией и убери то, что не хочешь показывать, или попроси в issue другой способ его
+  передать.

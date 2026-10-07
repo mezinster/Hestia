@@ -6,7 +6,7 @@ when:
 
 clone:
   - name: clone
-    image: woodpeckerci/plugin-git
+    image: woodpeckerci/plugin-git:2.10.1
     settings:
       tags: true
       partial: false
@@ -25,7 +25,10 @@ steps:
       HESTIA_FORK_KEY_PASSWORD:
         from_secret: fork_key_password
     commands:
-      - apt-get update -qq && apt-get install -y -qq --no-install-recommends unzip git >/dev/null
+      - apt-get update -qq && apt-get install -y -qq --no-install-recommends unzip git curl ca-certificates >/dev/null
+      # Clone fait dans un autre conteneur (autre propriétaire possible) : sans cela, git refuse le
+      # dépôt (« dubious ownership ») et les notes de publication seraient fausses.
+      - git config --global --add safe.directory '*'
       - scripts/fork/ci-build.sh
 
   - name: publish
