@@ -125,9 +125,11 @@ private fun MiniLightCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> 
             fontWeight = FontWeight.Medium,
             style = MaterialTheme.typography.labelSmall,
             textAlign = TextAlign.Center,
-            // 2 lignes réservées : avec un minuteur le libellé ne tient pas sur une seule.
-            minLines = 2,
-            maxLines = 2,
+            // 3 lignes réservées : dans un cercle étroit, « Allumée · 40 % · extinction dans
+            // 0:29:12 » ne tient pas sur 2 lignes et le décompte serait coupé.
+            minLines = 3,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis,
         )
         Text(
             text = powerWatts?.let { formatPower(it) }.orEmpty(),
