@@ -19,6 +19,13 @@ class LightSliderTest {
     }
 
     @Test
+    fun `pas de recalage pendant le glisse`() {
+        val online = LightStatus.Online(on = true, brightness = 40, powerWatts = 3.0)
+        assertNull(resyncTarget(online, dragging = true))
+        assertEquals(40f, resyncTarget(online, dragging = false))
+    }
+
+    @Test
     fun `apres un echec le curseur revient a la derniere valeur lue`() {
         assertEquals(55f, revertTarget(LightStatus.Online(on = false, brightness = 55, powerWatts = null)))
         assertNull(revertTarget(LightStatus.Offline))

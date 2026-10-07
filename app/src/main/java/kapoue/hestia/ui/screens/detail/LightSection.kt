@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.res.stringResource
@@ -29,11 +30,15 @@ import kotlin.math.roundToInt
 fun LightSection(
     status: LightStatus,
     showPower: Boolean,
+    revision: Int,
     onSet: (on: Boolean?, brightness: Int?) -> Unit,
 ) {
     val online = status as? LightStatus.Online
     var sliderValue by remember { mutableFloatStateOf(online?.brightness?.toFloat() ?: 100f) }
-    LaunchedEffect(status) { revertTarget(status)?.let { sliderValue = it } }
+    var dragging by remember { mutableStateOf(false) }
+    // Clé = luminosité lue (pas tout le statut : la puissance bouge à chaque relevé) + révision,
+    // incrémentée après chaque commande pour recaler aussi quand l'état relu est identique (échec).
+    LaunchedEffect(online?.brightness, revision) { resyncTarget(status, dragging)?.let { sliderValue = it } }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
@@ -54,8 +59,8 @@ fun LightSection(
         Text(stringResource(R.string.light_brightness, sliderValue.roundToInt().coerceIn(1, 100)), style = MaterialTheme.typography.bodyMedium)
         Slider(
             value = sliderValue,
-            onValueChange = { sliderValue = it },
-            onValueChangeFinished = { sliderCommand(sliderValue).let { onSet(it.on, it.brightness) } },
+            onValueChange = { dragging = true; sliderValue = it },
+            onValueChangeFinished = { dragging = false; sliderCommand(sliderValue).let { onSet(it.on, it.brightness) } },
             valueRange = 1f..100f,
             enabled = online != null,
         )

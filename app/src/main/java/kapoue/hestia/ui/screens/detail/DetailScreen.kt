@@ -102,6 +102,7 @@ fun DetailScreen(
     val status by viewModel.status.collectAsStateWithLifecycle()
     val sensorStatus by viewModel.sensorStatus.collectAsStateWithLifecycle()
     val lightStatus by viewModel.lightStatus.collectAsStateWithLifecycle()
+    val lightRevision by viewModel.lightRevision.collectAsStateWithLifecycle()
     val lightError by viewModel.lightError.collectAsStateWithLifecycle()
     val cutoffState by viewModel.cutoffState.collectAsStateWithLifecycle()
     val cutoffCandidates by viewModel.cutoffCandidates.collectAsStateWithLifecycle()
@@ -224,6 +225,7 @@ fun DetailScreen(
                 LightSection(
                     status = lightStatus,
                     showPower = dev.hasPowerMetering,
+                    revision = lightRevision,
                     onSet = { on, brightness -> viewModel.setLight(on, brightness) },
                 )
                 return@Column

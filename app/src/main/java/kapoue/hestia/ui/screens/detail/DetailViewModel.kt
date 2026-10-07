@@ -81,6 +81,10 @@ class DetailViewModel @Inject constructor(
     private val _lightStatus = MutableStateFlow<LightStatus>(LightStatus.Loading)
     val lightStatus: StateFlow<LightStatus> = _lightStatus.asStateFlow()
 
+    /** Incrémenté après chaque commande (succès ou échec) : force le recalage du curseur. */
+    private val _lightRevision = MutableStateFlow(0)
+    val lightRevision: StateFlow<Int> = _lightRevision.asStateFlow()
+
     private val _lightError = MutableStateFlow<UserMessage?>(null)
     val lightError: StateFlow<UserMessage?> = _lightError.asStateFlow()
     fun consumeLightError() { _lightError.value = null }
@@ -313,6 +317,7 @@ class DetailViewModel @Inject constructor(
             val result = lightRepository.set(dev, on, brightness)
             if (result !is RpcResult.Success) _lightError.value = result.toUserMessageOrNull()
             _lightStatus.value = lightRepository.getStatus(dev).toLightStatus()
+            _lightRevision.value += 1
         }
     }
 
