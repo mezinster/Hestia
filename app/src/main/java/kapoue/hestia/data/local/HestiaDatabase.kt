@@ -5,9 +5,11 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.dao.DiagnosticLogDao
+import kapoue.hestia.data.local.dao.PausedCoverEventDao
 import kapoue.hestia.data.local.dao.PausedPlanningDao
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.DiagnosticLog
+import kapoue.hestia.data.local.entity.PausedCoverEvent
 import kapoue.hestia.data.local.entity.PausedPlanning
 
 /**
@@ -16,8 +18,8 @@ import kapoue.hestia.data.local.entity.PausedPlanning
  * changement de schéma ultérieur.
  */
 @Database(
-    entities = [Device::class, DiagnosticLog::class, PausedPlanning::class],
-    version = 19, // jamais 13, voir CLAUDE.md
+    entities = [Device::class, DiagnosticLog::class, PausedPlanning::class, PausedCoverEvent::class],
+    version = 20, // jamais 13, voir CLAUDE.md
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -25,6 +27,7 @@ abstract class HestiaDatabase : RoomDatabase() {
     abstract fun deviceDao(): DeviceDao
     abstract fun diagnosticLogDao(): DiagnosticLogDao
     abstract fun pausedPlanningDao(): PausedPlanningDao
+    abstract fun pausedCoverEventDao(): PausedCoverEventDao
 
     companion object {
         const val NAME = "hestia.db"

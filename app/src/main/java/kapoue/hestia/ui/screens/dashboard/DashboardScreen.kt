@@ -118,6 +118,7 @@ fun DashboardScreen(
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             viewModel.updatePermission(LocalNetworkPermission.isUsable(context))
+            viewModel.invalidateCoverEvents()
             while (true) {
                 viewModel.refresh()
                 delay(5_000)

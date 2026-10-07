@@ -7,15 +7,22 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kapoue.hestia.R
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.local.entity.PausedCoverEvent
 import kapoue.hestia.data.local.entity.PausedPlanning
+import kapoue.hestia.data.local.entity.toEvent
 import kapoue.hestia.data.prefs.AppPreferences
+import kapoue.hestia.data.repository.CoverEventResult
 import kapoue.hestia.data.repository.CoverRepository
+import kapoue.hestia.data.repository.CoverScheduleRepository
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.repository.LightRepository
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
+import kapoue.hestia.domain.model.CoverEvent
+import kapoue.hestia.domain.model.CoverEventAction
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
+import kapoue.hestia.domain.model.shouldReloadCoverEvents
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.common.toUserMessageOrNull
@@ -45,6 +52,7 @@ class DetailViewModel @Inject constructor(
     private val appPreferences: AppPreferences,
     private val lightRepository: LightRepository,
     private val coverRepository: CoverRepository,
+    private val coverScheduleRepository: CoverScheduleRepository,
     private val logger: DiagnosticLogger,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -315,6 +323,8 @@ class DetailViewModel @Inject constructor(
         if (dev.isCover) {
             _coverStatus.value = coverRepository.getStatus(dev).toCoverStatus()
             _activeIp.value = repository.activeIp(dev)
+            // Relevé périodique : événements relus au plus toutes les 30 s (modifs faites sur l'appareil).
+            if (shouldReloadCoverEvents(lastCoverEventsLoadMs, System.currentTimeMillis())) loadCoverEvents(dev)
             return
         }
         if (dev.isLight) {
@@ -373,6 +383,91 @@ class DetailViewModel @Inject constructor(
             _coverStatus.value = coverRepository.getStatus(dev).toCoverStatus()
             _coverRevision.value += 1
         }
+    }
+
+    // --- Programmation des volets (lot S2, 2026-10-07) : événements exécutés par l'appareil. ---
+
+    /** Événements réellement présents sur le volet, relus après chaque modification. */
+    private val _coverEvents = MutableStateFlow<List<CoverEvent>>(emptyList())
+    val coverEvents: StateFlow<List<CoverEvent>> = _coverEvents.asStateFlow()
+
+    /** Événements en pause (mémo local), illisibles écartés à l'affichage. */
+    val pausedCoverEvents: StateFlow<List<PausedCoverEvent>> = coverScheduleRepository.observePaused(deviceId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Résultat de la dernière tentative d'ajout ou de modification, consommé par le dialogue. */
+    private val _coverEventResult = MutableStateFlow<CoverEventResult?>(null)
+    val coverEventResult: StateFlow<CoverEventResult?> = _coverEventResult.asStateFlow()
+    fun clearCoverEventResult() { _coverEventResult.value = null }
+
+    /** Instant de la dernière relecture des événements (nul tant qu'elle n'a pas eu lieu). */
+    private var lastCoverEventsLoadMs: Long? = null
+
+    private suspend fun loadCoverEvents(dev: Device) {
+        lastCoverEventsLoadMs = System.currentTimeMillis()
+        coverScheduleRepository.getEvents(dev).getOrNull()?.let { _coverEvents.value = it }
+    }
+
+    private fun describe(e: CoverEvent): String {
+        val days = if (e.date != null) "le ${e.date}" else if (e.days.isEmpty()) "tous les jours" else "jours ${e.days.sorted().joinToString(",")}"
+        val what = when (val a = e.action) {
+            CoverEventAction.Open -> "ouvrir"
+            CoverEventAction.Close -> "fermer"
+            is CoverEventAction.GoTo -> "position ${a.position}"
+        }
+        return "%02d:%02d $days $what".format(e.hour, e.minute)
+    }
+
+    /** Journalise, exécute [call], publie le résultat pour le dialogue et relit les événements. */
+    private fun coverEventDialogAction(label: String, call: suspend (Device) -> CoverEventResult) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            logger.info(DiagnosticLogger.UI, "Volet ${dev.ipAddress}#${dev.switchId} → programmation : $label")
+            // Remis à nul avant l'appel : deux refus identiques de suite doivent chacun être émis.
+            _coverEventResult.value = null
+            val result = call(dev)
+            logger.info(DiagnosticLogger.UI, "Volet ${dev.ipAddress}#${dev.switchId} → programmation : $label : ${result::class.simpleName}")
+            _coverEventResult.value = result
+            if (result is CoverEventResult.Success) loadCoverEvents(dev)
+        }
+    }
+
+    /** Action de la liste (supprimer, pause, reprise) : un échec passe par le message transitoire de l'écran. */
+    private fun coverEventRowAction(label: String, call: suspend (Device) -> CoverEventResult) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            logger.info(DiagnosticLogger.UI, "Volet ${dev.ipAddress}#${dev.switchId} → programmation : $label")
+            val result = call(dev)
+            logger.info(DiagnosticLogger.UI, "Volet ${dev.ipAddress}#${dev.switchId} → programmation : $label : ${result::class.simpleName}")
+            coverEventResultMessage(result)?.let { _coverError.value = UserMessage(it) }
+            loadCoverEvents(dev)
+        }
+    }
+
+    fun addCoverEvent(event: CoverEvent) =
+        coverEventDialogAction("ajout ${describe(event)}") { coverScheduleRepository.add(it, event) }
+
+    fun addCoverWindow(first: CoverEvent, second: CoverEvent) =
+        coverEventDialogAction("ajout de plage ${describe(first)} / ${describe(second)}") { coverScheduleRepository.addWindow(it, first, second) }
+
+    fun updateCoverEvent(old: CoverEvent, new: CoverEvent) =
+        coverEventDialogAction("modification ${describe(old)} → ${describe(new)}") { coverScheduleRepository.update(it, old, new) }
+
+    fun deleteCoverEvent(event: CoverEvent) =
+        coverEventRowAction("suppression ${describe(event)}") { coverScheduleRepository.delete(it, event) }
+
+    fun pauseCoverEvent(event: CoverEvent) =
+        coverEventRowAction("pause ${describe(event)}") { coverScheduleRepository.pause(it, event) }
+
+    fun resumeCoverEvent(paused: PausedCoverEvent) {
+        val label = runCatching { describe(paused.toEvent()) }.getOrDefault("ligne ${paused.id}")
+        coverEventRowAction("reprise $label") { coverScheduleRepository.resume(it, paused) }
+    }
+
+    /** Oublie un événement en pause (mémo local seulement : rien à retirer de l'appareil). */
+    fun deletePausedCoverEvent(paused: PausedCoverEvent) {
+        logger.info(DiagnosticLogger.UI, "Volet $deviceId → programmation : oubli d'un événement en pause (ligne ${paused.id})")
+        viewModelScope.launch { coverScheduleRepository.deletePaused(paused) }
     }
 
     private suspend fun loadPlannings(dev: Device) {

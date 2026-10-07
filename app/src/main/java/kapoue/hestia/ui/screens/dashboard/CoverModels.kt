@@ -1,7 +1,12 @@
 package kapoue.hestia.ui.screens.dashboard
 
+import kapoue.hestia.R
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.model.CoverStatusResult
+import kapoue.hestia.domain.model.CoverEventAction
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
+import kapoue.hestia.domain.model.CoverEvent
 
 /** Mouvement d'un volet tel que rapporté par `Cover.GetStatus.state`. */
 enum class CoverMotion { OPEN, CLOSED, OPENING, CLOSING, STOPPED, CALIBRATING, UNKNOWN }
@@ -63,3 +68,48 @@ internal fun coverPollIntervalMs(status: CoverStatus): Long {
     )
     return if (moving) 1_500L else 5_000L
 }
+
+/** Le prochain événement n'est ajouté au libellé que d'un volet en ligne et pas en calibration. */
+internal fun coverShowsNext(status: CoverStatus): Boolean =
+    status is CoverStatus.Online && status.motion != CoverMotion.CALIBRATING
+
+/** Chaîne du prochain événement : selon l'action, et « à HH:MM » (aujourd'hui) ou « jour HH:MM ». */
+@androidx.annotation.StringRes
+internal fun coverNextStringRes(next: NextCoverEvent): Int = when (next.action) {
+    CoverEventAction.Open -> if (next.today) R.string.cover_next_open_today else R.string.cover_next_open_day
+    CoverEventAction.Close -> if (next.today) R.string.cover_next_close_today else R.string.cover_next_close_day
+    is CoverEventAction.GoTo -> if (next.today) R.string.cover_next_goto_today else R.string.cover_next_goto_day
+}
+
+/**
+ * Prochain événement à afficher sur la tuile : [today] vrai si [at] tombe le jour même, [farOff]
+ * vrai s'il tombe plus de 6 jours plus tard (le nom du jour serait alors ambigu).
+ */
+internal data class NextCoverEvent(
+    val action: CoverEventAction,
+    val at: LocalDateTime,
+    val today: Boolean,
+    val farOff: Boolean = false,
+)
+
+/** Comment désigner le jour du prochain événement sur la tuile. */
+internal enum class CoverNextDay { TODAY, WEEKDAY, DATE }
+
+/** « à HH:MM » aujourd'hui, nom du jour dans les 6 jours, date courte au-delà (unique lointain). */
+internal fun coverNextDay(next: NextCoverEvent): CoverNextDay = when {
+    next.today -> CoverNextDay.TODAY
+    next.farOff -> CoverNextDay.DATE
+    else -> CoverNextDay.WEEKDAY
+}
+
+/**
+ * Événement le plus proche dans le temps parmi [events] (les uniques expirés sont ignorés par
+ * [CoverEvent.nextOccurrence]), ou nul s'il n'y en a aucun.
+ */
+internal fun nextCoverEvent(events: List<CoverEvent>, now: LocalDateTime): NextCoverEvent? =
+    events.mapNotNull { e -> e.nextOccurrence(now)?.let { e to it } }
+        .minByOrNull { it.second }
+        ?.let { (e, at) ->
+            val days = ChronoUnit.DAYS.between(now.toLocalDate(), at.toLocalDate())
+            NextCoverEvent(e.action, at, today = days == 0L, farOff = days > 6)
+        }

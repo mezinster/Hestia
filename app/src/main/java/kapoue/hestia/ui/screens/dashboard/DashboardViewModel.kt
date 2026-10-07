@@ -15,6 +15,9 @@ import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.repository.CoverRepository
+import kapoue.hestia.data.repository.CoverScheduleRepository
+import kapoue.hestia.domain.model.CoverEvent
+import kapoue.hestia.domain.model.shouldReloadCoverEvents
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.repository.DeviceStatusResult
 import kapoue.hestia.data.repository.LightRepository
@@ -45,6 +48,7 @@ class DashboardViewModel @Inject constructor(
     private val ntfyClient: NtfyClient,
     private val lightRepository: LightRepository,
     private val coverRepository: CoverRepository,
+    private val coverScheduleRepository: CoverScheduleRepository,
 ) : ViewModel() {
 
     init {
@@ -104,6 +108,11 @@ class DashboardViewModel @Inject constructor(
     private val lightStatuses = MutableStateFlow<Map<Long, LightStatus>>(emptyMap())
     private val coverStatuses = MutableStateFlow<Map<Long, CoverStatus>>(emptyMap())
 
+    // Événements programmés des volets : relus au plus toutes les 30 s par volet (pas à chaque
+    // relevé de 5 s), dernière liste conservée entre deux relectures ou si la lecture échoue.
+    private val coverEvents = MutableStateFlow<Map<Long, List<CoverEvent>>>(emptyMap())
+    private val coverEventsLoadedAt = mutableMapOf<Long, Long>()
+
     // Renseigné par la couche UI (qui seule connaît le Context) à chaque reprise d'écran.
     private val _permissionUsable = MutableStateFlow(true)
 
@@ -117,8 +126,8 @@ class DashboardViewModel @Inject constructor(
             combine(presences, plannings, pendingThresholds, onSinceElapsed, sensorStatuses) { p, pl, th, os, ss -> Extras(p, pl, th, os, ss) },
             lightStatuses,
         ) { e, ls -> e.copy(lightStatuses = ls) },
-        coverStatuses,
-    ) { e, cs -> e.copy(coverStatuses = cs) }
+        combine(coverStatuses, coverEvents) { cs, ce -> cs to ce },
+    ) { e, (cs, ce) -> e.copy(coverStatuses = cs, coverEvents = ce) }
 
     val uiState: StateFlow<DashboardUiState> =
         combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, extras ->
@@ -140,6 +149,7 @@ class DashboardViewModel @Inject constructor(
                         },
                         lightStatus = if (device.isLight) extras.lightStatuses[device.id] ?: LightStatus.Loading else null,
                         coverStatus = if (device.isCover) extras.coverStatuses[device.id] ?: CoverStatus.Loading else null,
+                        coverEvents = extras.coverEvents[device.id].orEmpty(),
                         presence = extras.presence[device.id],
                         plannings = extras.plannings[device.id].orEmpty(),
                         pendingThresholdW = extras.pendingThresholds[device.id],
@@ -180,6 +190,7 @@ class DashboardViewModel @Inject constructor(
         // automatique).
         if (!userInitiated && !force && refreshJob?.isActive == true) return
         if (userInitiated || force) refreshJob?.cancel()
+        if (userInitiated) coverEventsLoadedAt.clear()
         refreshJob = viewModelScope.launch {
             if (!_permissionUsable.value) {
                 // Aucune interrogation tentée, aucune tuile affichée : le bandeau global du
@@ -257,7 +268,11 @@ class DashboardViewModel @Inject constructor(
                         async {
                             val coverStatus = coverRepository.getStatus(device).toCoverStatus()
                             if (coverStatus is CoverStatus.Online) {
+                                // Rattrapage ntfy des plannings du volet (leurs tâches embarquent
+                                // l'appel ntfy), comme pour un variateur.
+                                viewModelScope.launch { repository.ntfyCatchUpIfNeeded(device) }
                                 viewModelScope.launch { repository.nameCatchUpIfNeeded(device) }
+                                refreshCoverEventsIfDue(device)
                             }
                             device.id to coverStatus
                         }
@@ -282,6 +297,10 @@ class DashboardViewModel @Inject constructor(
                 val previousLightStatuses = lightStatuses.value
                 lightStatuses.value = lightResults.await().toMap()
                 coverStatuses.value = coverResults.await().toMap()
+                // Ne garde que les volets actuels (appareil supprimé ou changé de type).
+                val coverIds = devices.filter { it.isCover }.map { it.id }.toSet()
+                coverEvents.value = coverEvents.value.filterKeys { it in coverIds }
+                coverEventsLoadedAt.keys.retainAll(coverIds)
                 presences.value = presenceResults.await()
                     .mapNotNull { (id, info) -> info?.let { id to it } }
                     .toMap()
@@ -594,6 +613,18 @@ class DashboardViewModel @Inject constructor(
     /** Arrête un volet en mouvement depuis sa tuile. */
     fun coverStop(device: Device) = coverAction(device, "arrêt") { coverRepository.stop(device) }
 
+    /** Au retour sur le Tableau (ex. depuis le Détail) : les événements sont relus au prochain relevé, sans attendre 30 s. */
+    fun invalidateCoverEvents() = coverEventsLoadedAt.clear()
+
+    /** Relit les événements du volet s'ils datent de plus de 30 s ; en cas d'échec, garde la liste précédente. */
+    private suspend fun refreshCoverEventsIfDue(device: Device) {
+        val now = System.currentTimeMillis()
+        if (!shouldReloadCoverEvents(coverEventsLoadedAt[device.id], now)) return
+        // Horodatage posé avant l'appel : un échec n'est pas réessayé à chaque relevé de 5 s.
+        coverEventsLoadedAt[device.id] = now
+        coverScheduleRepository.getEvents(device).getOrNull()?.let { coverEvents.value = coverEvents.value + (device.id to it) }
+    }
+
     private fun coverAction(device: Device, label: String, call: suspend () -> Unit) {
         if (!_permissionUsable.value) return
         viewModelScope.launch {
@@ -637,4 +668,5 @@ private data class Extras(
     val sensorStatuses: Map<Long, SensorStatus>,
     val lightStatuses: Map<Long, LightStatus> = emptyMap(),
     val coverStatuses: Map<Long, CoverStatus> = emptyMap(),
+    val coverEvents: Map<Long, List<CoverEvent>> = emptyMap(),
 )

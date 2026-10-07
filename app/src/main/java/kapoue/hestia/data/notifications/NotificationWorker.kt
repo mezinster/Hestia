@@ -12,9 +12,13 @@ import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.core.util.formatClockTime
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.prefs.AppPreferences
+import kapoue.hestia.data.repository.CoverScheduleRepository
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.data.rpc.getOrNull
+import kapoue.hestia.domain.model.CoverEventAction
+import kapoue.hestia.domain.model.coverEventInstantsBetween
+import java.time.Instant
 import java.time.ZoneId
 import java.util.Objects
 
@@ -42,6 +46,7 @@ class NotificationWorker(
     @InstallIn(SingletonComponent::class)
     interface Deps {
         fun deviceRepository(): DeviceRepository
+        fun coverScheduleRepository(): CoverScheduleRepository
         fun appPreferences(): AppPreferences
         fun logger(): DiagnosticLogger
     }
@@ -85,6 +90,22 @@ class NotificationWorker(
                     ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.END, from, now, zone)?.let { t ->
                         post(ctx, device.id, endKind, t, device.name,
                             ctx.getString(endText, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))
+                        posted++
+                    }
+                }
+            }
+            // Événements programmés des volets (lus sur l'appareil ; échec = silencieux, comme ci-dessus).
+            if (device.isCover) {
+                val fromLocal = Instant.ofEpochMilli(from).atZone(zone).toLocalDateTime()
+                val toLocal = Instant.ofEpochMilli(now).atZone(zone).toLocalDateTime()
+                for (e in deps.coverScheduleRepository().getEventsForNotifications(device).getOrNull().orEmpty()) {
+                    val (kind, text) = when (val a = e.action) {
+                        CoverEventAction.Open -> "cv-open" to ctx.getString(R.string.cover_notif_opened)
+                        CoverEventAction.Close -> "cv-close" to ctx.getString(R.string.cover_notif_closed)
+                        is CoverEventAction.GoTo -> "cv-goto" to ctx.getString(R.string.cover_notif_moved, a.position)
+                    }
+                    for (t in coverEventInstantsBetween(e, fromLocal, toLocal)) {
+                        post(ctx, device.id, kind, t.atZone(zone).toInstant().toEpochMilli(), device.name, text)
                         posted++
                     }
                 }

@@ -5,6 +5,7 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.repository.DeviceStatusResult
 import kapoue.hestia.data.repository.SensorStatusResult
 import kapoue.hestia.data.rpc.RpcResult
+import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.Planning
 
 /** État visuel d'un canal sur le Tableau. */
@@ -110,6 +111,8 @@ data class TileUiState(
     val lightStatus: LightStatus? = null,
     /** État du volet, seulement pour un canal volet (`device.isCover`). */
     val coverStatus: CoverStatus? = null,
+    /** Événements programmés du volet (relus au plus toutes les 30 s), pour « ouvre à … » sur la tuile. */
+    val coverEvents: List<CoverEvent> = emptyList(),
     val presence: PresenceInfo? = null,
     /** Plannings présents sur l'appareil ; la tuile affiche celui **en cours** s'il y en a un. */
     val plannings: List<Planning> = emptyList(),

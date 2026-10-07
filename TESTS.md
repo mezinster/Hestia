@@ -298,3 +298,18 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Mode démo : « Living Room Shutter » (calibré, 60 %) bouge à l'écran ; « Bedroom Shutter » demande une calibration.
 - [ ] Non-régression : relais (Plug M) et variateurs inchangés.
 - [ ] Limite connue : un appareil exposant à la fois un relais (ou variateur) et un volet avec le même id (ex. `switch:0` + `cover:0`) — le volet est ignoré à l'ajout (journalisé). Aucun modèle Shelly connu ne le fait.
+
+## Volets — plannings (fork, 2026-10-07)
+
+- [ ] Événement créé depuis Hestia (Ouvrir 07:30 lun–ven) : visible dans l'interface web de l'appareil (Schedules) avec `Cover.Open` ; s'exécute appli fermée.
+- [ ] Fermer 21:00 tous les jours, Aller à 50 % 13:00 le 24 déc. (une fois) : idem ; l'événement unique disparaît après son passage.
+- [ ] Plage (ouvrir 07:30 / fermer 21:00) et plage inversée : deux événements créés ; doublon et limite (10) refusés avec un message clair.
+- [ ] Position proposée seulement si le volet est calibré.
+- [ ] Pause puis reprise : la tâche disparaît puis revient sur l'appareil.
+- [ ] Tâche créée dans l'appli Shelly officielle : apparaît dans la liste de Hestia.
+- [ ] ntfy activé → notification à l'exécution ; ntfy désactivé → la tâche ne contient plus d'`HTTP.Request`.
+- [ ] ntfy désactivé pendant que le volet est hors ligne → au retour en ligne, ses tâches ne contiennent plus d'`HTTP.Request` (rattrapage).
+- [ ] Notifications locales (si activées) au moment de chaque événement.
+- [ ] Tuile : « Fermé · ouvre à 07:30 », « ouvre lun 07:30 » quand ce n'est pas aujourd'hui, « ouvre 24/12/2026 13:00 » (date courte) pour un unique à plus de 6 jours.
+- [ ] **Langues** : hors mode démo, EN / FR / RU / système : section, dialogue, tuile et notifications dans la bonne langue.
+- [ ] Non-régression : plannings du Plug M (relais) et d'un variateur inchangés.
