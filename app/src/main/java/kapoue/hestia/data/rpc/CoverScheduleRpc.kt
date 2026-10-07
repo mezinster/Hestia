@@ -7,11 +7,11 @@ import kapoue.hestia.data.rpc.model.ScheduleListResult
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -99,12 +99,12 @@ internal fun coverEventsFrom(jobs: List<ScheduleJob>, coverId: Int): List<CoverE
     jobs.mapNotNull { job ->
         val call = job.calls.firstOrNull() ?: return@mapNotNull null
         val params = call.params ?: return@mapNotNull null
-        if (params["id"]?.jsonPrimitive?.intOrNull != coverId) return@mapNotNull null
+        if ((params["id"] as? JsonPrimitive)?.intOrNull != coverId) return@mapNotNull null
         val action = when (call.method) {
             "Cover.Open" -> CoverEventAction.Open
             "Cover.Close" -> CoverEventAction.Close
             "Cover.GoToPosition" -> {
-                val pos = params["pos"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+                val pos = (params["pos"] as? JsonPrimitive)?.intOrNull?.takeIf { it in 0..100 } ?: return@mapNotNull null
                 CoverEventAction.GoTo(pos)
             }
             else -> return@mapNotNull null

@@ -5,6 +5,8 @@ import kapoue.hestia.data.rpc.model.ScheduleCall
 import kapoue.hestia.data.rpc.model.ScheduleJob
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -101,5 +103,28 @@ class CoverScheduleRpcTest {
         val job = ScheduleJob(4, true, coverTimespec(original), listOf(call("Cover.Close", "id" to 0)))
         val back = coverEventsFrom(listOf(job), 0).single()
         assertEquals(true, back.sameSlotAs(original))
+    }
+
+    @Test
+    fun `position hors 0-100 ignoree`() {
+        val jobs = listOf(
+            ScheduleJob(1, true, "0 0 9 * * *", listOf(call("Cover.GoToPosition", "id" to 0, "pos" to 150))),
+            ScheduleJob(2, true, "0 0 9 * * *", listOf(call("Cover.GoToPosition", "id" to 0, "pos" to -1))),
+        )
+        assertEquals(emptyList<CoverEvent>(), coverEventsFrom(jobs, 0))
+    }
+
+    @Test
+    fun `id ou position non numeriques ignores sans exception`() {
+        val badId = ScheduleCall("Cover.Open", buildJsonObject { put("id", JsonObject(emptyMap())) })
+        val badPos = ScheduleCall(
+            "Cover.GoToPosition",
+            buildJsonObject { put("id", 0); put("pos", JsonArray(emptyList())) },
+        )
+        val jobs = listOf(
+            ScheduleJob(1, true, "0 0 9 * * *", listOf(badId)),
+            ScheduleJob(2, true, "0 0 9 * * *", listOf(badPos)),
+        )
+        assertEquals(emptyList<CoverEvent>(), coverEventsFrom(jobs, 0))
     }
 }
