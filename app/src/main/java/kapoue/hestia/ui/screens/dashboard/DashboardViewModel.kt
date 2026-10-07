@@ -264,7 +264,8 @@ class DashboardViewModel @Inject constructor(
                     }.awaitAll()
                 }
                 val presenceResults = async {
-                    devices.filter { it.hasScripting && !it.isLight }.map { device ->
+                    // Scripts relais (présence, minuteur bouton) : jamais pour un variateur ni un volet.
+                    devices.filter { it.hasScripting && !it.isLight && !it.isCover }.map { device ->
                         async { device.id to loadPresence(device) }
                     }.awaitAll()
                 }
@@ -328,7 +329,7 @@ class DashboardViewModel @Inject constructor(
                 // pour tous les canaux à chaque cycle. Même garde [wasOn] que ci-dessus, pour la
                 // même raison (sans elle, `stopPresenceForToday` était rappelé en boucle dès qu'une
                 // présence fraîchement créée croisait une vieille source bouton).
-                devices.filter { it.hasScripting && !it.isLight }.forEach { device ->
+                devices.filter { it.hasScripting && !it.isLight && !it.isCover }.forEach { device ->
                     val status = statuses.value[device.id] as? TileStatus.Online ?: return@forEach
                     if (status.output || !isButtonSource(status.source)) return@forEach
                     val wasOn = (previousStatuses[device.id] as? TileStatus.Online)?.output == true
@@ -353,7 +354,7 @@ class DashboardViewModel @Inject constructor(
                 // pour ceux-là, jamais pour tous les canaux à chaque cycle (voir
                 // DeviceRepository.getActiveChargeThreshold/getActiveButtonThreshold, mécanismes
                 // validés en direct le 2026-08-22).
-                val activeChargeThresholds = devices.filter { it.hasScripting && !it.isLight }.map { device ->
+                val activeChargeThresholds = devices.filter { it.hasScripting && !it.isLight && !it.isCover }.map { device ->
                     async {
                         val status = statuses.value[device.id] as? TileStatus.Online
                         val hasActivePlanning = plannings.value[device.id]?.any { it.isActiveNow() } == true
