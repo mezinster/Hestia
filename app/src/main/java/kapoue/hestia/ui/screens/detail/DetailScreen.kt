@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -100,6 +101,8 @@ fun DetailScreen(
     val device by viewModel.device.collectAsStateWithLifecycle()
     val status by viewModel.status.collectAsStateWithLifecycle()
     val sensorStatus by viewModel.sensorStatus.collectAsStateWithLifecycle()
+    val lightStatus by viewModel.lightStatus.collectAsStateWithLifecycle()
+    val lightError by viewModel.lightError.collectAsStateWithLifecycle()
     val cutoffState by viewModel.cutoffState.collectAsStateWithLifecycle()
     val cutoffCandidates by viewModel.cutoffCandidates.collectAsStateWithLifecycle()
     val cutoffMessage by viewModel.cutoffMessage.collectAsStateWithLifecycle()
@@ -110,6 +113,7 @@ fun DetailScreen(
     val resumePlanningError by viewModel.resumePlanningError.collectAsStateWithLifecycle()
     val buttonTimerConfig by viewModel.buttonTimerConfig.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val resources = LocalResources.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     // Coupure de prise (Lot 5) : la case cochée ne resterait pas cochée si le détecteur est
@@ -118,6 +122,13 @@ fun DetailScreen(
         cutoffMessage?.let {
             Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
             viewModel.consumeCutoffMessage()
+        }
+    }
+
+    LaunchedEffect(lightError) {
+        lightError?.let {
+            Toast.makeText(context, resources.getString(it.res), Toast.LENGTH_LONG).show()
+            viewModel.consumeLightError()
         }
     }
 
@@ -205,6 +216,18 @@ fun DetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             DeviceHeader(dev, activeIp ?: dev.ipAddress)
+
+            if (dev.isLight) {
+                // Variateur (2026-10-07) : chemin séparé, aucune section relais (minuteur,
+                // planning, présence) — même principe que le détecteur de fumée ci-dessous.
+                HorizontalDivider()
+                LightSection(
+                    status = lightStatus,
+                    showPower = dev.hasPowerMetering,
+                    onSet = { on, brightness -> viewModel.setLight(on, brightness) },
+                )
+                return@Column
+            }
 
             if (dev.type == DeviceType.SMOKE_DETECTOR) {
                 // Chemin entièrement séparé (voir SMOKE-DETECTOR.md) : StatusBadge est construit

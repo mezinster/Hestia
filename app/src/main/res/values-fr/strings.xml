@@ -298,6 +298,9 @@
     <string name="state_loading">Lecture…</string>
     <string name="light_state_on">Allumée · %1$d %%</string>
     <string name="light_state_off">Éteinte</string>
+    <string name="light_brightness">Luminosité : %1$d %%</string>
+    <string name="light_turn_on">Allumer</string>
+    <string name="light_turn_off">Éteindre</string>
 
     <!-- Bandeau global du Tableau (pas de tuile dédiée) quand la permission réseau local manque -->
     <string name="dashboard_permission_banner">Autorisation réseau local requise pour contacter tes appareils.</string>

@@ -5,19 +5,24 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kapoue.hestia.R
+import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.repository.LightRepository
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.ui.common.UserMessage
+import kapoue.hestia.ui.common.toUserMessageOrNull
 import kapoue.hestia.ui.navigation.StackedRoutes
+import kapoue.hestia.ui.screens.dashboard.LightStatus
 import kapoue.hestia.ui.screens.dashboard.SensorStatus
 import kapoue.hestia.ui.screens.dashboard.TileStatus
+import kapoue.hestia.ui.screens.dashboard.toLightStatus
 import kapoue.hestia.ui.screens.dashboard.toSensorStatus
 import kapoue.hestia.ui.screens.dashboard.toTileStatus
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +39,8 @@ import javax.inject.Inject
 class DetailViewModel @Inject constructor(
     private val repository: DeviceRepository,
     private val appPreferences: AppPreferences,
+    private val lightRepository: LightRepository,
+    private val logger: DiagnosticLogger,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -69,6 +76,14 @@ class DetailViewModel @Inject constructor(
     fun consumeCutoffMessage() {
         _cutoffMessage.value = null
     }
+
+    /** État du variateur, seulement pour un canal light (variateurs, 2026-10-07). */
+    private val _lightStatus = MutableStateFlow<LightStatus>(LightStatus.Loading)
+    val lightStatus: StateFlow<LightStatus> = _lightStatus.asStateFlow()
+
+    private val _lightError = MutableStateFlow<UserMessage?>(null)
+    val lightError: StateFlow<UserMessage?> = _lightError.asStateFlow()
+    fun consumeLightError() { _lightError.value = null }
 
     /** Appareils pouvant servir de cible de coupure (canaux avec relais, jamais le détecteur lui-même). */
     val cutoffCandidates: StateFlow<List<Device>> = repository.observeDevices()
@@ -270,6 +285,11 @@ class DetailViewModel @Inject constructor(
             _cutoffState.value = repository.getSmokeCutoffState(dev)
             return
         }
+        if (dev.isLight) {
+            _lightStatus.value = lightRepository.getStatus(dev).toLightStatus()
+            _activeIp.value = repository.activeIp(dev)
+            return
+        }
         val status = repository.getStatus(dev).toTileStatus()
         _status.value = status
         _activeIp.value = repository.activeIp(dev)
@@ -283,6 +303,17 @@ class DetailViewModel @Inject constructor(
         // getPlannings fusionne plannings précis et simulations de présence (gated en interne sur
         // hasScripting pour ces dernières) depuis la fusion du 2026-08-18.
         if (dev.supportsSwitch) loadPlannings(dev)
+    }
+
+    /** Marche/arrêt ou luminosité d'un variateur ; relit l'état réel ensuite, succès ou non. */
+    fun setLight(on: Boolean?, brightness: Int?) {
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            logger.info(DiagnosticLogger.UI, "Variateur ${dev.ipAddress}#${dev.switchId} → on=$on luminosité=${brightness ?: "-"}")
+            val result = lightRepository.set(dev, on, brightness)
+            if (result !is RpcResult.Success) _lightError.value = result.toUserMessageOrNull()
+            _lightStatus.value = lightRepository.getStatus(dev).toLightStatus()
+        }
     }
 
     private suspend fun loadPlannings(dev: Device) {
