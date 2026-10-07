@@ -56,4 +56,24 @@ class LightDemoTest {
         val plain = running.copy(timerStartedAt = null, timerDuration = null)
         assertEquals(plain, expireDemoTimer(plain, nowEpochSec = 99_999.0))
     }
+
+    private fun kitchen(channel: Int) = Device(
+        name = "K$channel", ipAddress = "203.0.113.11", switchId = channel,
+        type = DeviceType.LAMP, isLight = true, supportsSwitch = false,
+    )
+
+    @Test
+    fun `le variateur multi-light demo a des etats varies par canal`() {
+        val island = demoLightStatus(kitchen(0), nowEpochSec = 5000.0)
+        assertTrue(island.output); assertEquals(80.0, island.brightness!!, 0.0)
+        assertFalse(demoLightStatus(kitchen(1), nowEpochSec = 5000.0).output)
+        val counter = demoLightStatus(kitchen(2), nowEpochSec = 5000.0)
+        assertTrue(counter.output); assertEquals(25.0, counter.brightness!!, 0.0)
+        // Minuteur de 45 min démarré à l'instant de la première lecture.
+        assertEquals(5000.0, counter.timerStartedAt!!, 0.0)
+        assertEquals(2700.0, counter.timerDuration!!, 0.0)
+        val cabinet = demoLightStatus(kitchen(3), nowEpochSec = 5000.0)
+        assertTrue(cabinet.output); assertEquals(100.0, cabinet.brightness!!, 0.0)
+        assertEquals(null, cabinet.timerDuration)
+    }
 }

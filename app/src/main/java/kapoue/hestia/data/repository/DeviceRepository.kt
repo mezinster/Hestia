@@ -2788,6 +2788,20 @@ class DeviceRepository @Inject constructor(
         )
         position++
 
+        // Variateur multi-light démo (contrôleur RGBW en mode light, 4 canaux) : montre la ligne de
+        // cercles du Tableau sans matériel — états variés, voir LightRepository/demoLightStatus.
+        val kitchenIp = "203.0.113.11"
+        listOf("Island", "Table", "Counter", "Cabinet").forEachIndexed { lightId, name ->
+            deviceDao.insert(
+                Device(
+                    name = name, deviceName = "Kitchen Lights", ipAddress = kitchenIp, switchId = lightId,
+                    type = DeviceType.LAMP, model = "Demo", supportsSwitch = false, isLight = true,
+                    hasScripting = true, hasPowerMetering = true, position = position,
+                ),
+            )
+            position++
+        }
+
         // Bloc multi-canaux (façon vraie multiprise) — mix d'états sur les 4 canaux, voir
         // demoStripStatus.
         val stripIp = "203.0.113.10"
