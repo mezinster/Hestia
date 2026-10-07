@@ -178,6 +178,8 @@
     <string name="add_device_led_loading">Проверка…</string>
     <string name="add_device_led_unavailable">Не поддерживается этим устройством или оно недоступно.</string>
     <string name="device_type_plug">Розетка</string>
+    <!-- Choix du type à l'ajout : un relais (1PM, Pro…) passe aussi par ce type -->
+    <string name="device_type_plug_or_relay">Розетка / реле</string>
     <string name="device_type_lamp">Лампа</string>
     <string name="device_type_sensor">Датчик</string>
     <string name="device_type_smoke_detector">Датчик дыма</string>

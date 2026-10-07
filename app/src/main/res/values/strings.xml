@@ -186,6 +186,8 @@
     <string name="add_device_led_loading">Checking…</string>
     <string name="add_device_led_unavailable">Unavailable on this device, or unreachable.</string>
     <string name="device_type_plug">Plug</string>
+    <!-- Choix du type à l'ajout : un relais (1PM, Pro…) passe aussi par ce type -->
+    <string name="device_type_plug_or_relay">Plug / relay</string>
     <string name="device_type_lamp">Lamp</string>
     <string name="device_type_sensor">Sensor</string>
     <string name="device_type_smoke_detector">Smoke detector</string>

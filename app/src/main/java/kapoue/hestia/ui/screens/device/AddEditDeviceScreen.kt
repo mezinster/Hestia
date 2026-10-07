@@ -595,7 +595,9 @@ private fun DeviceTypeTile(
 }
 
 private fun deviceTypeLabel(type: DeviceType): Int = when (type) {
-    DeviceType.PLUG -> R.string.device_type_plug
+    // Tout appareil à relais marche/arrêt passe par ce type, pas seulement une prise : le dire
+    // évite qu'un possesseur de relais (1PM, Pro…) croie son appareil non pris en charge.
+    DeviceType.PLUG -> R.string.device_type_plug_or_relay
     DeviceType.LAMP -> R.string.device_type_lamp
     DeviceType.SENSOR -> R.string.device_type_sensor
     DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector

@@ -180,6 +180,8 @@
     <string name="add_device_led_loading">Vérification…</string>
     <string name="add_device_led_unavailable">Indisponible sur cet appareil, ou injoignable.</string>
     <string name="device_type_plug">Prise</string>
+    <!-- Choix du type à l'ajout : un relais (1PM, Pro…) passe aussi par ce type -->
+    <string name="device_type_plug_or_relay">Prise / relais</string>
     <string name="device_type_lamp">Lampe</string>
     <string name="device_type_sensor">Capteur</string>
     <string name="device_type_smoke_detector">Détecteur de fumée</string>
