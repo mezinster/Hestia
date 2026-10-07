@@ -277,3 +277,8 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] RGBW en mode light : une seule ligne de 4 cercles (nom du groupe, état de chaque canal en texte, décompte du minuteur) ; tap sur un cercle → Détail du canal.
 - [ ] Mise à jour par-dessus une version sans variateurs (base v17) : aucun appareil perdu.
 - [ ] Mode démo : « Bedroom Dimmer » allumé à 40 % au départ ; bouton et curseur changent l'état.
+- [ ] Planning de variateur : créé depuis le Détail (sans présence ni coupure proposées) → visible dans l'interface web de l'appareil (Schedules) avec `Light.Set` ; la lampe s'allume (dernier niveau) et s'éteint aux heures prévues, appli fermée.
+- [ ] Tuile / ligne multi-light : « Allumée · 40 % · programmée jusqu'à 22:00 » pendant le planning ; un minuteur en cours affiche son décompte à la place.
+- [ ] Extinction depuis l'appli ou le bouton mural pendant un planning récurrent → désactivé pour aujourd'hui (repris demain).
+- [ ] Pause / reprise / modification / suppression d'un planning de variateur ; suppression pendant le créneau → la lampe s'éteint.
+- [ ] Non-régression : plannings du Plug M de référence (relais) inchangés — création, relecture, extinction, coupure sur seuil, présence.

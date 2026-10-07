@@ -2863,7 +2863,7 @@ class DeviceRepository @Inject constructor(
      */
     private fun demoPlannings(device: Device): List<Planning> {
         val suffix = device.ipAddress.substringAfterLast('.').toIntOrNull()
-        if (suffix != 5 && suffix != 6) return emptyList()
+        if (suffix != 5 && suffix != 6 && suffix != 7) return emptyList()
         val start = LocalTime.now().minusHours(1)
         val end = LocalTime.now().plusHours(1)
         val everyDay = (0..6).toSet()

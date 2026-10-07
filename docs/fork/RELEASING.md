@@ -24,6 +24,11 @@ git push origin fork/main
 La configuration du fork n'ajoute que des lignes (jamais de modification de lignes amont) : une
 synchronisation ne devrait pas produire de conflit à cause d'elle.
 
+Conflits attendus à la synchronisation (plannings des variateurs, lot C3) : `ShellyRpcClient.scheduleCreate`
+et `DeviceRepository.reconstructPlannings` ont une signature générique (`control, channelId` au lieu de
+`switchId`) ; `applyIfAlreadyActive`/`deletePlanning` appellent `setChannelAt`. Si l'amont modifie ces
+fonctions, reporter ses changements en gardant ces paramètres.
+
 ## 2. Numérotation
 
 - Tag : `fork/<versionName amont>-fork.<N>`, p. ex. `fork/2.16.1-fork.3`.
