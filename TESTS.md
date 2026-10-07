@@ -254,3 +254,16 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Mention d'indépendance présente dans l'À propos, le README et la fiche F-Droid
 - [ ] Aucun mot de passe ni donnée sensible dans le journal de diagnostic
 - [ ] Installation propre de l'APK release sur les deux appareils, parcours complet refait
+
+## Variateurs (fork, 2026-10-07)
+
+- [ ] Ajout d'un variateur (Dimmer Gen3/Gen4, Plus Wall Dimmer…) via la tuile « Variateur » : ajouté, nom lu sur l'appareil.
+- [ ] Même appareil ajouté via « Prise / relais » : même résultat (ce sont les composants qui décident).
+- [ ] Plus RGBW PM en mode light : 4 tuiles séparées. En mode rgb/rgbw : refus « mode couleur ».
+- [ ] Tuile : « Allumée · N % » / « Éteinte » / « Indisponible » ; bouton marche/arrêt OK ; tap → Détail.
+- [ ] Détail : curseur, envoi au relâchement seulement ; lampe éteinte + curseur → s'allume à ce niveau.
+- [ ] Appareil débranché pendant un réglage : message « injoignable », curseur revient à la valeur réelle.
+- [ ] Aucun minuteur / planning / présence proposé pour un variateur.
+- [ ] Réglages : variateur « En ligne » quand il répond.
+- [ ] Mise à jour par-dessus une version sans variateurs (base v17) : aucun appareil perdu.
+- [ ] Mode démo : « Bedroom Dimmer » allumé à 40 %.
