@@ -79,6 +79,32 @@ internal fun coverJobNeedsNtfyRewrite(job: ScheduleJob, expected: JsonObject?): 
     return actual != expected
 }
 
+/** Décision de resynchronisation ntfy pour un job de volet. */
+internal enum class NtfyResyncStep { Keep, Rewrite, DeleteOnly }
+
+/**
+ * Plan par id de job. Un job déjà conforme est conservé ; un job périmé dont une copie conforme
+ * existe déjà (même créneau, même action, autre job) est seulement supprimé, sinon réécrit.
+ * Évite d'accumuler des doublons quand la suppression d'un ancien job a échoué au passage précédent.
+ * [expectedFor] donne l'appel ntfy attendu selon l'action (nul = ntfy désactivé).
+ */
+internal fun coverNtfyResyncPlan(
+    jobs: List<ScheduleJob>,
+    coverId: Int,
+    expectedFor: (CoverEventAction) -> JsonObject?,
+): Map<Int, NtfyResyncStep> {
+    val entries = jobs.mapNotNull { job ->
+        coverEventsFrom(listOf(job), coverId).firstOrNull()?.let { Triple(job, it, !coverJobNeedsNtfyRewrite(job, expectedFor(it.action))) }
+    }
+    return entries.associate { (job, event, conform) ->
+        job.id to when {
+            conform -> NtfyResyncStep.Keep
+            entries.any { (other, e, ok) -> ok && other.id != job.id && e.action == event.action && e.sameSlotAs(event) } -> NtfyResyncStep.DeleteOnly
+            else -> NtfyResyncStep.Rewrite
+        }
+    }
+}
+
 /**
  * Programmation des volets (lot S2, 2026-10-07, fork) : les événements sont des plannings natifs
  * exécutés par l'appareil ; Hestia ne les stocke pas, hormis le mémo des événements en pause.
@@ -249,14 +275,17 @@ class CoverScheduleRepository @Inject constructor(
             else -> { fail(device, "resynchronisation ntfy (lecture)", listed); return false }
         }
         val now = LocalDateTime.now()
+        val plan = coverNtfyResyncPlan(jobs, device.switchId) { action -> ntfyTexts(device, action)?.let { coverNtfyCall(it) } }
         var ok = true
         for (job in jobs) {
-            val event = coverEventsFrom(listOf(job), device.switchId).firstOrNull() ?: continue
+            val step = plan[job.id] ?: continue
+            if (step == NtfyResyncStep.Keep) continue
+            val event = coverEventsFrom(listOf(job), device.switchId).first()
             if (event.isExpiredOnce(now)) continue
-            val expected = ntfyTexts(device, event.action)?.let { coverNtfyCall(it) }
-            if (!coverJobNeedsNtfyRewrite(job, expected)) continue
-            val c = create(ip, device, event)
-            if (c !is RpcResult.Success) { fail(device, "resynchronisation ntfy (création)", c); ok = false; continue }
+            if (step == NtfyResyncStep.Rewrite) {
+                val c = create(ip, device, event)
+                if (c !is RpcResult.Success) { fail(device, "resynchronisation ntfy (création)", c); ok = false; continue }
+            }
             val d = scheduleRpc.delete(ip, job.id)
             if (d !is RpcResult.Success) {
                 fail(device, "resynchronisation ntfy (suppression de l'ancien job ${job.id})", d)

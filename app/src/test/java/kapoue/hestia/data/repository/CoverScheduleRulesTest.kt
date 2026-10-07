@@ -16,6 +16,7 @@ import org.junit.Assert.assertNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kapoue.hestia.data.rpc.coverTimespec
 import org.junit.Test
 
 /** Règles de validation avant création d'événements de volet (lot S2, 2026-10-07). */
@@ -102,4 +103,34 @@ class CoverScheduleRulesTest {
     @Test
     fun `ntfy actif sans appel HTTP a ajouter`() =
         assertTrue(coverJobNeedsNtfyRewrite(job(action), ntfy()))
+
+    // --- Plan de resynchronisation ntfy ---
+    private fun jobAt(id: Int, hour: Int, topic: String?) = ScheduleJob(
+        id, true, coverTimespec(ev(hour)),
+        listOfNotNull(action, topic?.let { ntfy(topic = it) }).map { call(it) },
+    )
+    private val expectedOn: (CoverEventAction) -> JsonObject? = { ntfy() }
+
+    @Test
+    fun `perime avec copie correcte du meme creneau est supprime seul`() {
+        val plan = coverNtfyResyncPlan(listOf(jobAt(1, 7, "ancien"), jobAt(2, 7, "t")), 0, expectedOn)
+        assertEquals(NtfyResyncStep.DeleteOnly, plan[1]); assertEquals(NtfyResyncStep.Keep, plan[2])
+    }
+
+    @Test
+    fun `perime seul est reecrit`() {
+        assertEquals(NtfyResyncStep.Rewrite, coverNtfyResyncPlan(listOf(jobAt(1, 7, "ancien")), 0, expectedOn)[1])
+    }
+
+    @Test
+    fun `tout correct est conserve`() {
+        val plan = coverNtfyResyncPlan(listOf(jobAt(1, 7, "t"), jobAt(2, 8, "t")), 0, expectedOn)
+        assertTrue(plan.values.all { it == NtfyResyncStep.Keep })
+    }
+
+    @Test
+    fun `perime d'un creneau et correct d'un autre creneau est reecrit`() {
+        val plan = coverNtfyResyncPlan(listOf(jobAt(1, 7, "ancien"), jobAt(2, 8, "t")), 0, expectedOn)
+        assertEquals(NtfyResyncStep.Rewrite, plan[1]); assertEquals(NtfyResyncStep.Keep, plan[2])
+    }
 }
