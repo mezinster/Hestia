@@ -106,4 +106,38 @@ class LightModelsTest {
         assertNull(lightTimerRemainingSec(timerEndsAtElapsed = 10_000L, elapsedNow = 10_000L))
         assertNull(lightTimerRemainingSec(timerEndsAtElapsed = null, elapsedNow = 10_000L))
     }
+
+    private val evening = kapoue.hestia.domain.model.Planning(startHour = 18, startMinute = 0, endHour = 22, endMinute = 0, days = (0..6).toSet())
+
+    @Test
+    fun `le minuteur l'emporte sur le planning`() {
+        assertEquals(LightOnDetail.Timer(90), lightOnDetail(timerRemainingSec = 90, activePlanning = evening))
+        assertEquals(LightOnDetail.Planned(22 * 60), lightOnDetail(timerRemainingSec = null, activePlanning = evening))
+        assertEquals(LightOnDetail.None, lightOnDetail(timerRemainingSec = null, activePlanning = null))
+    }
+
+    @Test
+    fun `planning actif sauf presence ou desactive aujourd'hui`() {
+        val presence = evening.copy(marginMinutes = 30)
+        assertEquals(evening, activeLightPlanning(listOf(presence, evening), planningDisabledToday = false) { true })
+        assertNull(activeLightPlanning(listOf(evening), planningDisabledToday = true) { true })
+        val once = evening.copy(date = java.time.LocalDate.of(2026, 10, 8))
+        assertEquals(once, activeLightPlanning(listOf(once), planningDisabledToday = true) { true })
+        assertNull(activeLightPlanning(listOf(evening), planningDisabledToday = false) { false })
+    }
+
+    @Test
+    fun `seul un vrai appui bouton pendant un planning recurrent le desactive`() {
+        assertTrue(disablesPlanningToday(onNow = false, buttonSource = true, wasOn = true, activeRecurringPlanning = true))
+        assertFalse(disablesPlanningToday(onNow = false, buttonSource = true, wasOn = false, activeRecurringPlanning = true))
+        assertFalse(disablesPlanningToday(onNow = false, buttonSource = false, wasOn = true, activeRecurringPlanning = true))
+        assertFalse(disablesPlanningToday(onNow = true, buttonSource = true, wasOn = true, activeRecurringPlanning = true))
+        assertFalse(disablesPlanningToday(onNow = false, buttonSource = true, wasOn = true, activeRecurringPlanning = false))
+    }
+
+    @Test
+    fun `la source de l'appareil est conservee`() {
+        val status = RpcResult.Success(LightStatusResult(id = 0, output = false, source = "button")).toLightStatus()
+        assertEquals("button", (status as LightStatus.Online).source)
+    }
 }

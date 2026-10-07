@@ -235,6 +235,9 @@ class DashboardViewModel @Inject constructor(
                             // Rattrapage best-effort du nom (variateurs C1) : même principe que pour un
                             // relais, détaché du cycle de relevé.
                             if (lightStatus is LightStatus.Online) {
+                                // Rattrapage ntfy des plannings du variateur (leurs tâches embarquent
+                                // l'appel ntfy), comme pour un relais.
+                                viewModelScope.launch { repository.ntfyCatchUpIfNeeded(device) }
                                 viewModelScope.launch { repository.nameCatchUpIfNeeded(device) }
                             }
                             device.id to lightStatus
@@ -247,7 +250,7 @@ class DashboardViewModel @Inject constructor(
                     }.awaitAll()
                 }
                 val planningResults = async {
-                    devices.filter { it.supportsSwitch }.map { device ->
+                    devices.filter { it.supportsSwitch || it.isLight }.map { device ->
                         async { device.id to repository.getPlannings(device).getOrNull().orEmpty() }
                     }.awaitAll()
                 }
@@ -256,6 +259,7 @@ class DashboardViewModel @Inject constructor(
                 val previousStatuses = statuses.value
                 statuses.value = statusResults.await().toMap()
                 sensorStatuses.value = sensorResults.await().toMap()
+                val previousLightStatuses = lightStatuses.value
                 lightStatuses.value = lightResults.await().toMap()
                 presences.value = presenceResults.await()
                     .mapNotNull { (id, info) -> info?.let { id to it } }
@@ -279,12 +283,21 @@ class DashboardViewModel @Inject constructor(
                 // sur l'appareil (voir CLAUDE.md), l'utilisateur peut toujours couper à la main.
                 devices.filter { it.supportsSwitch }.forEach { device ->
                     val status = statuses.value[device.id] as? TileStatus.Online ?: return@forEach
-                    if (status.output || !isButtonSource(status.source)) return@forEach
                     val wasOn = (previousStatuses[device.id] as? TileStatus.Online)?.output == true
-                    if (!wasOn) return@forEach
                     val activePlanning = plannings.value[device.id]
                         ?.firstOrNull { !it.isPresence && !it.once && it.isActiveNow() }
-                    if (activePlanning != null) appPreferences.markPlanningDisabledToday(device.id)
+                    if (disablesPlanningToday(status.output, isButtonSource(status.source), wasOn, activePlanning != null)) {
+                        appPreferences.markPlanningDisabledToday(device.id)
+                    }
+                }
+                // Même détection pour un variateur (lot C3) : appui mural pendant un planning récurrent.
+                devices.filter { it.isLight }.forEach { device ->
+                    val status = lightStatuses.value[device.id] as? LightStatus.Online ?: return@forEach
+                    val wasOn = (previousLightStatuses[device.id] as? LightStatus.Online)?.on == true
+                    val activePlanning = plannings.value[device.id]?.firstOrNull { !it.isPresence && !it.once && it.isActiveNow() }
+                    if (disablesPlanningToday(status.on, isButtonSource(status.source), wasOn, activePlanning != null)) {
+                        appPreferences.markPlanningDisabledToday(device.id)
+                    }
                 }
                 // Même détection pour un appui bouton pendant une présence — mais contrairement à
                 // Planning, le script tourne en continu et réimposerait l'état voulu au tick
@@ -541,6 +554,11 @@ class DashboardViewModel @Inject constructor(
         if (!_permissionUsable.value) return
         viewModelScope.launch {
             logger.info(DiagnosticLogger.UI, "Variateur ${device.ipAddress}#${device.switchId} → ${if (turnOn) "allumé" else "éteint"}")
+            // Même règle que toggle() : éteindre pendant un planning récurrent le désactive pour la journée.
+            if (!turnOn) {
+                val activePlanning = plannings.value[device.id]?.firstOrNull { !it.isPresence && !it.once && it.isActiveNow() }
+                if (activePlanning != null) appPreferences.markPlanningDisabledToday(device.id)
+            }
             lightRepository.set(device, on = turnOn, brightness = null)
             lightStatuses.value = lightStatuses.value + (device.id to lightRepository.getStatus(device).toLightStatus())
         }

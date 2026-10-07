@@ -120,7 +120,7 @@ private fun MiniLightCircle(tile: TileUiState, elapsedNow: Long, onClick: () -> 
             overflow = TextOverflow.Ellipsis,
         )
         Text(
-            text = lightStateLabel(status, elapsedNow),
+            text = lightStateLabel(status, elapsedNow, activeLightPlanning(tile.plannings, tile.planningDisabledToday)),
             color = MaterialTheme.colorScheme.onSurface,
             fontWeight = FontWeight.Medium,
             style = MaterialTheme.typography.labelSmall,

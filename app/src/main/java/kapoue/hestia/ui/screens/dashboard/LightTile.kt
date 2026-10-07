@@ -51,7 +51,7 @@ fun LightTile(
         status is LightStatus.Offline -> colors.offlineBg to colors.offlineText
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val label = lightStateLabel(status, elapsedNow)
+    val label = lightStateLabel(status, elapsedNow, activeLightPlanning(tile.plannings, tile.planningDisabledToday))
     Surface(color = bg, shape = RoundedCornerShape(12.dp), onClick = onOpenDetail, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(tile.device.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)

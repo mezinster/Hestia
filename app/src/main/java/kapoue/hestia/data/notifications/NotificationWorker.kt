@@ -68,7 +68,7 @@ class NotificationWorker(
             // getPlannings fusionne plannings précis et simulations de présence depuis la fusion
             // du 2026-08-18 (gated en interne sur hasScripting pour la présence) — une seule
             // boucle suffit désormais, [Planning.isPresence] choisit juste le texte de notif.
-            if (device.supportsSwitch) {
+            if (device.supportsSwitch || device.isLight) {
                 for (p in repository.getPlannings(device).getOrNull().orEmpty()) {
                     val (startKind, startText) = if (p.isPresence) "pr-start" to R.string.notif_presence_started else "pl-start" to R.string.notif_planning_started
                     val (endKind, endText) = if (p.isPresence) "pr-end" to R.string.notif_presence_ended else "pl-end" to R.string.notif_planning_ended

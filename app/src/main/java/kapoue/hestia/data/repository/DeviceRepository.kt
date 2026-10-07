@@ -18,12 +18,17 @@ import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
 import kapoue.hestia.data.presence.SmokeRelayScriptGenerator
 import kapoue.hestia.data.presence.TimerNotifyScriptGenerator
+import kapoue.hestia.data.rpc.ChannelControl
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.data.rpc.LightRpcClient
 import kapoue.hestia.data.rpc.ShellyRpcClient
+import kapoue.hestia.data.rpc.actionFor
+import kapoue.hestia.data.rpc.channelControlFor
+import kapoue.hestia.data.rpc.hasNativePlannings
+import kapoue.hestia.data.rpc.planningRequestAllowed
 import kapoue.hestia.data.rpc.errorOrNull
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.rpc.model.ScheduleJob
@@ -1239,7 +1244,7 @@ class DeviceRepository @Inject constructor(
         val (ip, r) = withIp(device) { i -> rpcClient.scheduleList(i) }
         val native = when (r) {
             is RpcResult.Success -> {
-                val all = reconstructPlannings(r.value.jobs, device.switchId)
+                val all = reconstructPlannings(r.value.jobs, channelControlFor(device), device.switchId)
                 val (expired, active) = all.partition { it.isExpiredOnce() }
                 if (expired.isNotEmpty()) {
                     logger.info(DiagnosticLogger.RPC, "Nettoyage de ${expired.size} planning(s) Unique expiré(s)")
@@ -1260,7 +1265,8 @@ class DeviceRepository @Inject constructor(
             is RpcResult.RpcError -> return r
             is RpcResult.Failure -> return r
         }
-        if (!device.hasScripting) return RpcResult.Success(native)
+        // Présence = script `Switch` : jamais pour un variateur (lot C3).
+        if (!device.hasScripting || device.isLight) return RpcResult.Success(native)
         val presence = getPresenceWindows(device).getOrNull().orEmpty().map { w ->
             Planning(
                 startHour = w.startHour, startMinute = w.startMinute,
@@ -1290,7 +1296,7 @@ class DeviceRepository @Inject constructor(
 
     /**
      * Reconstruit les plannings à partir des programmes cron. On ne retient que les jobs
-     * « Switch.Set » du bon canal, puis on apparie chaque allumage à son extinction :
+     * de l'action du canal ([ChannelControl]), puis on apparie chaque allumage à son extinction :
      * - **créneau récurrent de journée** : même jeu de jours, extinction plus tard dans la journée ;
      * - **récurrent de nuit** (passe minuit) : extinction le matin, sur les jours **décalés au
      *   lendemain** (voir la création) ;
@@ -1300,12 +1306,11 @@ class DeviceRepository @Inject constructor(
      * (garanti à la création), l'appariement reste sans ambiguïté pour les plannings créés par Hestia.
      * Un éventuel second appel `Script.Start` (job allumage) donne [Planning.cutoffScriptId].
      */
-    private fun reconstructPlannings(jobs: List<ScheduleJob>, switchId: Int): List<Planning> {
+    private fun reconstructPlannings(jobs: List<ScheduleJob>, control: ChannelControl, channelId: Int): List<Planning> {
         data class Ev(val jobId: Int, val minutes: Int, val on: Boolean, val days: Set<Int>, val date: LocalDate?, val scriptId: Int?)
         val events = jobs.mapNotNull { job ->
-            val call = job.calls.firstOrNull { it.method == "Switch.Set" } ?: return@mapNotNull null
+            val call = job.actionFor(control, channelId) ?: return@mapNotNull null
             val params = call.params ?: return@mapNotNull null
-            if (params["id"]?.jsonPrimitive?.intOrNull != switchId) return@mapNotNull null
             val on = params["on"]?.jsonPrimitive?.booleanOrNull ?: return@mapNotNull null
             val parsed = ScheduleCodec.parse(job.timespec) ?: return@mapNotNull null
             val scriptCall = job.calls.firstOrNull { it.method == "Script.Start" || it.method == "Script.Stop" }
@@ -1366,6 +1371,8 @@ class DeviceRepository @Inject constructor(
         cutoffThresholdW: Int? = null,
         marginMinutes: Int? = null,
     ): CreatePlanningResult {
+        // Filet de sécurité (lot C3) : l'interface ne propose jamais présence ni coupure pour un variateur.
+        if (!planningRequestAllowed(device, cutoffThresholdW, marginMinutes)) return CreatePlanningResult.Error
         // Un Unique déjà révolu serait créé sur l'appareil puis supprimé quelques secondes après
         // par le nettoyage automatique (getPlannings) — sans retour à l'utilisateur. On le refuse net.
         if (date != null && !onceEndAt(startHour, startMinute, endHour, endMinute, date).isAfter(LocalDateTime.now())) {
@@ -1426,7 +1433,7 @@ class DeviceRepository @Inject constructor(
         }
         val ntfy = ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)
         val onId = rpcClient.scheduleCreate(
-            ip, onTimespec, device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
+            ip, onTimespec, channelControlFor(device), device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
             ntfyTopic = ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.startBody,
         ).getOrNull()?.id
         if (onId == null) {
@@ -1434,7 +1441,7 @@ class DeviceRepository @Inject constructor(
             return CreatePlanningResult.Error
         }
         val offId = rpcClient.scheduleCreate(
-            ip, offTimespec, device.switchId, on = false,
+            ip, offTimespec, channelControlFor(device), device.switchId, on = false,
             // Avec seuil : le script décide lui-même de notifier la fin (planEnd) — pas de ntfy
             // dans le programme, qui préviendrait à 18 h même après une coupure sur seuil
             // (retour David, 2026-09-28). Sans seuil : inchangé, le programme notifie seul.
@@ -1477,8 +1484,15 @@ class DeviceRepository @Inject constructor(
         date: LocalDate?,
     ) {
         val nowActive = Planning(startHour, startMinute, endHour, endMinute, days, date = date).isActiveNow()
-        if (nowActive) rpcClient.setSwitch(ip, device.switchId, on = true)
+        if (nowActive) setChannelAt(ip, device, on = true)
     }
+
+    /** Allume/éteint le canal selon sa nature (lot C3) : `Switch.Set` ou `Light.Set` (dernier niveau). */
+    private suspend fun setChannelAt(ip: String, device: Device, on: Boolean): RpcResult<*> =
+        when (channelControlFor(device)) {
+            ChannelControl.SWITCH -> rpcClient.setSwitch(ip, device.switchId, on = on)
+            ChannelControl.LIGHT -> lightRpc.setLight(ip, device.switchId, on = on, brightness = null)
+        }
 
     private data class NtfyPlanningTexts(val topic: String, val title: String, val startBody: String, val endBody: String)
 
@@ -1566,6 +1580,8 @@ class DeviceRepository @Inject constructor(
         cutoffThresholdW: Int? = null,
         marginMinutes: Int? = null,
     ): CreatePlanningResult {
+        // Filet de sécurité (lot C3) : l'interface ne propose jamais présence ni coupure pour un variateur.
+        if (!planningRequestAllowed(device, cutoffThresholdW, marginMinutes)) return CreatePlanningResult.Error
         if (date != null && !onceEndAt(startHour, startMinute, endHour, endMinute, date).isAfter(LocalDateTime.now())) {
             return CreatePlanningResult.PastOnce
         }
@@ -1629,7 +1645,7 @@ class DeviceRepository @Inject constructor(
         }
         val ntfy = ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)
         val onId = rpcClient.scheduleCreate(
-            ip, onTimespec, device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
+            ip, onTimespec, channelControlFor(device), device.switchId, on = true, scriptCallMethod = "Script.Start", scriptId = scriptId,
             ntfyTopic = ntfy?.topic, ntfyTitle = ntfy?.title, ntfyBody = ntfy?.startBody,
         ).getOrNull()?.id
         if (onId == null) {
@@ -1637,7 +1653,7 @@ class DeviceRepository @Inject constructor(
             return CreatePlanningResult.Error
         }
         val offId = rpcClient.scheduleCreate(
-            ip, offTimespec, device.switchId, on = false,
+            ip, offTimespec, channelControlFor(device), device.switchId, on = false,
             // Avec seuil : le script décide lui-même de notifier la fin (planEnd) — pas de ntfy
             // dans le programme, qui préviendrait à 18 h même après une coupure sur seuil
             // (retour David, 2026-09-28). Sans seuil : inchangé, le programme notifie seul.
@@ -1716,7 +1732,7 @@ class DeviceRepository @Inject constructor(
             val windows = getPresenceWindows(device).getOrNull().orEmpty()
             val result = setPresenceWindows(device, windows.filterNot { it.matchesPlanning(planning) })
             if (result is RpcResult.Success && planning.isActiveNow()) {
-                val (_, set) = withIp(device) { i -> rpcClient.setSwitch(i, device.switchId, on = false) }
+                val (_, set) = withIp(device) { i -> setChannelAt(i, device, on = false) }
                 set.errorOrNull()?.let { return it }
             }
             return result
@@ -1728,7 +1744,7 @@ class DeviceRepository @Inject constructor(
         rpcClient.scheduleDelete(ip, offJobId).errorOrNull()?.let { return it }
         planning.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
         if (planning.isActiveNow()) {
-            rpcClient.setSwitch(ip, device.switchId, on = false)
+            setChannelAt(ip, device, on = false)
         }
         return RpcResult.Success(Unit)
     }
@@ -2442,7 +2458,7 @@ class DeviceRepository @Inject constructor(
     private suspend fun resyncNtfyForDevice(device: Device): Boolean {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return true
         var reachable = true
-        if (device.supportsSwitch) {
+        if (hasNativePlannings(device)) {
             // getPlannings fusionne plannings précis et simulations de présence : ce seul relevé
             // couvre désormais les deux (plus besoin d'un second passage par getPresenceWindows).
             when (val r = getPlannings(device)) {
@@ -2452,7 +2468,7 @@ class DeviceRepository @Inject constructor(
                 is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
             }
         }
-        if (device.hasScripting) {
+        if (device.hasScripting && !device.isLight) {
             if (reachable) {
                 val buttonConfig = getButtonTimerConfig(device)
                 if (buttonConfig.enabled) {
@@ -2848,7 +2864,7 @@ class DeviceRepository @Inject constructor(
      */
     private fun demoPlannings(device: Device): List<Planning> {
         val suffix = device.ipAddress.substringAfterLast('.').toIntOrNull()
-        if (suffix != 5 && suffix != 6) return emptyList()
+        if (suffix != 5 && suffix != 6 && suffix != 7) return emptyList()
         val start = LocalTime.now().minusHours(1)
         val end = LocalTime.now().plusHours(1)
         val everyDay = (0..6).toSet()

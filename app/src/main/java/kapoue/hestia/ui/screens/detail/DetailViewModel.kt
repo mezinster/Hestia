@@ -293,6 +293,7 @@ class DetailViewModel @Inject constructor(
         if (dev.isLight) {
             _lightStatus.value = lightRepository.getStatus(dev).toLightStatus()
             _activeIp.value = repository.activeIp(dev)
+            loadPlannings(dev)
             return
         }
         val status = repository.getStatus(dev).toTileStatus()
