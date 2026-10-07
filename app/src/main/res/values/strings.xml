@@ -189,6 +189,7 @@
     <!-- Choix du type à l'ajout : un relais (1PM, Pro…) passe aussi par ce type -->
     <string name="device_type_plug_or_relay">Plug / relay</string>
     <string name="device_type_dimmer">Dimmer</string>
+    <string name="device_type_shutter">Shutter</string>
     <string name="device_type_lamp">Lamp</string>
     <string name="device_type_sensor">Sensor</string>
     <string name="device_type_smoke_detector">Smoke detector</string>
@@ -549,4 +550,28 @@
     <string name="diagnostic_report_devices_header">Devices:</string>
     <string name="diagnostic_report_device_line">- %1$s (%2$s, %3$s) — firmware %4$s</string>
     <string name="diagnostic_report_firmware_unreachable">unreachable</string>
+    <!-- Tableau : tuile volet (S1) -->
+    <string name="cover_state_open">Open</string>
+    <string name="cover_state_closed">Closed</string>
+    <string name="cover_state_opening">Opening…</string>
+    <string name="cover_state_opening_at">Opening… %1$d%%</string>
+    <string name="cover_state_closing">Closing…</string>
+    <string name="cover_state_closing_at">Closing… %1$d%%</string>
+    <string name="cover_state_stopped">Stopped</string>
+    <string name="cover_state_stopped_at">Stopped at %1$d%%</string>
+    <string name="cover_state_calibrating">Calibrating…</string>
+    <string name="cover_open">Open</string>
+    <string name="cover_stop">Stop</string>
+    <string name="cover_close">Close</string>
+    <string name="cover_position">Position: %1$d%%</string>
+    <string name="cover_needs_calibration">Position control needs calibration.</string>
+    <string name="cover_calibrate">Calibrate</string>
+    <string name="cover_calibrate_title">Calibrate the shutter?</string>
+    <string name="cover_calibrate_message">The motor will fully open and close the shutter (about 1–2 minutes). Keep the area clear.</string>
+    <string name="cover_fault_obstruction">Stopped: obstruction detected</string>
+    <string name="cover_fault_overpower">Stopped: power too high</string>
+    <string name="cover_fault_overtemp">Stopped: device too hot</string>
+    <string name="cover_fault_voltage">Stopped: voltage problem</string>
+    <string name="cover_fault_safety_switch">Stopped: safety switch triggered</string>
+    <string name="cover_fault_generic">The device reported a fault — check it.</string>
 </resources>

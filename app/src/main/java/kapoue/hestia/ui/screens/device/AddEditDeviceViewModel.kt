@@ -9,11 +9,12 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.R
 import kapoue.hestia.core.util.isValidIpv4
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.repository.CoverRepository
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.repository.LightRepository
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcResult
-import kapoue.hestia.data.rpc.isLightOnly
+import kapoue.hestia.data.rpc.hasNoSwitchChannels
 import kapoue.hestia.domain.model.CloudInfo
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
@@ -110,6 +111,7 @@ data class AddEditUiState(
 class AddEditDeviceViewModel @Inject constructor(
     private val repository: DeviceRepository,
     private val lightRepository: LightRepository,
+    private val coverRepository: CoverRepository,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -453,16 +455,17 @@ class AddEditDeviceViewModel @Inject constructor(
                     }
                 }
             }
-            // Ni relais ni light (volet, capteur…) : refus expliqué plutôt qu'un canal 0
+            // Ni relais, ni light, ni volet (capteur…) : refus expliqué plutôt qu'un canal 0
             // supposé dont toutes les commandes échoueraient ensuite.
             caps.unsupportedKind?.let { kind ->
                 _uiState.update { it.copy(isTesting = false, error = kind.toUserMessage()) }
                 return@launch
             }
-            // Variateur seul (light:N, 2026-10-07) : tous ses canaux ajoutés d'un coup, sans écran
-            // de sélection en v1.
-            if (caps.isLightOnly()) {
-                val added = lightRepository.addLightChannels(_uiState.value.name.trim(), ip, caps)
+            // Variateur et/ou volet sans relais (light:N, cover:N) : tous les canaux ajoutés d'un coup,
+            // sans écran de sélection en v1.
+            if (caps.hasNoSwitchChannels()) {
+                val added = lightRepository.addLightChannels(_uiState.value.name.trim(), ip, caps) +
+                    coverRepository.addCoverChannels(_uiState.value.name.trim(), ip, caps)
                 if (added == 0) {
                     _uiState.update { it.copy(isTesting = false, error = UserMessage(R.string.error_device_exists)) }
                 } else {
@@ -554,9 +557,9 @@ class AddEditDeviceViewModel @Inject constructor(
         val added = repository.addChannels(
             name = state.name.trim(),
             ip = state.ipAddress.trim(),
-            // Un relais ajouté via la tuile Variateur reste une prise : la tuile choisie ne change pas
-            // le résultat (spec § 2) — LAMP est réservé aux canaux light.
-            type = if (state.type == DeviceType.LAMP) DeviceType.PLUG else state.type,
+            // Un relais ajouté via la tuile Variateur ou Volet reste une prise : la tuile choisie ne
+            // change pas le résultat (spec § 2) — LAMP est réservé aux canaux light.
+            type = if (state.type == DeviceType.LAMP || state.type == DeviceType.SHUTTER) DeviceType.PLUG else state.type,
             capabilities = caps,
             switchIds = channels,
         )
@@ -565,7 +568,12 @@ class AddEditDeviceViewModel @Inject constructor(
         } else {
             0
         }
-        if (added + addedLights == 0) {
+        val addedCovers = if (caps.coverChannels.isNotEmpty()) {
+            coverRepository.addCoverChannels(state.name.trim(), state.ipAddress.trim(), caps)
+        } else {
+            0
+        }
+        if (added + addedLights + addedCovers == 0) {
             _uiState.update {
                 it.copy(isTesting = false, channelSelection = null, error = UserMessage(R.string.error_device_exists))
             }
@@ -655,4 +663,4 @@ class AddEditDeviceViewModel @Inject constructor(
 }
 
 /** Prise / relais et Variateur partagent la même sonde : ce sont les composants qui décident. */
-private fun DeviceType.usesProbe(): Boolean = this == DeviceType.PLUG || this == DeviceType.LAMP
+private fun DeviceType.usesProbe(): Boolean = this == DeviceType.PLUG || this == DeviceType.LAMP || this == DeviceType.SHUTTER

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Blinds
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
@@ -315,7 +316,7 @@ fun AddEditDeviceScreen(
                     // Sonde automatique (prise uniquement, retour David, 2026-09-23) : débounce
                     // après la dernière frappe, ou touche Suivant du clavier — jamais besoin de
                     // quitter le champ (peu fiable, voir échange).
-                    if ((state.type == DeviceType.PLUG || state.type == DeviceType.LAMP) && state.autoProbing) {
+                    if ((state.type == DeviceType.PLUG || state.type == DeviceType.LAMP || state.type == DeviceType.SHUTTER) && state.autoProbing) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
@@ -326,7 +327,7 @@ fun AddEditDeviceScreen(
                     HorizontalDivider()
 
                     val foundName = state.foundDeviceName
-                    if ((state.type == DeviceType.PLUG || state.type == DeviceType.LAMP) && foundName != null) {
+                    if ((state.type == DeviceType.PLUG || state.type == DeviceType.LAMP || state.type == DeviceType.SHUTTER) && foundName != null) {
                         // Nom déjà trouvé sur la prise par la sonde automatique : plus besoin du
                         // champ Nom éditable, l'appareil fait autorité (retour David, 2026-09-23).
                         Text(
@@ -566,6 +567,17 @@ private fun DeviceTypeTiles(selectedType: DeviceType?, onSelected: (DeviceType) 
                 onClick = { onSelected(DeviceType.LAMP) },
                 modifier = Modifier.weight(1f),
             )
+        }
+        // Deux lignes de deux : à quatre sur une seule ligne (~73 dp par tuile sur 360 dp), les
+        // libellés (« Détecteur de fumée »…) seraient coupés en pleine lettre.
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+            DeviceTypeTile(
+                icon = Icons.Filled.Blinds,
+                label = stringResource(deviceTypeLabel(DeviceType.SHUTTER)),
+                dimmed = selectedType != null && selectedType != DeviceType.SHUTTER,
+                onClick = { onSelected(DeviceType.SHUTTER) },
+                modifier = Modifier.weight(1f),
+            )
             DeviceTypeTile(
                 icon = SmokeDetectorIcon,
                 label = stringResource(deviceTypeLabel(DeviceType.SMOKE_DETECTOR)),
@@ -609,6 +621,7 @@ private fun deviceTypeLabel(type: DeviceType): Int = when (type) {
     DeviceType.LAMP -> R.string.device_type_dimmer
     DeviceType.SENSOR -> R.string.device_type_sensor
     DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector
+    DeviceType.SHUTTER -> R.string.device_type_shutter
 }
 
 /** Exemple affiché en filigrane du champ Nom — « Prise scooter » n'a aucun sens pour un
@@ -782,6 +795,7 @@ private fun nounFor(type: DeviceType): Int = when (type) {
     DeviceType.LAMP -> R.string.device_type_dimmer
     DeviceType.SENSOR -> R.string.device_type_sensor
     DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector
+    DeviceType.SHUTTER -> R.string.device_type_shutter
 }
 
 /**

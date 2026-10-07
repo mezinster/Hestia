@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Blinds
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lightbulb
@@ -104,6 +105,9 @@ fun DetailScreen(
     val lightStatus by viewModel.lightStatus.collectAsStateWithLifecycle()
     val lightRevision by viewModel.lightRevision.collectAsStateWithLifecycle()
     val lightError by viewModel.lightError.collectAsStateWithLifecycle()
+    val coverStatus by viewModel.coverStatus.collectAsStateWithLifecycle()
+    val coverRevision by viewModel.coverRevision.collectAsStateWithLifecycle()
+    val coverError by viewModel.coverError.collectAsStateWithLifecycle()
     val cutoffState by viewModel.cutoffState.collectAsStateWithLifecycle()
     val cutoffCandidates by viewModel.cutoffCandidates.collectAsStateWithLifecycle()
     val cutoffMessage by viewModel.cutoffMessage.collectAsStateWithLifecycle()
@@ -123,6 +127,13 @@ fun DetailScreen(
         cutoffMessage?.let {
             Toast.makeText(context, context.getString(it.res), Toast.LENGTH_LONG).show()
             viewModel.consumeCutoffMessage()
+        }
+    }
+
+    LaunchedEffect(coverError) {
+        coverError?.let {
+            Toast.makeText(context, resources.getString(it.res), Toast.LENGTH_LONG).show()
+            viewModel.consumeCoverError()
         }
     }
 
@@ -184,7 +195,7 @@ fun DetailScreen(
             viewModel.updatePermission(LocalNetworkPermission.isUsable(context))
             while (true) {
                 viewModel.refresh()
-                delay(5_000)
+                delay(viewModel.pollIntervalMs())
             }
         }
     }
@@ -217,6 +228,22 @@ fun DetailScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             DeviceHeader(dev, activeIp ?: dev.ipAddress)
+
+            if (dev.isCover) {
+                // Volet (2026-10-07) : chemin séparé, ni plannings ni présence dans ce lot.
+                HorizontalDivider()
+                CoverSection(
+                    status = coverStatus,
+                    showPower = dev.hasPowerMetering,
+                    revision = coverRevision,
+                    onOpen = { viewModel.coverOpen() },
+                    onStop = { viewModel.coverStop() },
+                    onClose = { viewModel.coverClose() },
+                    onGoTo = { pos -> viewModel.coverGoTo(pos) },
+                    onCalibrate = { viewModel.coverCalibrate() },
+                )
+                return@Column
+            }
 
             if (dev.isLight) {
                 // Variateur (2026-10-07) : chemin séparé. Il a son propre minuteur
@@ -1548,4 +1575,5 @@ private fun iconFor(type: DeviceType): ImageVector = when (type) {
     // représente un vrai détecteur de fumée ; Filled.SmokeFree (essayé un temps) est en fait
     // « interdiction de fumer », confusion vécue en test réel le 2026-08-31.
     DeviceType.SMOKE_DETECTOR -> SmokeDetectorIcon
+    DeviceType.SHUTTER -> Icons.Filled.Blinds
 }

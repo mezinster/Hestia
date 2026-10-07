@@ -17,6 +17,7 @@ import kapoue.hestia.data.notifications.NotificationScheduler
 import kapoue.hestia.data.notifications.NtfyClient
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.repository.CoverRepository
 import kapoue.hestia.data.repository.LightRepository
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.domain.model.AppLanguage
@@ -38,6 +39,7 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val repository: DeviceRepository,
     private val lightRepository: LightRepository,
+    private val coverRepository: CoverRepository,
     private val backupManager: BackupManager,
     private val appPreferences: AppPreferences,
     private val appLocaleManager: AppLocaleManager,
@@ -269,6 +271,8 @@ class SettingsViewModel @Inject constructor(
                     device.type == DeviceType.SMOKE_DETECTOR -> repository.getSensorStatus(device).result is RpcResult.Success
                     // Variateur (2026-10-07) : Switch.GetStatus n'a aucun sens pour un light.
                     device.isLight -> lightRepository.getStatus(device) is RpcResult.Success
+                    // Volet (S1, 2026-10-07) : Cover.GetStatus.
+                    device.isCover -> coverRepository.getStatus(device) is RpcResult.Success
                     else -> repository.getStatus(device).result is RpcResult.Success
                 }
                 _connectivity.value = _connectivity.value + (device.id to online)

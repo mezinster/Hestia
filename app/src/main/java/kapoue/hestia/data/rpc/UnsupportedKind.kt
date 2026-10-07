@@ -7,7 +7,7 @@ package kapoue.hestia.data.rpc
  * comme canal 0 et de laisser toutes les commandes échouer ensuite.
  */
 enum class UnsupportedKind {
-    /** Volet roulant (`cover`), ex. un 2PM configuré en mode volet. */
+    /** Volet roulant (`cover`), ex. un 2PM configuré en mode volet (désormais pris en charge, lot S1 ; conservé pour la classification). */
     COVER,
 
     /** Contrôleur d'éclairage en mode couleur (`rgb`, `rgbw`, `cct`) — les variateurs `light:N` sont pris en charge. */

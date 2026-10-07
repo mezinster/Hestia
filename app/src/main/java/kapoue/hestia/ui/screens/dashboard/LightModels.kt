@@ -50,11 +50,21 @@ internal fun lightTimerEndsAt(startedAt: Double?, duration: Double?, nowEpochSec
     return nowElapsedMs + remainingSec * 1000
 }
 
+/** Nature d'un canal pour le regroupement du Tableau (volets, 2026-10-07). */
+enum class ChannelKind { RELAY, LIGHT, COVER }
+
+internal fun Device.channelKind(): ChannelKind = when {
+    isCover -> ChannelKind.COVER
+    isLight -> ChannelKind.LIGHT
+    else -> ChannelKind.RELAY
+}
+
 /**
  * Clé de regroupement du Tableau : adresse + nature. Les canaux light d'un même contrôleur forment
- * leur propre bandeau, indépendant de celui des relais éventuels de la même adresse.
+ * leur propre bandeau, indépendant de celui des relais éventuels de la même adresse ; les volets
+ * ont aussi leur propre groupe (mais gardent chacun leur tuile, voir [computeGroupFlags]).
  */
-internal fun Device.groupKey(): Pair<String, Boolean> = ipAddress to isLight
+internal fun Device.groupKey(): Pair<String, ChannelKind> = ipAddress to channelKind()
 
 /** Position d'un appareil dans l'affichage regroupé (bandeau multi-canaux). */
 internal data class GroupFlags(val isFirstInGroup: Boolean, val isMultiChannel: Boolean)
@@ -67,10 +77,14 @@ internal data class GroupFlags(val isFirstInGroup: Boolean, val isMultiChannel: 
  */
 internal fun computeGroupFlags(ordered: List<Device>): List<GroupFlags> {
     val sizeByKey = ordered.groupingBy { it.groupKey() }.eachCount()
-    val seen = mutableSetOf<Pair<String, Boolean>>()
+    val seen = mutableSetOf<Pair<String, ChannelKind>>()
     return ordered.map { device ->
         val key = device.groupKey()
-        GroupFlags(isFirstInGroup = seen.add(key), isMultiChannel = sizeByKey.getValue(key) > 1)
+        GroupFlags(
+            isFirstInGroup = seen.add(key),
+            // Les volets ne sont jamais en bandeau : chacun garde sa tuile (S1).
+            isMultiChannel = sizeByKey.getValue(key) > 1 && key.second != ChannelKind.COVER,
+        )
     }
 }
 

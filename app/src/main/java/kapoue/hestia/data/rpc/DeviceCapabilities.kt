@@ -19,6 +19,10 @@ data class DeviceCapabilities(
     val lightChannels: List<Int> = emptyList(),
     /** Nom configuré sur l'appareil pour chaque canal light (`light:N` config `name`). */
     val lightChannelNames: Map<Int, String> = emptyMap(),
+    /** Canaux volet (`cover:N`) exposés — volets roulants, lot S1 (2026-10-07). */
+    val coverChannels: List<Int> = emptyList(),
+    /** Nom configuré sur l'appareil pour chaque canal volet (`cover:N` config `name`). */
+    val coverChannelNames: Map<Int, String> = emptyMap(),
     val hasScripting: Boolean,
     val hasPowerMetering: Boolean,
     /** Clés brutes de `Shelly.GetComponents` (`switch:0`, `cover:0`, `sys`…), pour le diagnostic. */
@@ -26,7 +30,7 @@ data class DeviceCapabilities(
 ) {
     val isMultiChannel: Boolean get() = switchChannels.size > 1
 
-    /** Nature de l'appareil s'il n'a ni relais ni variateur pilotable par Hestia, null sinon. */
+    /** Nature de l'appareil s'il n'a ni relais, ni variateur, ni volet pilotable par Hestia, null sinon. */
     val unsupportedKind: UnsupportedKind?
-        get() = if (switchChannels.isEmpty() && lightChannels.isEmpty()) classifyUnsupported(componentKeys) else null
+        get() = if (switchChannels.isEmpty() && lightChannels.isEmpty() && coverChannels.isEmpty()) classifyUnsupported(componentKeys) else null
 }

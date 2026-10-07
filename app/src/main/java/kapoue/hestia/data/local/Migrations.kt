@@ -209,3 +209,10 @@ val MIGRATION_17_18 = object : Migration(17, 18) {
         db.execSQL("ALTER TABLE devices ADD COLUMN isLight INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/** v18 → v19 : volets (lot S1, fork) — distingue un canal cover d'un relais. Absence = relais. */
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN isCover INTEGER NOT NULL DEFAULT 0")
+    }
+}

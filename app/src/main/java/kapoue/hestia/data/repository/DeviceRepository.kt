@@ -23,6 +23,7 @@ import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.ScheduleCodec
+import kapoue.hestia.data.rpc.CoverRpcClient
 import kapoue.hestia.data.rpc.LightRpcClient
 import kapoue.hestia.data.rpc.ShellyRpcClient
 import kapoue.hestia.data.rpc.actionFor
@@ -95,6 +96,7 @@ class DeviceRepository @Inject constructor(
     private val pausedPlanningDao: PausedPlanningDao,
     private val rpcClient: ShellyRpcClient,
     private val lightRpc: LightRpcClient,
+    private val coverRpc: CoverRpcClient,
     private val cloudClient: ShellyCloudClient,
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
@@ -1266,7 +1268,8 @@ class DeviceRepository @Inject constructor(
             is RpcResult.Failure -> return r
         }
         // Présence = script `Switch` : jamais pour un variateur (lot C3).
-        if (!device.hasScripting || device.isLight) return RpcResult.Success(native)
+        // Un volet n'a pas de script de présence non plus (Switch seulement).
+        if (!device.hasScripting || device.isLight || device.isCover) return RpcResult.Success(native)
         val presence = getPresenceWindows(device).getOrNull().orEmpty().map { w ->
             Planning(
                 startHour = w.startHour, startMinute = w.startMinute,
@@ -2084,10 +2087,11 @@ class DeviceRepository @Inject constructor(
             val channelName = when (channelNameRpc(device)) {
                 ChannelNameRpc.SWITCH -> rpcClient.getSwitchConfig(ip, device.switchId).getOrNull()?.name
                 ChannelNameRpc.LIGHT -> lightRpc.getConfig(ip, device.switchId).getOrNull()?.name
+                ChannelNameRpc.COVER -> coverRpc.getConfig(ip, device.switchId).getOrNull()?.name
                 ChannelNameRpc.NONE -> null
             }?.takeIf { it.isNotBlank() }
             // Un variateur garde le nom de son canal lu à l'ajout : pas de repli sur le nom physique.
-            val resolvedName = channelName ?: physicalName.takeIf { monoChannel && !device.isLight }
+            val resolvedName = channelName ?: physicalName.takeIf { monoChannel && !device.isLight && !device.isCover }
             if (resolvedName != null && resolvedName != updated.name) {
                 updated = updated.copy(name = resolvedName)
             }
@@ -2431,6 +2435,8 @@ class DeviceRepository @Inject constructor(
             ChannelNameRpc.SWITCH -> withIp(device) { ip -> rpcClient.switchSetConfigName(ip, device.switchId, device.name) }
             // Variateur (C1, 2026-10-07) : même principe via Light.SetConfig.
             ChannelNameRpc.LIGHT -> withIp(device) { ip -> lightRpc.setConfigName(ip, device.switchId, device.name) }
+            // Volet (S1, 2026-10-07) : même principe via Cover.SetConfig.
+            ChannelNameRpc.COVER -> withIp(device) { ip -> coverRpc.setConfigName(ip, device.switchId, device.name) }
             ChannelNameRpc.NONE -> return true
         }
         return result is RpcResult.Success
@@ -2468,7 +2474,8 @@ class DeviceRepository @Inject constructor(
                 is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
             }
         }
-        if (device.hasScripting && !device.isLight) {
+        // Le script du minuteur de bouton physique est propre à Switch : ni variateur ni volet.
+        if (device.hasScripting && !device.isLight && !device.isCover) {
             if (reachable) {
                 val buttonConfig = getButtonTimerConfig(device)
                 if (buttonConfig.enabled) {
@@ -2796,6 +2803,19 @@ class DeviceRepository @Inject constructor(
                 Device(
                     name = name, deviceName = "Kitchen Lights", ipAddress = kitchenIp, switchId = lightId,
                     type = DeviceType.LAMP, model = "Demo", supportsSwitch = false, isLight = true,
+                    hasScripting = true, hasPowerMetering = true, position = position,
+                ),
+            )
+            position++
+        }
+
+        // Volets démo (S1, 2026-10-07) — voir CoverRepository/demoCoverStatus : « .12 » calibré à
+        // 60 %, « .13 » non calibré (ouvrir/fermer seulement).
+        listOf("Living Room Shutter" to "203.0.113.12", "Bedroom Shutter" to "203.0.113.13").forEach { (name, ip) ->
+            deviceDao.insert(
+                Device(
+                    name = name, deviceName = name, ipAddress = ip, switchId = 0,
+                    type = DeviceType.SHUTTER, model = "Demo", supportsSwitch = false, isCover = true,
                     hasScripting = true, hasPowerMetering = true, position = position,
                 ),
             )

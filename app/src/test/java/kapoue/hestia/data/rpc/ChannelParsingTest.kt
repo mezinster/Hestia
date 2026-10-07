@@ -44,4 +44,11 @@ class ChannelParsingTest {
     fun `lightswitch ou rgbw ne sont pas confondus avec light`() {
         assertEquals(emptyList<Int>(), parseChannels(listOf(entry("rgbw:0"), entry("lights:0")), "light"))
     }
+
+    @Test
+    fun `un Pro Dual Cover expose deux canaux volet`() {
+        val components = listOf(entry("cover:1", "Chambre"), entry("cover:0"), entry("input:0"))
+        assertEquals(listOf(0, 1), parseChannels(components, "cover"))
+        assertEquals(mapOf(1 to "Chambre"), parseChannelNames(components, "cover"))
+    }
 }

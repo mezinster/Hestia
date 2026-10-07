@@ -18,6 +18,7 @@ class UnsupportedKindTest {
         reportedName = null,
         switchChannels = keys.mapNotNull { Regex("""switch:(\d+)""").matchEntire(it)?.groupValues?.get(1)?.toInt() },
         lightChannels = keys.mapNotNull { Regex("""light:(\d+)""").matchEntire(it)?.groupValues?.get(1)?.toInt() },
+        coverChannels = keys.mapNotNull { Regex("""cover:(\d+)""").matchEntire(it)?.groupValues?.get(1)?.toInt() },
         componentKeys = common + keys,
         hasScripting = true,
         hasPowerMetering = false,
@@ -29,8 +30,8 @@ class UnsupportedKindTest {
     }
 
     @Test
-    fun `un 2PM en mode volet est reconnu comme volet`() {
-        assertEquals(UnsupportedKind.COVER, caps("input:0", "input:1", "cover:0").unsupportedKind)
+    fun `un 2PM en mode volet est pris en charge`() {
+        assertNull(caps("input:0", "input:1", "cover:0").unsupportedKind)
     }
 
     @Test

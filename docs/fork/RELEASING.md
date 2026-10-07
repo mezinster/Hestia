@@ -111,9 +111,9 @@ en plus (le pipeline échouerait sur la Release existante).
 
 ## 6. Base Room
 
-Le fork utilise la version 18 de la base (colonne `isLight`, variateurs). Si l'amont publie à son
-tour une base v18 (autre contenu), renuméroter la migration du fork (v19, n'ajoutant `isLight` que
-si la colonne est absente) **avant** de publier une version fusionnée.
+Le fork utilise la version 19 de la base (variateurs `isLight` en v18, volets `isCover` en v19). Si l'amont publie à son
+tour une base v18 ou v19 (autre contenu), renuméroter la migration du fork (v20, n'ajoutant `isLight` que
+si la colonne est absente, et `isCover` que si la colonne est absente) **avant** de publier une version fusionnée.
 
 ## 7. Tests des scripts
 
