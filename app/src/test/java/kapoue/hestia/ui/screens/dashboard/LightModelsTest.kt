@@ -74,4 +74,11 @@ class LightModelsTest {
         assertNull(lightTimerEndsAt(startedAt = null, duration = 60.0, nowEpochSec = 1100.0, nowElapsedMs = 0L))
         assertNull(lightTimerEndsAt(startedAt = 1000.0, duration = null, nowEpochSec = 1100.0, nowElapsedMs = 0L))
     }
+
+    @Test
+    fun `secondes restantes du minuteur arrondies et jamais negatives`() {
+        assertEquals(90L, lightTimerRemainingSec(timerEndsAtElapsed = 100_500L, elapsedNow = 10_000L))
+        assertNull(lightTimerRemainingSec(timerEndsAtElapsed = 10_000L, elapsedNow = 10_000L))
+        assertNull(lightTimerRemainingSec(timerEndsAtElapsed = null, elapsedNow = 10_000L))
+    }
 }

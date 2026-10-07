@@ -22,6 +22,7 @@ import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.ScheduleCodec
+import kapoue.hestia.data.rpc.LightRpcClient
 import kapoue.hestia.data.rpc.ShellyRpcClient
 import kapoue.hestia.data.rpc.errorOrNull
 import kapoue.hestia.data.rpc.getOrNull
@@ -88,6 +89,7 @@ class DeviceRepository @Inject constructor(
     private val deviceDao: DeviceDao,
     private val pausedPlanningDao: PausedPlanningDao,
     private val rpcClient: ShellyRpcClient,
+    private val lightRpc: LightRpcClient,
     private val cloudClient: ShellyCloudClient,
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
@@ -2063,11 +2065,11 @@ class DeviceRepository @Inject constructor(
             if (physicalName != null && physicalName != updated.deviceName) {
                 updated = updated.copy(deviceName = physicalName)
             }
-            val channelName = if (device.supportsSwitch) {
-                rpcClient.getSwitchConfig(ip, device.switchId).getOrNull()?.name?.takeIf { it.isNotBlank() }
-            } else {
-                null
-            }
+            val channelName = when (channelNameRpc(device)) {
+                ChannelNameRpc.SWITCH -> rpcClient.getSwitchConfig(ip, device.switchId).getOrNull()?.name
+                ChannelNameRpc.LIGHT -> lightRpc.getConfig(ip, device.switchId).getOrNull()?.name
+                ChannelNameRpc.NONE -> null
+            }?.takeIf { it.isNotBlank() }
             // Un variateur garde le nom de son canal lu à l'ajout : pas de repli sur le nom physique.
             val resolvedName = channelName ?: physicalName.takeIf { monoChannel && !device.isLight }
             if (resolvedName != null && resolvedName != updated.name) {
@@ -2407,10 +2409,14 @@ class DeviceRepository @Inject constructor(
         if (channelOk && physicalOk) appPreferences.markNameSynced(device.id)
     }
 
-    /** @return vrai si le canal ne pilote pas de relais, ou si le nom a bien été écrit dessus. */
+    /** @return vrai si le canal n'a pas de nom côté appareil, ou si le nom a bien été écrit dessus. */
     private suspend fun pushChannelName(device: Device): Boolean {
-        if (!device.supportsSwitch || device.ipAddress.startsWith(DEMO_IP_PREFIX)) return true
-        val (_, result) = withIp(device) { ip -> rpcClient.switchSetConfigName(ip, device.switchId, device.name) }
+        val (_, result) = when (channelNameRpc(device)) {
+            ChannelNameRpc.SWITCH -> withIp(device) { ip -> rpcClient.switchSetConfigName(ip, device.switchId, device.name) }
+            // Variateur (C1, 2026-10-07) : même principe via Light.SetConfig.
+            ChannelNameRpc.LIGHT -> withIp(device) { ip -> lightRpc.setConfigName(ip, device.switchId, device.name) }
+            ChannelNameRpc.NONE -> return true
+        }
         return result is RpcResult.Success
     }
 

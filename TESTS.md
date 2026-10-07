@@ -233,6 +233,10 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Android 11–12 (Sony) : langue forcée conservée après rotation, bascule du thème sombre et redémarrage de l'appli
 - [ ] Android 11–12 (Sony) : retour à « Suivre la langue du système » → langue du téléphone, pas la dernière langue forcée
 - [ ] Notification Android (worker) et texte ntfy d'un minuteur nouvellement armé : dans la langue choisie, pas celle du système
+- [ ] Minuteur (Détail) : 30 min / 1 h / 2 h / Manuel → la lampe s'allume, « … · extinction dans 0:29:59 » sur le Détail et la tuile, puis s'éteint seule à l'échéance, même appli fermée.
+- [ ] Éteindre pendant le minuteur l'annule (plus de décompte, pas de rallumage).
+- [ ] Renommer un variateur (Modifier ou Réglages) : le nom apparaît dans l'interface web de l'appareil / l'appli Shelly ; appareil injoignable au moment du renommage → nom poussé au retour sur le Tableau.
+- [ ] Nom changé depuis l'interface web de l'appareil → repris par Hestia au passage par Réglages.
 - [ ] Mode démo : toujours en anglais ; en sortant, retour à la langue choisie
 - [ ] Russe : pluriels corrects dans Réglages (2 канала, 5 каналов) et textes ntfy en cyrillique lisibles sur le téléphone
 

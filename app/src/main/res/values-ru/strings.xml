@@ -291,6 +291,8 @@
     <string name="light_brightness">Яркость: %1$d %%</string>
     <string name="light_turn_on">Включить</string>
     <string name="light_turn_off">Выключить</string>
+    <string name="light_timer_title">Таймер</string>
+    <string name="light_timer_off_in">выкл. через %1$s</string>
 
     <!-- Bandeau global du Tableau (pas de tuile dédiée) quand la permission réseau local manque -->
     <string name="dashboard_permission_banner">Чтобы связаться с устройствами, нужно разрешение на доступ к локальной сети.</string>

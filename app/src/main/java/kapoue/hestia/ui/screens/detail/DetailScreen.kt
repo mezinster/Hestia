@@ -226,7 +226,9 @@ fun DetailScreen(
                     status = lightStatus,
                     showPower = dev.hasPowerMetering,
                     revision = lightRevision,
+                    elapsedNow = elapsedNow,
                     onSet = { on, brightness -> viewModel.setLight(on, brightness) },
+                    onStartTimer = { seconds -> viewModel.setLight(on = true, brightness = null, toggleAfterSec = seconds) },
                 )
                 return@Column
             }

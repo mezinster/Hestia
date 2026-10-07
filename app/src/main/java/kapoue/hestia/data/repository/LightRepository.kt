@@ -2,6 +2,7 @@ package kapoue.hestia.data.repository
 
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.dao.DeviceDao
+import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.LightRpcClient
@@ -22,6 +23,7 @@ class LightRepository @Inject constructor(
     private val deviceDao: DeviceDao,
     private val lightRpc: LightRpcClient,
     private val deviceRepository: DeviceRepository,
+    private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
 ) {
     // État en mémoire des variateurs démo : sans lui, le bouton et le curseur sembleraient cassés.
@@ -61,7 +63,7 @@ class LightRepository @Inject constructor(
             }
             val channelName = capabilities.lightChannelNames[lightId]
                 ?: if (capabilities.lightChannels.size > 1) "$name · ${lightId + 1}" else name
-            deviceDao.insert(
+            val newId = deviceDao.insert(
                 Device(
                     name = channelName,
                     deviceName = resolvedDeviceName,
@@ -76,6 +78,11 @@ class LightRepository @Inject constructor(
                     position = position++,
                 ),
             )
+            // Nom inventé ici (absent de l'appareil) : à pousser dessus. Le Tableau le fera au
+            // prochain relevé ([DeviceRepository.nameCatchUpIfNeeded]), comme pour un relais injoignable.
+            if (capabilities.lightChannelNames[lightId] == null || capabilities.reportedName.isNullOrBlank()) {
+                appPreferences.markNameUnsynced(newId)
+            }
             added++
         }
         logger.info(DiagnosticLogger.DB, "Ajout variateur $ip : $added canal(aux) light sur ${capabilities.lightChannels.size}")

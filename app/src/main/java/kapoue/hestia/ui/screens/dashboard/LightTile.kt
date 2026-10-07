@@ -36,6 +36,8 @@ import kapoue.hestia.ui.theme.stateColors
 @Composable
 fun LightTile(
     tile: TileUiState,
+    /** Horloge rafraîchie à la seconde par le parent : décompte du minuteur (C1). */
+    elapsedNow: Long,
     onToggle: (Boolean) -> Unit,
     onOpenDetail: () -> Unit,
     onOpenFirmware: () -> Unit,
@@ -49,12 +51,7 @@ fun LightTile(
         status is LightStatus.Offline -> colors.offlineBg to colors.offlineText
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val label = when {
-        online?.on == true -> stringResource(R.string.light_state_on, online.brightness)
-        online != null -> stringResource(R.string.light_state_off)
-        status is LightStatus.Offline -> stringResource(R.string.state_offline)
-        else -> stringResource(R.string.state_loading)
-    }
+    val label = lightStateLabel(status, elapsedNow)
     Surface(color = bg, shape = RoundedCornerShape(12.dp), onClick = onOpenDetail, modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(tile.device.name, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -70,7 +67,8 @@ fun LightTile(
                 fontWeight = FontWeight.Medium,
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Center,
-                maxLines = 1,
+                // 2 lignes : avec un minuteur, « Allumée · 40 % · extinction dans 0:29:12 » ne tient pas toujours.
+                maxLines = 2,
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().height(40.dp)) {

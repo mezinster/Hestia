@@ -69,3 +69,10 @@ internal fun computeGroupFlags(ordered: List<Device>): List<GroupFlags> {
         }
     }
 }
+
+/** Secondes restantes d'un minuteur (arrondi inférieur), null s'il n'y en a pas ou s'il est écoulé. */
+internal fun lightTimerRemainingSec(timerEndsAtElapsed: Long?, elapsedNow: Long): Long? {
+    if (timerEndsAtElapsed == null) return null
+    val remaining = (timerEndsAtElapsed - elapsedNow) / 1000
+    return remaining.takeIf { it > 0 }
+}
