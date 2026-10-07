@@ -33,7 +33,7 @@ class LightRepository @Inject constructor(
         if (device.ipAddress.startsWith(DeviceRepository.DEMO_IP_PREFIX)) {
             val now = System.currentTimeMillis() / 1000.0
             return RpcResult.Success(
-                demoStates.compute(device.id) { _, current -> expireDemoTimer(current ?: demoLightStatus(device), now) }!!,
+                demoStates.compute(device.id) { _, current -> expireDemoTimer(current ?: demoLightStatus(device, now), now) }!!,
             )
         }
         return deviceRepository.withIp(device) { ip -> lightRpc.getLightStatus(ip, device.switchId) }.second
@@ -93,9 +93,25 @@ class LightRepository @Inject constructor(
     }
 }
 
-/** État simulé d'un variateur démo — sans réseau, pour les captures et les tests manuels. */
-internal fun demoLightStatus(device: Device): LightStatusResult =
-    LightStatusResult(id = device.switchId, output = true, brightness = 40.0, apower = 6.2)
+/**
+ * État simulé d'un variateur démo — sans réseau, pour les captures et les tests manuels. Le bloc
+ * multi-light « Kitchen Lights » (.11) varie par canal pour montrer d'un coup d'œil la ligne de
+ * cercles : allumé, éteint, minuteur en cours (démarré à la première lecture), pleine intensité.
+ */
+internal fun demoLightStatus(device: Device, nowEpochSec: Double = 0.0): LightStatusResult {
+    if (device.ipAddress != "${DeviceRepository.DEMO_IP_PREFIX}11") {
+        return LightStatusResult(id = device.switchId, output = true, brightness = 40.0, apower = 6.2)
+    }
+    return when (device.switchId) {
+        0 -> LightStatusResult(id = 0, output = true, brightness = 80.0, apower = 12.4)
+        1 -> LightStatusResult(id = 1, output = false, brightness = 60.0, apower = 0.0)
+        2 -> LightStatusResult(
+            id = 2, output = true, brightness = 25.0, apower = 3.9,
+            timerStartedAt = nowEpochSec, timerDuration = 2700.0,
+        )
+        else -> LightStatusResult(id = device.switchId, output = true, brightness = 100.0, apower = 15.5)
+    }
+}
 
 /**
  * Applique une commande sur l'état démo : marche/arrêt et/ou luminosité, puissance recalculée. Un
