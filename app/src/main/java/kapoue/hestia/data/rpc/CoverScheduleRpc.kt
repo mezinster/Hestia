@@ -110,7 +110,9 @@ internal fun coverEventsFrom(jobs: List<ScheduleJob>, coverId: Int): List<CoverE
             else -> return@mapNotNull null
         }
         val parsed = ScheduleCodec.parse(job.timespec) ?: return@mapNotNull null
-        CoverEvent(parsed.hour, parsed.minute, parsed.days, parsed.date, action, job.id)
+        // Convention de CoverEvent : « tous les jours » = jours vides (le cron `*` est décodé en 0..6)
+        val days = if (parsed.date == null && parsed.days.size >= 7) emptySet() else parsed.days
+        CoverEvent(parsed.hour, parsed.minute, days, parsed.date, action, job.id)
     }
 
 /** Programmation des volets : création, relecture et suppression des plannings natifs de l'appareil. */

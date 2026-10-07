@@ -80,9 +80,26 @@ class CoverScheduleRpcTest {
         assertEquals(
             listOf(
                 CoverEvent(7, 30, setOf(1, 2, 3, 4, 5), null, CoverEventAction.Open, 3),
-                CoverEvent(12, 0, ScheduleCodec.ALL_DAYS, null, CoverEventAction.GoTo(50), 5),
+                CoverEvent(12, 0, emptySet(), null, CoverEventAction.GoTo(50), 5),
             ),
             coverEventsFrom(jobs, 0),
         )
+    }
+
+    @Test
+    fun `tous les jours est relu avec des jours vides`() {
+        val jobs = listOf(ScheduleJob(9, true, "0 0 21 * * *", listOf(call("Cover.Close", "id" to 0))))
+        assertEquals(
+            listOf(CoverEvent(21, 0, action = CoverEventAction.Close, jobId = 9)),
+            coverEventsFrom(jobs, 0),
+        )
+    }
+
+    @Test
+    fun `aller-retour tous les jours`() {
+        val original = CoverEvent(21, 0, action = CoverEventAction.Close)
+        val job = ScheduleJob(4, true, coverTimespec(original), listOf(call("Cover.Close", "id" to 0)))
+        val back = coverEventsFrom(listOf(job), 0).single()
+        assertEquals(true, back.sameSlotAs(original))
     }
 }
