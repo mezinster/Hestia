@@ -20,4 +20,12 @@ class DeviceBackupTest {
         val withLight = """{"name":"Variateur","ipAddress":"192.168.1.50","switchId":0,"type":"LAMP","driver":"SHELLY_GEN2","isLight":true}"""
         assertTrue(json.decodeFromString(DeviceBackup.serializer(), withLight).isLight)
     }
+
+    @Test
+    fun `isCover absent d'une ancienne sauvegarde vaut faux et est relu quand present`() {
+        val old = """{"name":"P","ipAddress":"1.2.3.4","switchId":0,"type":"PLUG","driver":"SHELLY_GEN2"}"""
+        assertFalse(json.decodeFromString(DeviceBackup.serializer(), old).isCover)
+        val cover = """{"name":"V","ipAddress":"1.2.3.4","switchId":0,"type":"SHUTTER","driver":"SHELLY_GEN2","isCover":true}"""
+        assertTrue(json.decodeFromString(DeviceBackup.serializer(), cover).isCover)
+    }
 }

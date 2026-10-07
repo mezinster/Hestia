@@ -52,6 +52,8 @@ data class DeviceBackup(
     val ip2Name: String? = null,
     /** Canal variateur (2026-10-07). Absent d'une ancienne sauvegarde = relais. */
     val isLight: Boolean = false,
+    /** Canal volet (lot S1). Absent d'une ancienne sauvegarde = relais. */
+    val isCover: Boolean = false,
 )
 
 /** Réservé — aucune préférence manuelle en V1 (le thème suit le système). */

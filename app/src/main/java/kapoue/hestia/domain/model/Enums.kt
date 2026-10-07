@@ -13,6 +13,7 @@ enum class DeviceType {
     LAMP,
     SENSOR,
     SMOKE_DETECTOR,
+    SHUTTER,
 }
 
 /** Pilote de communication. Une seule valeur en V1 ; l'enum prépare d'autres marques. */

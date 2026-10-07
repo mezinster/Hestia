@@ -115,4 +115,10 @@ data class Device(
      */
     @ColumnInfo(defaultValue = "0")
     val isLight: Boolean = false,
+    /**
+     * Canal volet (`cover:N`, lot S1) : [switchId] porte l'id du `cover:N`, [supportsSwitch] vaut
+     * faux. Jamais en même temps que [isLight].
+     */
+    @ColumnInfo(defaultValue = "0")
+    val isCover: Boolean = false,
 )

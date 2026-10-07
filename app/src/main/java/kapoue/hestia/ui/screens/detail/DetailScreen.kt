@@ -19,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Blinds
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lightbulb
@@ -1548,4 +1549,5 @@ private fun iconFor(type: DeviceType): ImageVector = when (type) {
     // représente un vrai détecteur de fumée ; Filled.SmokeFree (essayé un temps) est en fait
     // « interdiction de fumer », confusion vécue en test réel le 2026-08-31.
     DeviceType.SMOKE_DETECTOR -> SmokeDetectorIcon
+    DeviceType.SHUTTER -> Icons.Filled.Blinds
 }

@@ -107,6 +107,7 @@ class DiagnosticViewModel @Inject constructor(
         DeviceType.LAMP -> R.string.device_type_dimmer
         DeviceType.SENSOR -> R.string.device_type_sensor
         DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector
+        DeviceType.SHUTTER -> R.string.device_type_shutter
     }
 
     private fun appVersion(): String = runCatching {

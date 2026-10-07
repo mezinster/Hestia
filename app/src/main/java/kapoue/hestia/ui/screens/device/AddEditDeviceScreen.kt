@@ -609,6 +609,7 @@ private fun deviceTypeLabel(type: DeviceType): Int = when (type) {
     DeviceType.LAMP -> R.string.device_type_dimmer
     DeviceType.SENSOR -> R.string.device_type_sensor
     DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector
+    DeviceType.SHUTTER -> R.string.device_type_shutter
 }
 
 /** Exemple affiché en filigrane du champ Nom — « Prise scooter » n'a aucun sens pour un
@@ -782,6 +783,7 @@ private fun nounFor(type: DeviceType): Int = when (type) {
     DeviceType.LAMP -> R.string.device_type_dimmer
     DeviceType.SENSOR -> R.string.device_type_sensor
     DeviceType.SMOKE_DETECTOR -> R.string.device_type_smoke_detector
+    DeviceType.SHUTTER -> R.string.device_type_shutter
 }
 
 /**
