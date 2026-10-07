@@ -27,4 +27,17 @@ class LightDemoTest {
         assertTrue(bright.output)
         assertEquals(80.0, bright.brightness!!, 0.0)
     }
+
+    @Test
+    fun `un minuteur demo allume et renseigne la fin`() {
+        val demo = Device(name = "Bedroom Dimmer", ipAddress = "203.0.113.7", type = DeviceType.LAMP, isLight = true, supportsSwitch = false)
+        val off = applyDemoLightSet(demoLightStatus(demo), on = false, brightness = null)
+        val timed = applyDemoLightSet(off, on = true, brightness = null, toggleAfterSec = 1800, nowEpochSec = 5000.0)
+        assertTrue(timed.output)
+        assertEquals(5000.0, timed.timerStartedAt!!, 0.0)
+        assertEquals(1800.0, timed.timerDuration!!, 0.0)
+        // Éteindre annule le minuteur, comme sur l'appareil.
+        val cancelled = applyDemoLightSet(timed, on = false, brightness = null)
+        assertEquals(null, cancelled.timerDuration)
+    }
 }

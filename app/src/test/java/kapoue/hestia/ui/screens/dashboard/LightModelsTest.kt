@@ -7,6 +7,7 @@ import kapoue.hestia.data.rpc.model.LightStatusResult
 import kapoue.hestia.domain.model.DeviceType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -59,5 +60,18 @@ class LightModelsTest {
         val flags = computeGroupFlags(listOf(plug(0), light()))
         assertFalse(flags[0].isMultiChannel)
         assertFalse(flags[1].isMultiChannel)
+    }
+
+    @Test
+    fun `fin du minuteur dans le referentiel elapsed`() {
+        // Démarré il y a 100 s pour 600 s : il reste 500 s.
+        assertEquals(50_000L + 500_000L, lightTimerEndsAt(startedAt = 1000.0, duration = 600.0, nowEpochSec = 1100.0, nowElapsedMs = 50_000L))
+    }
+
+    @Test
+    fun `minuteur termine ou absent donne null`() {
+        assertNull(lightTimerEndsAt(startedAt = 1000.0, duration = 60.0, nowEpochSec = 1100.0, nowElapsedMs = 0L))
+        assertNull(lightTimerEndsAt(startedAt = null, duration = 60.0, nowEpochSec = 1100.0, nowElapsedMs = 0L))
+        assertNull(lightTimerEndsAt(startedAt = 1000.0, duration = null, nowEpochSec = 1100.0, nowElapsedMs = 0L))
     }
 }

@@ -13,6 +13,17 @@ data class LightStatusResult(
     /** Puissance active instantanée (W), seulement si l'appareil la mesure. */
     val apower: Double? = null,
     val source: String? = null,
+    /** Début du minuteur `toggle_after` (epoch Unix, s), absent sans minuteur (variateurs C1). */
+    @SerialName("timer_started_at") val timerStartedAt: Double? = null,
+    /** Durée totale du minuteur (s), absente sans minuteur. */
+    @SerialName("timer_duration") val timerDuration: Double? = null,
+)
+
+/** Réponse de Light.GetConfig (sous-ensemble) : seul le nom du canal est exploité. */
+@Serializable
+data class LightConfigResult(
+    val id: Int = 0,
+    val name: String? = null,
 )
 
 /** Réponse de Light.Set : état précédent. */

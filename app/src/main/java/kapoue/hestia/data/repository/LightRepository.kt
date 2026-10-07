@@ -34,12 +34,15 @@ class LightRepository @Inject constructor(
         return deviceRepository.withIp(device) { ip -> lightRpc.getLightStatus(ip, device.switchId) }.second
     }
 
-    suspend fun set(device: Device, on: Boolean?, brightness: Int?): RpcResult<LightSetResult> {
+    /** [toggleAfterSec] : minuteur tenu par l'appareil (variateurs C1), voir [LightRpcClient.setLight]. */
+    suspend fun set(device: Device, on: Boolean?, brightness: Int?, toggleAfterSec: Int? = null): RpcResult<LightSetResult> {
         if (device.ipAddress.startsWith(DeviceRepository.DEMO_IP_PREFIX)) {
-            demoStates.compute(device.id) { _, current -> applyDemoLightSet(current ?: demoLightStatus(device), on, brightness) }
+            demoStates.compute(device.id) { _, current ->
+                applyDemoLightSet(current ?: demoLightStatus(device), on, brightness, toggleAfterSec, System.currentTimeMillis() / 1000.0)
+            }
             return RpcResult.Success(LightSetResult())
         }
-        return deviceRepository.withIp(device) { ip -> lightRpc.setLight(ip, device.switchId, on, brightness) }.second
+        return deviceRepository.withIp(device) { ip -> lightRpc.setLight(ip, device.switchId, on, brightness, toggleAfterSec) }.second
     }
 
     /**
@@ -84,9 +87,25 @@ class LightRepository @Inject constructor(
 internal fun demoLightStatus(device: Device): LightStatusResult =
     LightStatusResult(id = device.switchId, output = true, brightness = 40.0, apower = 6.2)
 
-/** Applique une commande sur l'état démo : marche/arrêt et/ou luminosité, puissance recalculée. */
-internal fun applyDemoLightSet(current: LightStatusResult, on: Boolean?, brightness: Int?): LightStatusResult {
+/**
+ * Applique une commande sur l'état démo : marche/arrêt et/ou luminosité, puissance recalculée. Un
+ * minuteur ([toggleAfterSec]) est simulé comme sur l'appareil ; éteindre l'annule.
+ */
+internal fun applyDemoLightSet(
+    current: LightStatusResult,
+    on: Boolean?,
+    brightness: Int?,
+    toggleAfterSec: Int? = null,
+    nowEpochSec: Double = 0.0,
+): LightStatusResult {
     val output = on ?: current.output
     val level = brightness?.coerceIn(0, 100)?.toDouble() ?: current.brightness
-    return current.copy(output = output, brightness = level, apower = if (output) (level ?: 100.0) * 0.155 else 0.0)
+    val timed = output && toggleAfterSec != null
+    return current.copy(
+        output = output,
+        brightness = level,
+        apower = if (output) (level ?: 100.0) * 0.155 else 0.0,
+        timerStartedAt = if (timed) nowEpochSec else current.timerStartedAt.takeIf { output },
+        timerDuration = if (timed) toggleAfterSec!!.toDouble() else current.timerDuration.takeIf { output },
+    )
 }
