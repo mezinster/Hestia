@@ -128,7 +128,7 @@ class DeviceRepository @Inject constructor(
      * les appels suivants. Retourne l'IP effectivement utilisée, pour que l'appelant enchaîne
      * dessus le reste d'une séquence d'appels sans repasser par cette résolution à chaque fois.
      */
-    private suspend fun <T> withIp(device: Device, call: suspend (ip: String) -> RpcResult<T>): Pair<String, RpcResult<T>> {
+    internal suspend fun <T> withIp(device: Device, call: suspend (ip: String) -> RpcResult<T>): Pair<String, RpcResult<T>> {
         val slots = if (currentSlot(device) == 2 && device.ip2Address != null) {
             listOf(2 to device.ip2Address, 1 to device.ipAddress)
         } else {
@@ -2854,7 +2854,7 @@ class DeviceRepository @Inject constructor(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val DEMO_IP_PREFIX = "203.0.113." // RFC 5737 TEST-NET-3, jamais routable
         // Chaque planning = 2 programmes cron ; la prise en tient ~20, on plafonne à 10 plannings.
         const val MAX_PLANNINGS = 10
