@@ -199,3 +199,13 @@ val MIGRATION_16_17 = object : Migration(16, 17) {
         db.execSQL("ALTER TABLE devices ADD COLUMN firmwareUpdateAvailable INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+/**
+ * v17 → v18 : variateurs (`light:N`, 2026-10-07, fork) — distingue un canal light d'un relais.
+ * Absence = relais, comportement inchangé pour tous les appareils existants.
+ */
+val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN isLight INTEGER NOT NULL DEFAULT 0")
+    }
+}

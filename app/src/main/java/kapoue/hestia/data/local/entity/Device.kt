@@ -109,4 +109,10 @@ data class Device(
      */
     @ColumnInfo(defaultValue = "0")
     val firmwareUpdateAvailable: Boolean = false,
+    /**
+     * Canal variateur (`light:N`, variateurs 2026-10-07) plutôt que relais : [switchId] porte alors
+     * l'id du `light:N`, [supportsSwitch] vaut faux (aucune fonctionnalité switch proposée).
+     */
+    @ColumnInfo(defaultValue = "0")
+    val isLight: Boolean = false,
 )
