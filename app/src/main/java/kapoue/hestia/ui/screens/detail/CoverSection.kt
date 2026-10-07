@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.ui.screens.dashboard.CoverFault
+import kapoue.hestia.ui.screens.dashboard.CoverMotion
 import kapoue.hestia.ui.screens.dashboard.CoverStatus
 import kapoue.hestia.ui.screens.dashboard.coverStateLabel
 import kapoue.hestia.ui.theme.stateColors
@@ -46,17 +47,19 @@ fun CoverSection(
     val online = status as? CoverStatus.Online
     var sliderValue by remember { mutableFloatStateOf(online?.position?.toFloat() ?: 0f) }
     var dragging by remember { mutableStateOf(false) }
-    LaunchedEffect(online?.position, revision) { coverResyncTarget(status, dragging)?.let { sliderValue = it } }
+    LaunchedEffect(online?.position, online?.target, online?.motion, revision) { coverResyncTarget(status, dragging)?.let { sliderValue = it } }
 
     var showCalibrate by remember { mutableStateOf(false) }
+    // Pendant la calibration, un appui sur Ouvrir/Fermer l'interromprait : seul Stop reste actif.
+    val calibrating = online?.motion == CoverMotion.CALIBRATING
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(text = coverStateLabel(status), style = MaterialTheme.typography.titleMedium)
         if (showPower) online?.powerWatts?.let { Text(formatPower(it), style = MaterialTheme.typography.bodyMedium) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onOpen, enabled = online != null) { Text(stringResource(R.string.cover_open)) }
+            Button(onClick = onOpen, enabled = online != null && !calibrating) { Text(stringResource(R.string.cover_open)) }
             OutlinedButton(onClick = onStop, enabled = online != null) { Text(stringResource(R.string.cover_stop)) }
-            Button(onClick = onClose, enabled = online != null) { Text(stringResource(R.string.cover_close)) }
+            Button(onClick = onClose, enabled = online != null && !calibrating) { Text(stringResource(R.string.cover_close)) }
         }
         if (online?.positionControl == true) {
             Text(

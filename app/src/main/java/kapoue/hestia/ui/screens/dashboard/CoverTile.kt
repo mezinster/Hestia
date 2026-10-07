@@ -88,14 +88,14 @@ fun CoverTile(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            Row(horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                IconButton(onClick = onOpen, enabled = online != null) {
+            Row(horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                IconButton(onClick = onOpen, enabled = online != null && online.motion != CoverMotion.CALIBRATING) {
                     Icon(Icons.Filled.KeyboardArrowUp, contentDescription = stringResource(R.string.cover_open), tint = fg)
                 }
                 IconButton(onClick = onStop, enabled = online != null) {
                     Icon(Icons.Filled.Stop, contentDescription = stringResource(R.string.cover_stop), tint = fg)
                 }
-                IconButton(onClick = onClose, enabled = online != null) {
+                IconButton(onClick = onClose, enabled = online != null && online.motion != CoverMotion.CALIBRATING) {
                     Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.cover_close), tint = fg)
                 }
             }

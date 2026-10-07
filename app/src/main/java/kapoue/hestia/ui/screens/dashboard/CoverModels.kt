@@ -22,7 +22,7 @@ enum class CoverFault { OBSTRUCTION, OVERPOWER, OVERTEMP, VOLTAGE, SAFETY_SWITCH
 
 internal fun coverFaultOf(code: String): CoverFault = when (code) {
     "obstruction" -> CoverFault.OBSTRUCTION
-    "overpower" -> CoverFault.OVERPOWER
+    "overpower", "overcurrent" -> CoverFault.OVERPOWER
     "overtemp" -> CoverFault.OVERTEMP
     "overvoltage", "undervoltage" -> CoverFault.VOLTAGE
     "safety_switch" -> CoverFault.SAFETY_SWITCH
@@ -39,6 +39,8 @@ sealed interface CoverStatus {
         val positionControl: Boolean,
         val powerWatts: Double?,
         val faults: List<CoverFault>,
+        /** Position visée par la commande en cours (0–100), null si inconnue. */
+        val target: Int? = null,
     ) : CoverStatus
 }
 
@@ -49,6 +51,7 @@ fun RpcResult<CoverStatusResult>.toCoverStatus(): CoverStatus = when (this) {
         positionControl = value.posControl,
         powerWatts = value.apower,
         faults = value.errors.map(::coverFaultOf),
+        target = value.targetPos?.coerceIn(0, 100),
     )
     else -> CoverStatus.Offline
 }

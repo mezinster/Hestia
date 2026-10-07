@@ -37,4 +37,15 @@ class CoverModelsTest {
         assertEquals(5_000L, coverPollIntervalMs(st(CoverMotion.STOPPED)))
         assertEquals(5_000L, coverPollIntervalMs(CoverStatus.Offline))
     }
+
+    @Test
+    fun `la position cible est reprise et bornee`() {
+        val s = RpcResult.Success(CoverStatusResult(id = 0, state = "opening", currentPos = 20, targetPos = 140, posControl = true)).toCoverStatus()
+        assertEquals(100, (s as CoverStatus.Online).target)
+    }
+
+    @Test
+    fun `overcurrent est traduit en surpuissance`() {
+        assertEquals(CoverFault.OVERPOWER, coverFaultOf("overcurrent"))
+    }
 }

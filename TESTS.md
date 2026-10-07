@@ -297,3 +297,4 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] **Langues** : hors mode démo (qui force l'anglais), Réglages → Langue → English, Français, Русский, puis « Langue du système » : tuile et Détail d'un volet (états, boutons, dialogue de calibration, défauts) dans la bonne langue à chaque fois.
 - [ ] Mode démo : « Living Room Shutter » (calibré, 60 %) bouge à l'écran ; « Bedroom Shutter » demande une calibration.
 - [ ] Non-régression : relais (Plug M) et variateurs inchangés.
+- [ ] Limite connue : un appareil exposant à la fois un relais (ou variateur) et un volet avec le même id (ex. `switch:0` + `cover:0`) — le volet est ignoré à l'ajout (journalisé). Aucun modèle Shelly connu ne le fait.

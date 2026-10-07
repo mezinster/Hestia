@@ -8,12 +8,13 @@ import org.junit.Test
 
 class CoverSliderTest {
 
-    private fun online(position: Int?) = CoverStatus.Online(
-        motion = CoverMotion.STOPPED,
+    private fun online(position: Int?, motion: CoverMotion = CoverMotion.STOPPED, target: Int? = null) = CoverStatus.Online(
+        motion = motion,
         position = position,
         positionControl = position != null,
         powerWatts = null,
         faults = emptyList(),
+        target = target,
     )
 
     @Test
@@ -42,5 +43,22 @@ class CoverSliderTest {
         assertNull(coverResyncTarget(online(null), dragging = false))
         assertNull(coverResyncTarget(CoverStatus.Offline, dragging = false))
         assertNull(coverResyncTarget(CoverStatus.Loading, dragging = false))
+    }
+
+    @Test
+    fun `en mouvement avec cible le curseur se recale sur la cible`() {
+        assertEquals(80f, coverResyncTarget(online(20, CoverMotion.OPENING, target = 80), dragging = false))
+        assertEquals(10f, coverResyncTarget(online(60, CoverMotion.CLOSING, target = 10), dragging = false))
+    }
+
+    @Test
+    fun `a l'arret ou sans cible le curseur suit la position`() {
+        assertEquals(40f, coverResyncTarget(online(40, CoverMotion.STOPPED, target = 80), dragging = false))
+        assertEquals(20f, coverResyncTarget(online(20, CoverMotion.OPENING, target = null), dragging = false))
+    }
+
+    @Test
+    fun `pas de recalage sur la cible pendant un glisse`() {
+        assertNull(coverResyncTarget(online(20, CoverMotion.OPENING, target = 80), dragging = true))
     }
 }
