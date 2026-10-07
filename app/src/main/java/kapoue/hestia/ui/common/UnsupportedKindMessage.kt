@@ -7,7 +7,7 @@ import kapoue.hestia.data.rpc.UnsupportedKind
 fun UnsupportedKind.toUserMessage(): UserMessage = UserMessage(
     when (this) {
         UnsupportedKind.COVER -> R.string.error_unsupported_cover
-        UnsupportedKind.LIGHT -> R.string.error_unsupported_light
+        UnsupportedKind.COLOR_LIGHT -> R.string.error_unsupported_color_light
         UnsupportedKind.ENERGY_METER -> R.string.error_unsupported_energy_meter
         UnsupportedKind.SMOKE_DETECTOR -> R.string.error_unsupported_smoke_detector
         UnsupportedKind.SENSOR -> R.string.error_unsupported_sensor

@@ -218,7 +218,7 @@
     <string name="error_not_shelly">This address doesn\'t respond like a Shelly Gen2 or later device.</string>
     <string name="error_gen1_unsupported">This device is a Shelly Gen1, which isn\'t supported. Only Gen2 and later are.</string>
     <string name="error_unsupported_cover">This device is set up as a shutter controller, which Hestia doesn\'t support yet. If it\'s a 2PM, you can switch it to relay mode in its web interface.</string>
-    <string name="error_unsupported_light">This device is a dimmer or light controller, which Hestia doesn\'t support yet. Only on/off relays and plugs are supported.</string>
+    <string name="error_unsupported_color_light">This light controller is set to a colour mode, which Hestia doesn\'t support yet. Dimmers (white light) are supported.</string>
     <string name="error_unsupported_energy_meter">This device is an energy meter without a relay, which Hestia doesn\'t support yet.</string>
     <string name="error_unsupported_smoke_detector">This device is a smoke detector. Choose the Smoke detector type above to add it.</string>
     <string name="error_unsupported_sensor">This device is a sensor, which Hestia doesn\'t support yet. Only on/off relays and plugs are supported.</string>

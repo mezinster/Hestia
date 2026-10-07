@@ -210,7 +210,7 @@
     <string name="error_not_shelly">Устройство по этому адресу не отвечает как Shelly Gen2 или новее.</string>
     <string name="error_gen1_unsupported">Это устройство Shelly Gen1, оно не поддерживается. Поддерживаются только Gen2 и новее.</string>
     <string name="error_unsupported_cover">Это устройство настроено как контроллер штор, Hestia пока его не поддерживает. Если это 2PM, переключите его в режим реле в веб-интерфейсе устройства.</string>
-    <string name="error_unsupported_light">Это диммер или контроллер освещения, Hestia пока их не поддерживает. Поддерживаются только реле и розетки вкл/выкл.</string>
+    <string name="error_unsupported_color_light">Этот контроллер освещения работает в цветном режиме, Hestia его пока не поддерживает. Диммеры (белый свет) поддерживаются.</string>
     <string name="error_unsupported_energy_meter">Это счётчик электроэнергии без реле, Hestia пока их не поддерживает.</string>
     <string name="error_unsupported_smoke_detector">Это датчик дыма. Чтобы добавить его, выберите выше тип «Датчик дыма».</string>
     <string name="error_unsupported_sensor">Это датчик, Hestia пока их не поддерживает. Поддерживаются только реле и розетки вкл/выкл.</string>

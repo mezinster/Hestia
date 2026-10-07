@@ -461,22 +461,12 @@ class ShellyRpcClient @Inject constructor(
             is RpcResult.Failure -> return r
         }
 
-        val switchChannels = components
-            .mapNotNull { entry -> SWITCH_KEY.matchEntire(entry.key)?.groupValues?.get(1)?.toIntOrNull() }
-            .sorted()
+        val switchChannels = parseChannels(components, "switch")
 
         // Nom déjà configuré sur l'appareil pour chaque canal (Switch.GetConfig.name via le même
         // Shelly.GetComponents ci-dessus, aucun appel RPC de plus) — sert à proposer le vrai nom
         // du canal à l'ajout plutôt qu'un générique « <nom saisi> · N » (nom des prises, 2026-09-07).
-        val channelNames = components
-            .mapNotNull { entry ->
-                val switchId = SWITCH_KEY.matchEntire(entry.key)?.groupValues?.get(1)?.toIntOrNull()
-                    ?: return@mapNotNull null
-                val name = (entry.config?.get("name") as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() }
-                    ?: return@mapNotNull null
-                switchId to name
-            }
-            .toMap()
+        val channelNames = parseChannelNames(components, "switch")
 
         val hasPowerMetering = components.any { entry ->
             entry.key.startsWith("pm") || entry.key.startsWith("em") ||
@@ -489,6 +479,8 @@ class ShellyRpcClient @Inject constructor(
             reportedName = info.name,
             switchChannels = switchChannels,
             channelNames = channelNames,
+            lightChannels = parseChannels(components, "light"),
+            lightChannelNames = parseChannelNames(components, "light"),
             // Le moteur de scripts est standard sur Gen2+.
             hasScripting = generation >= 2,
             hasPowerMetering = hasPowerMetering,
@@ -603,7 +595,6 @@ class ShellyRpcClient @Inject constructor(
     }
 
     private companion object {
-        val SWITCH_KEY = Regex("""switch:(\d+)""")
 
         /**
          * Lectures de routine relevées en boucle (Tableau toutes les ~5 s, Réglages toutes les 60 s,

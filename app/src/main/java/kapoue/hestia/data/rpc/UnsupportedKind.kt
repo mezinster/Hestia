@@ -10,8 +10,8 @@ enum class UnsupportedKind {
     /** Volet roulant (`cover`), ex. un 2PM configuré en mode volet. */
     COVER,
 
-    /** Variateur ou contrôleur de LED (`light`, `rgb`, `rgbw`, `cct`). */
-    LIGHT,
+    /** Contrôleur d'éclairage en mode couleur (`rgb`, `rgbw`, `cct`) — les variateurs `light:N` sont pris en charge. */
+    COLOR_LIGHT,
 
     /** Compteur d'énergie sans relais (`em`, `em1`, `pm1`). */
     ENERGY_METER,
@@ -32,7 +32,7 @@ enum class UnsupportedKind {
 /** Types de composants classés par priorité : le premier présent l'emporte. */
 private val KIND_BY_COMPONENT: List<Pair<UnsupportedKind, Set<String>>> = listOf(
     UnsupportedKind.COVER to setOf("cover"),
-    UnsupportedKind.LIGHT to setOf("light", "rgb", "rgbw", "cct"),
+    UnsupportedKind.COLOR_LIGHT to setOf("rgb", "rgbw", "cct"),
     UnsupportedKind.ENERGY_METER to setOf("em", "em1", "pm1"),
     UnsupportedKind.SMOKE_DETECTOR to setOf("smoke"),
     UnsupportedKind.SENSOR to setOf("temperature", "humidity", "flood", "illuminance", "presence", "voltmeter"),

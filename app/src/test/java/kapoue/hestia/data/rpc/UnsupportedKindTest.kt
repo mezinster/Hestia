@@ -17,6 +17,7 @@ class UnsupportedKindTest {
         model = null,
         reportedName = null,
         switchChannels = keys.mapNotNull { Regex("""switch:(\d+)""").matchEntire(it)?.groupValues?.get(1)?.toInt() },
+        lightChannels = keys.mapNotNull { Regex("""light:(\d+)""").matchEntire(it)?.groupValues?.get(1)?.toInt() },
         componentKeys = common + keys,
         hasScripting = true,
         hasPowerMetering = false,
@@ -33,11 +34,15 @@ class UnsupportedKindTest {
     }
 
     @Test
-    fun `un variateur ou un contrôleur RGBW est reconnu comme éclairage`() {
-        assertEquals(UnsupportedKind.LIGHT, caps("input:0", "light:0").unsupportedKind)
-        assertEquals(UnsupportedKind.LIGHT, caps("input:0", "rgbw:0").unsupportedKind)
-        assertEquals(UnsupportedKind.LIGHT, caps("rgb:0").unsupportedKind)
-        assertEquals(UnsupportedKind.LIGHT, caps("cct:0").unsupportedKind)
+    fun `un variateur est pris en charge`() {
+        assertNull(caps("input:0", "light:0").unsupportedKind)
+    }
+
+    @Test
+    fun `un contrôleur en mode couleur est refusé comme éclairage couleur`() {
+        assertEquals(UnsupportedKind.COLOR_LIGHT, caps("input:0", "rgbw:0").unsupportedKind)
+        assertEquals(UnsupportedKind.COLOR_LIGHT, caps("rgb:0").unsupportedKind)
+        assertEquals(UnsupportedKind.COLOR_LIGHT, caps("cct:0").unsupportedKind)
     }
 
     @Test
