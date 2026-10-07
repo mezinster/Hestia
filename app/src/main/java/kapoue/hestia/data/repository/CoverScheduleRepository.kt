@@ -25,6 +25,7 @@ import kotlinx.serialization.json.put
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
 import kapoue.hestia.domain.model.coverEventDisplayOrder
+import kapoue.hestia.domain.model.splitForRead
 import kotlinx.coroutines.flow.Flow
 
 /** Nombre maximal d'événements de programmation par volet (une plage en compte deux). */
@@ -141,7 +142,7 @@ class CoverScheduleRepository @Inject constructor(
      * Relit les événements du volet. Chaque lecture (affichage, validation avant création,
      * resynchronisation) purge au passage les uniques échus, journalisé : ils ne s'exécuteront plus.
      */
-    private suspend fun readEvents(ip: String, device: Device): RpcResult<List<CoverEvent>> {
+    private suspend fun readEvents(ip: String, device: Device, keepExpired: Boolean = false): RpcResult<List<CoverEvent>> {
         val jobs = when (val r = scheduleRpc.list(ip)) {
             is RpcResult.Success -> r.value.jobs
             is RpcResult.RpcError -> return r
@@ -149,13 +150,19 @@ class CoverScheduleRepository @Inject constructor(
         }
         val all = coverEventsFrom(jobs, device.switchId)
         val now = LocalDateTime.now()
-        val (expired, alive) = all.partition { it.isExpiredOnce(now) }
+        val (alive, expired) = splitForRead(all, now, keepExpired)
         for (e in expired) {
             val id = e.jobId ?: continue
             val ok = scheduleRpc.delete(ip, id) is RpcResult.Success
             logger.info(DiagnosticLogger.RPC, "Volet ${device.id} : événement unique échu purgé (job $id, ${if (ok) "ok" else "échec"})")
         }
         return RpcResult.Success(alive.sortedWith(coverEventDisplayOrder))
+    }
+
+    /** Lecture du worker de notifications : garde les uniques échus et ne purge rien. */
+    suspend fun getEventsForNotifications(device: Device): RpcResult<List<CoverEvent>> {
+        if (isDemo(device)) return RpcResult.Success(emptyList())
+        return deviceRepository.withIp(device) { ip -> readEvents(ip, device, keepExpired = true) }.second
     }
 
     suspend fun getEvents(device: Device): RpcResult<List<CoverEvent>> {

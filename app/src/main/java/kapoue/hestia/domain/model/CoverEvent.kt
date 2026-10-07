@@ -123,3 +123,18 @@ internal fun coverEventInstantsBetween(event: CoverEvent, from: LocalDateTime, t
     }
     return result
 }
+
+/**
+ * Sépare les événements lus en (renvoyés, à purger). Lecture normale : les uniques échus sont
+ * purgés et non renvoyés. Lecture du worker de notifications ([keepExpired]) : ils sont gardés
+ * (ils viennent justement de s'exécuter) et rien n'est purgé, la prochaine lecture normale s'en charge.
+ */
+internal fun splitForRead(
+    all: List<CoverEvent>,
+    now: LocalDateTime,
+    keepExpired: Boolean,
+): Pair<List<CoverEvent>, List<CoverEvent>> {
+    if (keepExpired) return all to emptyList()
+    val (expired, alive) = all.partition { it.isExpiredOnce(now) }
+    return alive to expired
+}

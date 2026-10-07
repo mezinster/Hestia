@@ -98,7 +98,7 @@ class NotificationWorker(
             if (device.isCover) {
                 val fromLocal = Instant.ofEpochMilli(from).atZone(zone).toLocalDateTime()
                 val toLocal = Instant.ofEpochMilli(now).atZone(zone).toLocalDateTime()
-                for (e in deps.coverScheduleRepository().getEvents(device).getOrNull().orEmpty()) {
+                for (e in deps.coverScheduleRepository().getEventsForNotifications(device).getOrNull().orEmpty()) {
                     val (kind, text) = when (val a = e.action) {
                         CoverEventAction.Open -> "cv-open" to ctx.getString(R.string.cover_notif_opened)
                         CoverEventAction.Close -> "cv-close" to ctx.getString(R.string.cover_notif_closed)
