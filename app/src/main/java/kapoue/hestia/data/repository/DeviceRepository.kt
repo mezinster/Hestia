@@ -1268,7 +1268,8 @@ class DeviceRepository @Inject constructor(
             is RpcResult.Failure -> return r
         }
         // Présence = script `Switch` : jamais pour un variateur (lot C3).
-        if (!device.hasScripting || device.isLight) return RpcResult.Success(native)
+        // Un volet n'a pas de script de présence non plus (Switch seulement).
+        if (!device.hasScripting || device.isLight || device.isCover) return RpcResult.Success(native)
         val presence = getPresenceWindows(device).getOrNull().orEmpty().map { w ->
             Planning(
                 startHour = w.startHour, startMinute = w.startMinute,
@@ -2473,7 +2474,8 @@ class DeviceRepository @Inject constructor(
                 is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
             }
         }
-        if (device.hasScripting && !device.isLight) {
+        // Le script du minuteur de bouton physique est propre à Switch : ni variateur ni volet.
+        if (device.hasScripting && !device.isLight && !device.isCover) {
             if (reachable) {
                 val buttonConfig = getButtonTimerConfig(device)
                 if (buttonConfig.enabled) {

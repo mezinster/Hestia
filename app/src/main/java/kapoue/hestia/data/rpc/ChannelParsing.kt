@@ -26,3 +26,7 @@ internal fun parseChannelNames(components: List<ComponentEntry>, prefix: String)
 
 /** Vrai si l'appareil n'a que des canaux variateur : l'ajout passe alors par le dépôt Light. */
 internal fun DeviceCapabilities.isLightOnly(): Boolean = switchChannels.isEmpty() && lightChannels.isNotEmpty()
+
+/** Vrai si l'appareil n'a aucun relais mais des variateurs et/ou des volets : ajout direct, sans sélection. */
+internal fun DeviceCapabilities.hasNoSwitchChannels(): Boolean =
+    switchChannels.isEmpty() && (lightChannels.isNotEmpty() || coverChannels.isNotEmpty())
