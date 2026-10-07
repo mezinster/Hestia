@@ -24,4 +24,10 @@ class ChannelNameRpcTest {
     @Test
     fun `un appareil demo n'appelle jamais le reseau`() =
         assertEquals(ChannelNameRpc.NONE, channelNameRpc(device(isLight = true, supportsSwitch = false, ip = "203.0.113.7")))
+
+    @Test
+    fun `un volet passe par Cover`() = assertEquals(
+        ChannelNameRpc.COVER,
+        channelNameRpc(Device(name = "X", ipAddress = "192.168.1.60", type = DeviceType.SHUTTER, isCover = true, supportsSwitch = false)),
+    )
 }
