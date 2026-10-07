@@ -252,7 +252,17 @@ fun DashboardScreen(
                             }
                             if (!tile.isMultiChannel) {
                                 item(key = tile.device.id) {
-                                    if (tile.device.isLight) {
+                                    if (tile.device.isCover) {
+                                        // Volet (2026-10-07) : tap = Détail, ▲ ■ ▼ directement sur la tuile.
+                                        CoverTile(
+                                            tile = tile,
+                                            onOpen = { viewModel.coverOpen(tile.device) },
+                                            onStop = { viewModel.coverStop(tile.device) },
+                                            onClose = { viewModel.coverClose(tile.device) },
+                                            onOpenDetail = { onOpenDetail(tile.device.id) },
+                                            onOpenFirmware = { onOpenFirmware(tile.device.id) },
+                                        )
+                                    } else if (tile.device.isLight) {
                                         // Variateur (2026-10-07) : le tap ouvre directement le
                                         // Détail (curseur), pas la modale rapide pensée relais.
                                         LightTile(

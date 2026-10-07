@@ -550,4 +550,17 @@
     <string name="diagnostic_report_devices_header">Devices:</string>
     <string name="diagnostic_report_device_line">- %1$s (%2$s, %3$s) — firmware %4$s</string>
     <string name="diagnostic_report_firmware_unreachable">unreachable</string>
+    <!-- Tableau : tuile volet (S1) -->
+    <string name="cover_state_open">Open</string>
+    <string name="cover_state_closed">Closed</string>
+    <string name="cover_state_opening">Opening…</string>
+    <string name="cover_state_opening_at">Opening… %1$d%%</string>
+    <string name="cover_state_closing">Closing…</string>
+    <string name="cover_state_closing_at">Closing… %1$d%%</string>
+    <string name="cover_state_stopped">Stopped</string>
+    <string name="cover_state_stopped_at">Stopped at %1$d%%</string>
+    <string name="cover_state_calibrating">Calibrating…</string>
+    <string name="cover_open">Open</string>
+    <string name="cover_stop">Stop</string>
+    <string name="cover_close">Close</string>
 </resources>

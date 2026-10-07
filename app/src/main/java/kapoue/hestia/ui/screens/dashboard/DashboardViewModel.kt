@@ -14,6 +14,7 @@ import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
+import kapoue.hestia.data.repository.CoverRepository
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.repository.DeviceStatusResult
 import kapoue.hestia.data.repository.LightRepository
@@ -43,6 +44,7 @@ class DashboardViewModel @Inject constructor(
     private val logger: DiagnosticLogger,
     private val ntfyClient: NtfyClient,
     private val lightRepository: LightRepository,
+    private val coverRepository: CoverRepository,
 ) : ViewModel() {
 
     init {
@@ -100,6 +102,7 @@ class DashboardViewModel @Inject constructor(
     // ne concerne que les canaux avec relais (Switch.GetStatus).
     private val sensorStatuses = MutableStateFlow<Map<Long, SensorStatus>>(emptyMap())
     private val lightStatuses = MutableStateFlow<Map<Long, LightStatus>>(emptyMap())
+    private val coverStatuses = MutableStateFlow<Map<Long, CoverStatus>>(emptyMap())
 
     // Renseigné par la couche UI (qui seule connaît le Context) à chaque reprise d'écran.
     private val _permissionUsable = MutableStateFlow(true)
@@ -110,9 +113,12 @@ class DashboardViewModel @Inject constructor(
     // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils + on_since +
     // capteurs en un seul.
     private val extras = combine(
-        combine(presences, plannings, pendingThresholds, onSinceElapsed, sensorStatuses) { p, pl, th, os, ss -> Extras(p, pl, th, os, ss) },
-        lightStatuses,
-    ) { e, ls -> e.copy(lightStatuses = ls) }
+        combine(
+            combine(presences, plannings, pendingThresholds, onSinceElapsed, sensorStatuses) { p, pl, th, os, ss -> Extras(p, pl, th, os, ss) },
+            lightStatuses,
+        ) { e, ls -> e.copy(lightStatuses = ls) },
+        coverStatuses,
+    ) { e, cs -> e.copy(coverStatuses = cs) }
 
     val uiState: StateFlow<DashboardUiState> =
         combine(repository.observeDevices(), statuses, refreshing, loaded, extras) { devices, statusMap, isRefreshing, isLoaded, extras ->
@@ -133,6 +139,7 @@ class DashboardViewModel @Inject constructor(
                             null
                         },
                         lightStatus = if (device.isLight) extras.lightStatuses[device.id] ?: LightStatus.Loading else null,
+                        coverStatus = if (device.isCover) extras.coverStatuses[device.id] ?: CoverStatus.Loading else null,
                         presence = extras.presence[device.id],
                         plannings = extras.plannings[device.id].orEmpty(),
                         pendingThresholdW = extras.pendingThresholds[device.id],
@@ -244,6 +251,18 @@ class DashboardViewModel @Inject constructor(
                         }
                     }.awaitAll()
                 }
+                val coverResults = async {
+                    // Volets (cover:N, 2026-10-07) : chemin séparé, aucun repli cloud.
+                    devices.filter { it.isCover }.map { device ->
+                        async {
+                            val coverStatus = coverRepository.getStatus(device).toCoverStatus()
+                            if (coverStatus is CoverStatus.Online) {
+                                viewModelScope.launch { repository.nameCatchUpIfNeeded(device) }
+                            }
+                            device.id to coverStatus
+                        }
+                    }.awaitAll()
+                }
                 val presenceResults = async {
                     devices.filter { it.hasScripting && !it.isLight }.map { device ->
                         async { device.id to loadPresence(device) }
@@ -261,6 +280,7 @@ class DashboardViewModel @Inject constructor(
                 sensorStatuses.value = sensorResults.await().toMap()
                 val previousLightStatuses = lightStatuses.value
                 lightStatuses.value = lightResults.await().toMap()
+                coverStatuses.value = coverResults.await().toMap()
                 presences.value = presenceResults.await()
                     .mapNotNull { (id, info) -> info?.let { id to it } }
                     .toMap()
@@ -564,6 +584,24 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    /** Ouvre un volet depuis sa tuile. */
+    fun coverOpen(device: Device) = coverAction(device, "ouverture") { coverRepository.open(device) }
+
+    /** Ferme un volet depuis sa tuile. */
+    fun coverClose(device: Device) = coverAction(device, "fermeture") { coverRepository.close(device) }
+
+    /** Arrête un volet en mouvement depuis sa tuile. */
+    fun coverStop(device: Device) = coverAction(device, "arrêt") { coverRepository.stop(device) }
+
+    private fun coverAction(device: Device, label: String, call: suspend () -> Unit) {
+        if (!_permissionUsable.value) return
+        viewModelScope.launch {
+            logger.info(DiagnosticLogger.UI, "Volet ${device.ipAddress}#${device.switchId} → $label")
+            call()
+            coverStatuses.value = coverStatuses.value + (device.id to coverRepository.getStatus(device).toCoverStatus())
+        }
+    }
+
     private companion object {
         /** Tolérance pour considérer qu'un souvenir local de minuteur correspond bien au minuteur
          * natif actuellement en cours sur l'appareil (voir le calcul dans [fetch]). */
@@ -597,4 +635,5 @@ private data class Extras(
     val onSinceElapsed: Map<Long, Long>,
     val sensorStatuses: Map<Long, SensorStatus>,
     val lightStatuses: Map<Long, LightStatus> = emptyMap(),
+    val coverStatuses: Map<Long, CoverStatus> = emptyMap(),
 )

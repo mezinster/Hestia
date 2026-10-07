@@ -544,4 +544,17 @@
     <string name="diagnostic_report_devices_header">Appareils :</string>
     <string name="diagnostic_report_device_line">- %1$s (%2$s, %3$s) — firmware %4$s</string>
     <string name="diagnostic_report_firmware_unreachable">injoignable</string>
+    <!-- Tableau : tuile volet (S1) -->
+    <string name="cover_state_open">Ouvert</string>
+    <string name="cover_state_closed">Fermé</string>
+    <string name="cover_state_opening">Ouverture…</string>
+    <string name="cover_state_opening_at">Ouverture… %1$d %%</string>
+    <string name="cover_state_closing">Fermeture…</string>
+    <string name="cover_state_closing_at">Fermeture… %1$d %%</string>
+    <string name="cover_state_stopped">Arrêté</string>
+    <string name="cover_state_stopped_at">Arrêté à %1$d %%</string>
+    <string name="cover_state_calibrating">Calibration…</string>
+    <string name="cover_open">Ouvrir</string>
+    <string name="cover_stop">Arrêter</string>
+    <string name="cover_close">Fermer</string>
 </resources>

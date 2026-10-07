@@ -34,8 +34,24 @@ class LightModelsTest {
     fun `la cle de groupe distingue relais et lights d'une meme adresse`() {
         val l = Device(name = "L", ipAddress = "1.2.3.4", type = DeviceType.LAMP, isLight = true)
         val p = Device(name = "P", ipAddress = "1.2.3.4", type = DeviceType.PLUG)
-        assertEquals("1.2.3.4" to true, l.groupKey())
-        assertEquals("1.2.3.4" to false, p.groupKey())
+        assertEquals("1.2.3.4" to ChannelKind.LIGHT, l.groupKey())
+        assertEquals("1.2.3.4" to ChannelKind.RELAY, p.groupKey())
+    }
+
+    private fun cover(ip: String, id: Int) = Device(name = "C$id", ipAddress = ip, switchId = id, type = DeviceType.SHUTTER, isCover = true, supportsSwitch = false)
+
+    @Test
+    fun `deux volets d'une meme IP gardent chacun leur tuile`() {
+        val flags = computeGroupFlags(listOf(cover("1.1.1.1", 0), cover("1.1.1.1", 1)))
+        assertEquals(listOf(GroupFlags(true, false), GroupFlags(false, false)), flags)
+    }
+
+    @Test
+    fun `relais et volet d'une meme IP ne se melangent pas`() {
+        val r0 = Device(name = "R0", ipAddress = "1.1.1.1", switchId = 0, type = DeviceType.PLUG)
+        val r1 = Device(name = "R1", ipAddress = "1.1.1.1", switchId = 1, type = DeviceType.PLUG)
+        val flags = computeGroupFlags(listOf(r0, cover("1.1.1.1", 0), r1))
+        assertEquals(listOf(GroupFlags(true, true), GroupFlags(true, false), GroupFlags(false, true)), flags)
     }
 
     private fun plug(id: Int, ip: String = "1.2.3.4") = Device(name = "P$id", ipAddress = ip, switchId = id, type = DeviceType.PLUG)
