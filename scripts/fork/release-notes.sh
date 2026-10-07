@@ -17,7 +17,15 @@ summary="$(git tag -l --format='%(contents)' "$tag" | sed '/^-----BEGIN/,$d')"
 [[ -n "${summary//[[:space:]]/}" ]] && printf '## Summary\n\n%s\n\n' "$summary"
 echo "## Changes"
 echo
-if [[ -n "$prev" ]]; then
+# Section « ## <version> » du journal docs/fork/CHANGELOG.md tel qu'il est au tag (rédigé pour les
+# testeurs) ; à défaut, titres bruts des commits.
+version="${tag#fork/}"
+changelog="$(git show "$tag:docs/fork/CHANGELOG.md" 2>/dev/null \
+    | awk -v v="## $version" '$0 == v { on = 1; next } on && /^## / { exit } on' \
+    | sed -e '/./,$!d' || true)"
+if [[ -n "${changelog//[[:space:]]/}" ]]; then
+    printf '%s\n' "$changelog"
+elif [[ -n "$prev" ]]; then
     git log --no-merges --format='- %s' "$prev..$tag"
 else
     echo "First release of the new release pipeline (Russian translation, device-kind detection, dimmers)."

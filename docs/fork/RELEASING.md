@@ -45,6 +45,10 @@ fonctions, reporter ses changements en gardant ces paramètres. Les conditions �
 
 ## 3. Publier
 
+Avant de tagger, ajouter à `docs/fork/CHANGELOG.md` une section `## <x.y.z>-fork.<N>` (en anglais,
+pour les testeurs) et la committer sur `fork/main` : les notes de la Release publient cette section
+(à défaut, la liste brute des commits).
+
 ```bash
 git switch fork/main && git pull
 git tag -a fork/<x.y.z>-fork.<N> -m "<résumé d'une ligne en anglais pour les testeurs>"
