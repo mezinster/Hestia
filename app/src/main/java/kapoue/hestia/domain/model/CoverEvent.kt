@@ -99,3 +99,27 @@ internal const val COVER_EVENTS_RELOAD_MS = 30_000L
 /** Vrai au premier relevé, puis au plus une fois toutes les 30 s (les actions relisent d'elles-mêmes). */
 internal fun shouldReloadCoverEvents(lastLoadMs: Long?, nowMs: Long): Boolean =
     lastLoadMs == null || nowMs - lastLoadMs >= COVER_EVENTS_RELOAD_MS
+
+/**
+ * Toutes les occurrences de [event] dans la fenêtre `(from, to]` : [from] exclu, [to] inclus.
+ * Parcourt chaque date de la fenêtre, donc valable aussi au-delà d'une journée.
+ */
+internal fun coverEventInstantsBetween(event: CoverEvent, from: LocalDateTime, to: LocalDateTime): List<LocalDateTime> {
+    val time = LocalTime.of(event.hour, event.minute)
+    val result = mutableListOf<LocalDateTime>()
+    var day = from.toLocalDate()
+    val last = to.toLocalDate()
+    while (!day.isAfter(last)) {
+        val matches = when {
+            event.date != null -> day == event.date
+            event.days.isEmpty() -> true
+            else -> day.dayOfWeek.value % 7 in event.days
+        }
+        if (matches) {
+            val at = LocalDateTime.of(day, time)
+            if (at.isAfter(from) && !at.isAfter(to)) result += at
+        }
+        day = day.plusDays(1)
+    }
+    return result
+}
