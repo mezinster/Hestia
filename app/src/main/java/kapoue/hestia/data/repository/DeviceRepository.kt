@@ -2754,6 +2754,17 @@ class DeviceRepository @Inject constructor(
             position++
         }
 
+        // Variateur démo (fork, 2026-10-07) — voir LightRepository/demoLightStatus. Le « Living
+        // Room Lamp » ci-dessus reste une prise : il sert aux captures F-Droid de l'amont.
+        deviceDao.insert(
+            Device(
+                name = "Bedroom Dimmer", deviceName = "Bedroom Dimmer", ipAddress = "203.0.113.7", switchId = 0,
+                type = DeviceType.LAMP, model = "Demo", supportsSwitch = false, isLight = true,
+                hasScripting = true, hasPowerMetering = true, position = position,
+            ),
+        )
+        position++
+
         // Bloc multi-canaux (façon vraie multiprise) — mix d'états sur les 4 canaux, voir
         // demoStripStatus.
         val stripIp = "203.0.113.10"
