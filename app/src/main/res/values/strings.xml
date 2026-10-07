@@ -302,6 +302,8 @@
     <string name="sensor_relay_body_alarm_test">Test triggered (3 beeps).</string>
     <string name="state_offline">Unavailable</string>
     <string name="state_loading">Loading…</string>
+    <string name="light_state_on">On · %1$d%%</string>
+    <string name="light_state_off">Off</string>
 
     <!-- Bandeau global du Tableau (pas de tuile dédiée) quand la permission réseau local manque -->
     <string name="dashboard_permission_banner">Local network permission is required to reach your devices.</string>

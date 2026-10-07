@@ -241,7 +241,15 @@ fun DashboardScreen(
                             }
                             if (!tile.isMultiChannel) {
                                 item(key = tile.device.id) {
-                                    if (tile.device.type == DeviceType.SMOKE_DETECTOR) {
+                                    if (tile.device.isLight) {
+                                        // Variateur (2026-10-07) : le tap ouvre directement le
+                                        // Détail (curseur), pas la modale rapide pensée relais.
+                                        LightTile(
+                                            tile = tile,
+                                            onToggle = { viewModel.toggleLight(tile.device, it) },
+                                            onOpenDetail = { onOpenDetail(tile.device.id) },
+                                        )
+                                    } else if (tile.device.type == DeviceType.SMOKE_DETECTOR) {
                                         SmokeDetectorTile(
                                             tile = tile,
                                             onOpenDetail = { onOpenDetail(tile.device.id) },

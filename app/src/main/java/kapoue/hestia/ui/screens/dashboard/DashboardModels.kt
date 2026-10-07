@@ -106,6 +106,8 @@ data class TileUiState(
     val status: TileStatus,
     /** État du détecteur de fumée, seulement pour ce type d'appareil — voir SMOKE-DETECTOR.md. */
     val sensorStatus: SensorStatus? = null,
+    /** État du variateur, seulement pour un canal light (`device.isLight`). */
+    val lightStatus: LightStatus? = null,
     val presence: PresenceInfo? = null,
     /** Plannings présents sur l'appareil ; la tuile affiche celui **en cours** s'il y en a un. */
     val plannings: List<Planning> = emptyList(),
