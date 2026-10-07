@@ -230,6 +230,27 @@ fun DetailScreen(
                     onSet = { on, brightness -> viewModel.setLight(on, brightness) },
                     onStartTimer = { seconds -> viewModel.setLight(on = true, brightness = null, toggleAfterSec = seconds) },
                 )
+                // Plannings (lot C3) : mêmes composants que pour un relais ; présence et coupure
+                // masquées (scripts Switch), voir hasPresence/hasCutoff d'AddPlanningDialog.
+                HorizontalDivider()
+                PlanningSection(
+                    plannings = plannings,
+                    presenceDisabledToday = presenceDisabledToday,
+                    planningDisabledToday = planningDisabledToday,
+                    onEdit = { p ->
+                        viewModel.clearAddPlanningResult()
+                        if (p.isReallyActive()) blockedEditPlanning = p else editingPlanning = p
+                    },
+                    onAdd = {
+                        viewModel.clearAddPlanningResult()
+                        showAddPlanning = true
+                    },
+                    onDelete = { planningToDelete = it },
+                    onPause = { p -> if (p.isReallyActive()) planningToPause = p else viewModel.pausePlanning(p) },
+                    pausedPlannings = pausedPlannings,
+                    onResume = { viewModel.resumePlanning(it) },
+                    onDeletePaused = { pausedPlanningToDelete = it },
+                )
                 return@Column
             }
 
@@ -367,8 +388,8 @@ fun DetailScreen(
         AddPlanningDialog(
             initial = editingPlanning,
             result = addPlanningResult,
-            hasCutoff = (device?.hasScripting ?: false) && (device?.hasPowerMetering ?: false),
-            hasPresence = device?.hasScripting ?: false,
+            hasCutoff = device?.isLight != true && (device?.hasScripting ?: false) && (device?.hasPowerMetering ?: false),
+            hasPresence = device?.isLight != true && (device?.hasScripting ?: false),
             onValidate = { sh, sm, eh, em, days, date, thresholdW, marginMinutes ->
                 val edit = editingPlanning
                 if (edit != null) viewModel.updatePlanning(edit, sh, sm, eh, em, days, date, thresholdW, marginMinutes)
