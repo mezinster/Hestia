@@ -594,7 +594,7 @@ class ShellyRpcClient @Inject constructor(
          * ouvert). Les échecs restent journalisés dans tous les cas.
          */
         val QUIET_ON_SUCCESS = setOf(
-            "Switch.GetStatus", "Light.GetStatus", "Schedule.List", "Script.List", "Script.GetCode", "Shelly.GetStatus",
+            "Switch.GetStatus", "Light.GetStatus", "Cover.GetStatus", "Schedule.List", "Script.List", "Script.GetCode", "Shelly.GetStatus",
         )
         const val MAX_COMPONENT_PAGES = 32
     }
