@@ -17,6 +17,11 @@ import kapoue.hestia.data.rpc.CoverScheduleRpc
 import kapoue.hestia.data.rpc.NtfyTexts
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.coverEventsFrom
+import kapoue.hestia.data.rpc.coverNtfyCall
+import kapoue.hestia.data.rpc.model.ScheduleJob
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
 import kapoue.hestia.domain.model.coverEventDisplayOrder
@@ -49,13 +54,29 @@ internal fun validateNewEvents(
     ignoring: CoverEvent? = null,
 ): CoverEventResult? {
     if (new.any { it.isExpiredOnce(now) }) return CoverEventResult.PastOnce
+    // L'événement remplacé ne libère de la place que s'il est réellement présent.
     val others = existing.toMutableList().also { if (ignoring != null) it.remove(ignoring) }
     val duplicate = new.indices.any { i ->
         others.any { new[i].sameSlotAs(it) } || (i + 1 until new.size).any { j -> new[i].sameSlotAs(new[j]) }
     }
     if (duplicate) return CoverEventResult.Duplicate
-    if (existing.size - (if (ignoring != null) 1 else 0) + new.size > MAX_COVER_EVENTS) return CoverEventResult.LimitReached
+    if (others.size + new.size > MAX_COVER_EVENTS) return CoverEventResult.LimitReached
     return null
+}
+
+/**
+ * Vrai si le dernier appel de [job] (ntfy) diffère de [expected] : [expected] nul = ntfy désactivé,
+ * donc tout appel `HTTP.Request` final est à retirer. Couvre aussi un changement de sujet ou de titre.
+ */
+internal fun coverJobNeedsNtfyRewrite(job: ScheduleJob, expected: JsonObject?): Boolean {
+    val last = job.calls.drop(1).lastOrNull()?.takeIf { it.method == "HTTP.Request" }
+    if (last == null) return expected != null
+    if (expected == null) return true
+    val actual = buildJsonObject {
+        put("method", last.method)
+        last.params?.let { put("params", it) }
+    }
+    return actual != expected
 }
 
 /**
@@ -87,7 +108,10 @@ class CoverScheduleRepository @Inject constructor(
 
     fun observePaused(deviceId: Long): Flow<List<PausedCoverEvent>> = pausedDao.observeForDevice(deviceId)
 
-    /** Relit les événements du volet, purge au passage les uniques échus (journalisé). */
+    /**
+     * Relit les événements du volet. Chaque lecture (affichage, validation avant création,
+     * resynchronisation) purge au passage les uniques échus, journalisé : ils ne s'exécuteront plus.
+     */
     private suspend fun readEvents(ip: String, device: Device): RpcResult<List<CoverEvent>> {
         val jobs = when (val r = scheduleRpc.list(ip)) {
             is RpcResult.Success -> r.value.jobs
@@ -110,32 +134,31 @@ class CoverScheduleRepository @Inject constructor(
         return deviceRepository.withIp(device) { ip -> readEvents(ip, device) }.second
     }
 
-    /** Exécute [block] sur l'IP joignable ; [block] renvoie un résultat métier ou une erreur RPC. */
-    private suspend fun run(device: Device, what: String, block: suspend (ip: String) -> RpcResult<CoverEventResult>): CoverEventResult {
-        if (isDemo(device)) return CoverEventResult.Success
-        return when (val r = deviceRepository.withIp(device, block).second) {
-            is RpcResult.Success -> r.value
-            is RpcResult.RpcError -> {
-                logger.warn(DiagnosticLogger.RPC, "Volet ${device.id} : $what refusé par l'appareil (code ${r.code})")
-                CoverEventResult.Error
-            }
-            is RpcResult.Failure -> {
-                logger.warn(DiagnosticLogger.RPC, "Volet ${device.id} : $what impossible (appareil injoignable)")
-                CoverEventResult.Error
-            }
+    private fun fail(device: Device, what: String, r: RpcResult<*>): CoverEventResult {
+        when (r) {
+            is RpcResult.RpcError -> logger.warn(DiagnosticLogger.RPC, "Volet ${device.id} : $what refusé par l'appareil (code ${r.code})")
+            is RpcResult.Failure -> logger.warn(DiagnosticLogger.RPC, "Volet ${device.id} : $what impossible (appareil injoignable)")
+            is RpcResult.Success -> Unit
         }
+        return CoverEventResult.Error
     }
 
-    /** Lit l'existant puis valide ; renvoie le refus éventuel (déjà enveloppé) ou null si accepté. */
-    private suspend fun validate(
-        ip: String,
+    /**
+     * Lit l'existant (seul appel passant par la bascule entre adresses IP), puis exécute [block] sur
+     * l'IP qui a répondu, sans relance sur la seconde adresse : un échec en cours de séquence donne
+     * [CoverEventResult.Error], jamais un faux doublon.
+     */
+    private suspend fun run(
         device: Device,
-        new: List<CoverEvent>,
-        ignoring: CoverEvent? = null,
-    ): RpcResult<CoverEventResult?> = when (val existing = readEvents(ip, device)) {
-        is RpcResult.Success -> RpcResult.Success(validateNewEvents(existing.value, new, LocalDateTime.now(), ignoring))
-        is RpcResult.RpcError -> existing
-        is RpcResult.Failure -> existing
+        what: String,
+        block: suspend (ip: String, existing: List<CoverEvent>) -> CoverEventResult,
+    ): CoverEventResult {
+        if (isDemo(device)) return CoverEventResult.Success
+        val (ip, read) = deviceRepository.withIp(device) { ip -> readEvents(ip, device) }
+        return when (read) {
+            is RpcResult.Success -> block(ip, read.value)
+            else -> fail(device, what, read)
+        }
     }
 
     /** Crée un événement (ntfy en dernier appel s'il est actif) et renvoie l'id du job créé. */
@@ -146,69 +169,50 @@ class CoverScheduleRepository @Inject constructor(
             is RpcResult.Failure -> r
         }
 
-    suspend fun add(device: Device, event: CoverEvent): CoverEventResult = run(device, "ajout d'événement") { ip ->
-        val refusal = when (val v = validate(ip, device, listOf(event))) {
-            is RpcResult.Success -> v.value
-            is RpcResult.RpcError -> return@run v
-            is RpcResult.Failure -> return@run v
-        }
-        if (refusal != null) return@run RpcResult.Success(refusal)
-        when (val c = create(ip, device, event)) {
-            is RpcResult.Success -> RpcResult.Success(CoverEventResult.Success)
-            is RpcResult.RpcError -> c
-            is RpcResult.Failure -> c
-        }
+    suspend fun add(device: Device, event: CoverEvent): CoverEventResult = run(device, "ajout d'événement") { ip, existing ->
+        validateNewEvents(existing, listOf(event), LocalDateTime.now())?.let { return@run it }
+        val c = create(ip, device, event)
+        if (c is RpcResult.Success) CoverEventResult.Success else fail(device, "ajout d'événement", c)
     }
 
     /** Crée [first] puis [second] ; si [second] échoue, [first] est supprimé (plage tout ou rien). */
     suspend fun addWindow(device: Device, first: CoverEvent, second: CoverEvent): CoverEventResult =
-        run(device, "ajout de plage") { ip ->
-            val refusal = when (val v = validate(ip, device, listOf(first, second))) {
-                is RpcResult.Success -> v.value
-                is RpcResult.RpcError -> return@run v
-                is RpcResult.Failure -> return@run v
-            }
-            if (refusal != null) return@run RpcResult.Success(refusal)
+        run(device, "ajout de plage") { ip, existing ->
+            validateNewEvents(existing, listOf(first, second), LocalDateTime.now())?.let { return@run it }
             val firstId = when (val c = create(ip, device, first)) {
                 is RpcResult.Success -> c.value
-                is RpcResult.RpcError -> return@run c
-                is RpcResult.Failure -> return@run c
+                else -> return@run fail(device, "ajout de plage", c)
             }
-            when (val c = create(ip, device, second)) {
-                is RpcResult.Success -> RpcResult.Success(CoverEventResult.Success)
-                is RpcResult.RpcError -> { scheduleRpc.delete(ip, firstId); c }
-                is RpcResult.Failure -> { scheduleRpc.delete(ip, firstId); c }
+            val c = create(ip, device, second)
+            if (c is RpcResult.Success) return@run CoverEventResult.Success
+            if (scheduleRpc.delete(ip, firstId) !is RpcResult.Success) {
+                logger.warn(DiagnosticLogger.RPC, "Volet ${device.id} : retrait de la première moitié de la plage impossible (job $firstId), doublon possible")
             }
+            fail(device, "ajout de plage", c)
         }
 
-    /** Crée le nouvel événement puis supprime l'ancien : un échec ne perd jamais l'existant. */
+    /**
+     * Crée le nouvel événement puis supprime l'ancien : un échec ne perd jamais l'existant. Si la
+     * création a réussi, c'est un succès même quand la suppression échoue (comme `updatePlanning`).
+     */
     suspend fun update(device: Device, old: CoverEvent, new: CoverEvent): CoverEventResult =
-        run(device, "modification d'événement") { ip ->
-            val oldId = old.jobId ?: return@run RpcResult.Success(CoverEventResult.Error)
-            val refusal = when (val v = validate(ip, device, listOf(new), ignoring = old)) {
-                is RpcResult.Success -> v.value
-                is RpcResult.RpcError -> return@run v
-                is RpcResult.Failure -> return@run v
+        run(device, "modification d'événement") { ip, existing ->
+            val oldId = old.jobId ?: return@run CoverEventResult.Error
+            validateNewEvents(existing, listOf(new), LocalDateTime.now(), ignoring = old)?.let { return@run it }
+            val c = create(ip, device, new)
+            if (c !is RpcResult.Success) return@run fail(device, "modification d'événement", c)
+            if (scheduleRpc.delete(ip, oldId) !is RpcResult.Success) {
+                logger.warn(DiagnosticLogger.RPC, "Volet ${device.id} : ancien événement non supprimé (job $oldId), doublon possible")
             }
-            if (refusal != null) return@run RpcResult.Success(refusal)
-            when (val c = create(ip, device, new)) {
-                is RpcResult.Success -> when (val d = scheduleRpc.delete(ip, oldId)) {
-                    is RpcResult.Success -> RpcResult.Success(CoverEventResult.Success)
-                    is RpcResult.RpcError -> d
-                    is RpcResult.Failure -> d
-                }
-                is RpcResult.RpcError -> c
-                is RpcResult.Failure -> c
-            }
+            CoverEventResult.Success
         }
 
-    suspend fun delete(device: Device, event: CoverEvent): CoverEventResult = run(device, "suppression d'événement") { ip ->
-        val id = event.jobId ?: return@run RpcResult.Success(CoverEventResult.Error)
-        when (val d = scheduleRpc.delete(ip, id)) {
-            is RpcResult.Success -> RpcResult.Success(CoverEventResult.Success)
-            is RpcResult.RpcError -> d
-            is RpcResult.Failure -> d
-        }
+    suspend fun delete(device: Device, event: CoverEvent): CoverEventResult {
+        if (isDemo(device)) return CoverEventResult.Success
+        val id = event.jobId ?: return CoverEventResult.Error
+        // Un seul appel : la bascule entre adresses est sans risque ici.
+        val r = deviceRepository.withIp(device) { ip -> scheduleRpc.delete(ip, id) }.second
+        return if (r is RpcResult.Success) CoverEventResult.Success else fail(device, "suppression d'événement", r)
     }
 
     /** Supprime le job de l'appareil, puis mémorise l'événement localement (seulement si succès). */
@@ -232,33 +236,33 @@ class CoverScheduleRepository @Inject constructor(
     }
 
     /**
-     * Réécrit chaque événement avec ou sans ntfy selon les réglages actuels : création du
+     * Réécrit avec ou sans ntfy, selon les réglages actuels, les seuls événements dont l'appel ntfy
+     * final diffère de l'attendu (idempotent : un nouveau passage ne réécrit rien). Création du
      * remplaçant d'abord, suppression de l'ancien seulement après succès (jamais d'événement perdu).
-     * @return faux si l'appareil est injoignable.
+     * @return faux au moindre échec (lecture, création ou suppression), pour que le rattrapage réessaie.
      */
     suspend fun resyncNtfy(device: Device): Boolean {
         if (isDemo(device)) return true
-        var reachable = true
-        val result = deviceRepository.withIp(device) { ip ->
-            val events = when (val r = readEvents(ip, device)) {
-                is RpcResult.Success -> r.value
-                is RpcResult.RpcError -> return@withIp r
-                is RpcResult.Failure -> return@withIp r
-            }
-            for (event in events) {
-                val oldId = event.jobId ?: continue
-                when (val c = create(ip, device, event)) {
-                    is RpcResult.Success -> scheduleRpc.delete(ip, oldId)
-                    is RpcResult.RpcError -> logger.warn(DiagnosticLogger.RPC, "Volet ${device.id} : resynchronisation ntfy refusée (code ${c.code})")
-                    is RpcResult.Failure -> return@withIp c
-                }
-            }
-            RpcResult.Success(Unit)
-        }.second
-        if (result is RpcResult.Failure) {
-            logger.warn(DiagnosticLogger.RPC, "Volet ${device.id} : resynchronisation ntfy impossible (appareil injoignable)")
-            reachable = false
+        val (ip, listed) = deviceRepository.withIp(device) { ip -> scheduleRpc.list(ip) }
+        val jobs = when (listed) {
+            is RpcResult.Success -> listed.value.jobs
+            else -> { fail(device, "resynchronisation ntfy (lecture)", listed); return false }
         }
-        return reachable
+        val now = LocalDateTime.now()
+        var ok = true
+        for (job in jobs) {
+            val event = coverEventsFrom(listOf(job), device.switchId).firstOrNull() ?: continue
+            if (event.isExpiredOnce(now)) continue
+            val expected = ntfyTexts(device, event.action)?.let { coverNtfyCall(it) }
+            if (!coverJobNeedsNtfyRewrite(job, expected)) continue
+            val c = create(ip, device, event)
+            if (c !is RpcResult.Success) { fail(device, "resynchronisation ntfy (création)", c); ok = false; continue }
+            val d = scheduleRpc.delete(ip, job.id)
+            if (d !is RpcResult.Success) {
+                fail(device, "resynchronisation ntfy (suppression de l'ancien job ${job.id})", d)
+                ok = false
+            }
+        }
+        return ok
     }
 }

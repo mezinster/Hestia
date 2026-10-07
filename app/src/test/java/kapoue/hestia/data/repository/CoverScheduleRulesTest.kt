@@ -4,8 +4,18 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
+import kapoue.hestia.data.rpc.NtfyTexts
+import kapoue.hestia.data.rpc.coverActionCall
+import kapoue.hestia.data.rpc.coverNtfyCall
+import kapoue.hestia.data.rpc.model.ScheduleCall
+import kapoue.hestia.data.rpc.model.ScheduleJob
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
 
 /** Règles de validation avant création d'événements de volet (lot S2, 2026-10-07). */
@@ -59,4 +69,37 @@ class CoverScheduleRulesTest {
         val existing = (0..9).map { ev(it) }
         assertNull(validateNewEvents(existing, listOf(ev(20)), now, ignoring = existing[0]))
     }
+
+    @Test
+    fun `ignorer un evenement absent ne libere pas de place`() {
+        val existing = (0..9).map { ev(it) }
+        assertEquals(CoverEventResult.LimitReached, validateNewEvents(existing, listOf(ev(20)), now, ignoring = ev(22)))
+    }
+
+    private fun call(m: JsonObject) = ScheduleCall(m["method"]!!.jsonPrimitive.content, m["params"]!!.jsonObject)
+    private val action = coverActionCall(0, CoverEventAction.Open)
+    private fun ntfy(topic: String = "t", title: String = "Volet") = coverNtfyCall(NtfyTexts(topic, title, "Ouvert"))
+    private fun job(vararg calls: JsonObject) = ScheduleJob(1, true, "0 0 7 * * *", calls.map { call(it) })
+
+    @Test
+    fun `ntfy desactive avec un appel HTTP a retirer`() =
+        assertTrue(coverJobNeedsNtfyRewrite(job(action, ntfy()), null))
+
+    @Test
+    fun `ntfy desactive sans appel HTTP rien a faire`() =
+        assertFalse(coverJobNeedsNtfyRewrite(job(action), null))
+
+    @Test
+    fun `ntfy actif avec le meme appel rien a faire`() =
+        assertFalse(coverJobNeedsNtfyRewrite(job(action, ntfy()), ntfy()))
+
+    @Test
+    fun `ntfy actif sujet ou titre different a reecrire`() {
+        assertTrue(coverJobNeedsNtfyRewrite(job(action, ntfy()), ntfy(topic = "autre")))
+        assertTrue(coverJobNeedsNtfyRewrite(job(action, ntfy()), ntfy(title = "Salon")))
+    }
+
+    @Test
+    fun `ntfy actif sans appel HTTP a ajouter`() =
+        assertTrue(coverJobNeedsNtfyRewrite(job(action), ntfy()))
 }
