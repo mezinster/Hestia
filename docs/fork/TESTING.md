@@ -1,0 +1,125 @@
+# Hestia (test) — tester guide
+
+[English](#english) · [Русский](#русский)
+
+## English
+
+### What this is
+
+An **unofficial test build** of [Hestia](https://codeberg.org/kapoue/Hestia), the free Android app
+that controls Shelly devices on your local network (no cloud, no account). This fork adds features
+that are not (yet) in the official app:
+
+- Russian translation;
+- a clear message when a device can't be controlled (shutter, sensor, energy meter…);
+- dimmers (`light` devices): on/off and brightness.
+
+It runs on **Android 10 to 17**.
+
+> Independence: Hestia is an independent project, with no connection to Shelly or Allterco
+> Robotics. It is neither commissioned, sponsored, nor endorsed by Shelly. Shelly is a registered
+> trademark of its respective owner; it is mentioned only for technical compatibility.
+
+### Install
+
+1. Open <https://codeberg.org/mezinster/Hestia/releases/latest> on your phone.
+2. Download `hestia-<version>.apk`.
+3. Open the file. If Android asks, allow installing apps from your browser or file manager.
+
+The app appears as **« Hestia (test) »**. It installs **next to** the official Hestia from F-Droid:
+both can live on the same phone, each with its own devices and settings.
+
+### Update
+
+Download the newer APK from the same link and install it over the old one. Your devices and settings
+are kept. There are no automatic updates: check the link from time to time, or watch the repository
+on Codeberg.
+
+### Android 17
+
+The first time Hestia contacts a device, Android asks for permission to reach **devices on your
+local network**. Hestia needs it to talk to your Shelly devices; it only contacts the IP addresses
+you enter.
+
+### Verify the download (optional)
+
+- Each APK has a `.sha256` file next to it: `sha256sum -c hestia-<version>.apk.sha256`.
+- The APK is signed with this certificate (SHA-256), which you can check with an app such as
+  AppVerifier:
+
+  ```
+  17:69:2C:2F:A7:AF:58:D1:8E:90:54:B9:71:4E:B0:34:E3:86:68:B4:B5:B9:F5:45:80:4B:64:90:91:FA:DD:68
+  ```
+
+### Report a bug
+
+Open an issue at <https://codeberg.org/mezinster/Hestia/issues> with:
+
+- your Android version and phone model;
+- the Shelly model (and generation, if you know it);
+- what you did, what you expected, what happened;
+- the diagnostic log: on the **Dashboard**, tap the title at the top **5 times quickly** to open
+  **Diagnostic log**, then **Share**. It contains no passwords and is only sent when you choose to
+  share it.
+
+---
+
+## Русский
+
+### Что это
+
+**Неофициальная тестовая сборка** [Hestia](https://codeberg.org/kapoue/Hestia) — свободного
+приложения для Android, которое управляет устройствами Shelly в твоей локальной сети (без облака и
+без аккаунта). В этом форке есть функции, которых (пока) нет в официальном приложении:
+
+- русский перевод;
+- понятное сообщение, если устройством нельзя управлять (шторы, датчик, счётчик электроэнергии…);
+- диммеры (устройства `light`): вкл/выкл и яркость.
+
+Работает на **Android 10–17**.
+
+> Независимость: Hestia — независимый проект, никак не связанный с Shelly или Allterco Robotics.
+> Он не заказан, не спонсирован и не одобрен Shelly. Shelly — зарегистрированный товарный знак
+> своего владельца; он упоминается только для указания технической совместимости.
+
+### Установка
+
+1. Открой на телефоне <https://codeberg.org/mezinster/Hestia/releases/latest>.
+2. Скачай `hestia-<версия>.apk`.
+3. Открой файл. Если Android спросит, разреши установку приложений из браузера или файлового
+   менеджера.
+
+Приложение называется **«Hestia (test)»**. Оно ставится **рядом** с официальной Hestia из F-Droid:
+обе версии могут быть на одном телефоне, у каждой свои устройства и настройки.
+
+### Обновление
+
+Скачай более новый APK по той же ссылке и установи поверх старого. Устройства и настройки
+сохранятся. Автоматических обновлений нет: время от времени заглядывай по ссылке или подпишись на
+репозиторий на Codeberg.
+
+### Android 17
+
+Когда Hestia впервые обращается к устройству, Android запрашивает разрешение на доступ к
+**устройствам в локальной сети**. Оно нужно, чтобы общаться с твоими Shelly; Hestia обращается только
+к тем IP-адресам, которые ты ввёл.
+
+### Проверка загрузки (необязательно)
+
+- Рядом с каждым APK лежит файл `.sha256`: `sha256sum -c hestia-<версия>.apk.sha256`.
+- APK подписан этим сертификатом (SHA-256), его можно проверить, например, приложением AppVerifier:
+
+  ```
+  17:69:2C:2F:A7:AF:58:D1:8E:90:54:B9:71:4E:B0:34:E3:86:68:B4:B5:B9:F5:45:80:4B:64:90:91:FA:DD:68
+  ```
+
+### Сообщить об ошибке
+
+Создай issue на <https://codeberg.org/mezinster/Hestia/issues> и укажи:
+
+- версию Android и модель телефона;
+- модель Shelly (и поколение, если знаешь);
+- что ты сделал, что ожидал и что произошло;
+- журнал диагностики: на экране **Панель** быстро нажми **5 раз** на заголовок вверху — откроется
+  **Журнал диагностики**, затем **Поделиться**. В нём нет паролей, и он отправляется только если ты
+  сам им поделишься.
