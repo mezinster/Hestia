@@ -31,7 +31,10 @@ class LightRepository @Inject constructor(
 
     suspend fun getStatus(device: Device): RpcResult<LightStatusResult> {
         if (device.ipAddress.startsWith(DeviceRepository.DEMO_IP_PREFIX)) {
-            return RpcResult.Success(demoStates.getOrPut(device.id) { demoLightStatus(device) })
+            val now = System.currentTimeMillis() / 1000.0
+            return RpcResult.Success(
+                demoStates.compute(device.id) { _, current -> expireDemoTimer(current ?: demoLightStatus(device), now) }!!,
+            )
         }
         return deviceRepository.withIp(device) { ip -> lightRpc.getLightStatus(ip, device.switchId) }.second
     }
@@ -115,4 +118,12 @@ internal fun applyDemoLightSet(
         timerStartedAt = if (timed) nowEpochSec else current.timerStartedAt.takeIf { output },
         timerDuration = if (timed) toggleAfterSec!!.toDouble() else current.timerDuration.takeIf { output },
     )
+}
+
+/** Minuteur démo échu : la lampe s'éteint seule, comme le ferait l'appareil (`toggle_after`). */
+internal fun expireDemoTimer(current: LightStatusResult, nowEpochSec: Double): LightStatusResult {
+    val startedAt = current.timerStartedAt ?: return current
+    val duration = current.timerDuration ?: return current
+    if (startedAt + duration > nowEpochSec) return current
+    return current.copy(output = false, apower = 0.0, timerStartedAt = null, timerDuration = null)
 }

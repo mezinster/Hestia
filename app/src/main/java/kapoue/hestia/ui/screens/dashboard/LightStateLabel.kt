@@ -14,12 +14,9 @@ import kapoue.hestia.core.util.formatCountdown
 fun lightStateLabel(status: LightStatus, elapsedNow: Long): String {
     val online = status as? LightStatus.Online
     return when {
-        online?.on == true -> {
-            val base = stringResource(R.string.light_state_on, online.brightness)
-            lightTimerRemainingSec(online.timerEndsAtElapsed, elapsedNow)
-                ?.let { "$base · " + stringResource(R.string.light_timer_off_in, formatCountdown(it)) }
-                ?: base
-        }
+        online?.on == true -> lightTimerRemainingSec(online.timerEndsAtElapsed, elapsedNow)
+            ?.let { stringResource(R.string.light_state_on_timer, online.brightness, formatCountdown(it)) }
+            ?: stringResource(R.string.light_state_on, online.brightness)
         online != null -> stringResource(R.string.light_state_off)
         status is LightStatus.Offline -> stringResource(R.string.state_offline)
         else -> stringResource(R.string.state_loading)
