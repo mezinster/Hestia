@@ -120,4 +120,12 @@ class CoverEventDraftTest {
         assertTrue(canAddCoverWindow(8))
         assertFalse(canAddCoverWindow(9))
     }
+
+    @Test
+    fun `sept jours coches donnent tous les jours`() {
+        val e = buildCoverEvent(7, 30, CoverDaysChoice.Days((0..6).toSet()), CoverActionChoice.Open, 50)
+        assertEquals(emptySet<Int>(), e.days)
+        val (a, b) = buildCoverWindow(7, 30, 21, 0, CoverDaysChoice.Days((0..6).toSet()), inverted = false)
+        assertEquals(emptySet<Int>(), a.days); assertEquals(emptySet<Int>(), b.days)
+    }
 }

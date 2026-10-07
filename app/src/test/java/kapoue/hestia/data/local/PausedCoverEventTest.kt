@@ -44,4 +44,10 @@ class PausedCoverEventTest {
         assertEquals(event.copy(jobId = null), back)
         assertNull(back.jobId)
     }
+
+    @Test
+    fun `memo avec les sept jours relu comme tous les jours`() {
+        val paused = CoverEvent(21, 0, emptySet(), null, CoverEventAction.Close).toPaused(1, 0L).copy(days = "0,1,2,3,4,5,6")
+        assertEquals(emptySet<Int>(), paused.toEvent().days)
+    }
 }

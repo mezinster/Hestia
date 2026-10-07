@@ -8,6 +8,7 @@ import kapoue.hestia.data.repository.CoverEventResult
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
+import kapoue.hestia.domain.model.normalizeCoverDays
 import kapoue.hestia.domain.model.windowEvents
 
 /*
@@ -31,7 +32,7 @@ internal enum class CoverActionChoice { Open, Close, Position }
 
 private fun CoverDaysChoice.daysAndDate(): Pair<Set<Int>, LocalDate?> = when (this) {
     CoverDaysChoice.EveryDay -> emptySet<Int>() to null
-    is CoverDaysChoice.Days -> days to null
+    is CoverDaysChoice.Days -> normalizeCoverDays(days) to null
     is CoverDaysChoice.Once -> emptySet<Int>() to date
 }
 

@@ -6,6 +6,7 @@ import kapoue.hestia.data.rpc.model.ScheduleJob
 import kapoue.hestia.data.rpc.model.ScheduleListResult
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
+import kapoue.hestia.domain.model.normalizeCoverDays
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -114,7 +115,7 @@ internal fun coverEventsFrom(jobs: List<ScheduleJob>, coverId: Int): List<CoverE
         // Tâche créée hors Hestia avec des valeurs hors limites : l'ignorer (LocalTime.of lèverait).
         if (parsed.hour !in 0..23 || parsed.minute !in 0..59 || parsed.days.any { it !in 0..6 }) return@mapNotNull null
         // Convention de CoverEvent : « tous les jours » = jours vides (le cron `*` est décodé en 0..6)
-        val days = if (parsed.date == null && parsed.days.size >= 7) emptySet() else parsed.days
+        val days = if (parsed.date == null) normalizeCoverDays(parsed.days) else parsed.days
         CoverEvent(parsed.hour, parsed.minute, days, parsed.date, action, job.id)
     }
 

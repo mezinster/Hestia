@@ -67,4 +67,14 @@ class CoverEventTest {
         assertTrue(shouldReloadCoverEvents(1_000L, 31_000L))
         assertTrue(shouldReloadCoverEvents(1_000L, 90_000L))
     }
+
+    @Test
+    fun `sept jours coches equivalent a tous les jours`() {
+        val all = CoverEvent(21, 0, (0..6).toSet(), action = CoverEventAction.Open)
+        val every = CoverEvent(21, 0, emptySet(), action = CoverEventAction.Close)
+        assertTrue(all.sameSlotAs(every))
+        assertTrue(every.sameSlotAs(all))
+        assertEquals(emptySet<Int>(), normalizeCoverDays((0..6).toSet()))
+        assertEquals(setOf(1, 2), normalizeCoverDays(setOf(1, 2)))
+    }
 }

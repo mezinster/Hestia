@@ -128,4 +128,11 @@ class CoverScheduleRulesTest {
         assertFalse(isCoverNtfyCall(call(lanHook)))
         assertFalse(isCoverNtfyCall(call(action)))
     }
+
+    @Test
+    fun `sept jours coches en doublon de tous les jours`() {
+        val existing = CoverEvent(21, 0, emptySet(), null, CoverEventAction.Close, jobId = 1)
+        val new = CoverEvent(21, 0, (0..6).toSet(), null, CoverEventAction.Open)
+        assertEquals(CoverEventResult.Duplicate, validateNewEvents(listOf(existing), listOf(new), now))
+    }
 }

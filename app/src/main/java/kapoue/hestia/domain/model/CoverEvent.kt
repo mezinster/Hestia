@@ -18,6 +18,13 @@ sealed interface CoverEventAction {
 }
 
 /**
+ * Règle du domaine : les sept jours cochés équivalent à « tous les jours », représenté par un
+ * ensemble vide. Appliquée par tous les créateurs d'événements (dialogue, relecture de l'appareil,
+ * mémo des pauses) et par [CoverEvent.sameSlotAs].
+ */
+internal fun normalizeCoverDays(days: Set<Int>): Set<Int> = if ((0..6).all { it in days }) emptySet() else days
+
+/**
  * Un événement de programmation d'un volet, exécuté par l'appareil lui-même.
  *
  * Jours au format cron (0 = dimanche … 6 = samedi). [days] vide et [date] nul signifient
@@ -56,9 +63,10 @@ data class CoverEvent(
         return null
     }
 
-    /** Même créneau : mêmes heure, minute, jours et date (l'action est ignorée). */
+    /** Même créneau : mêmes heure, minute, jours (sept jours = tous les jours) et date (l'action est ignorée). */
     fun sameSlotAs(other: CoverEvent): Boolean =
-        hour == other.hour && minute == other.minute && days == other.days && date == other.date
+        hour == other.hour && minute == other.minute &&
+            normalizeCoverDays(days) == normalizeCoverDays(other.days) && date == other.date
 }
 
 /**

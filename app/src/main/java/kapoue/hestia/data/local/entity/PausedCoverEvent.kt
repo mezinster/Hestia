@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 import java.time.LocalDate
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
+import kapoue.hestia.domain.model.normalizeCoverDays
 
 /**
  * Événement de programmation d'un volet mis en pause : son job a été réellement supprimé de
@@ -46,7 +47,7 @@ data class PausedCoverEvent(
 fun PausedCoverEvent.toEvent(): CoverEvent = CoverEvent(
     hour = hour,
     minute = minute,
-    days = days.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet(),
+    days = normalizeCoverDays(days.split(",").mapNotNull { it.trim().toIntOrNull() }.toSet()),
     date = date?.let { LocalDate.parse(it) },
     action = when (action) {
         "open" -> CoverEventAction.Open
