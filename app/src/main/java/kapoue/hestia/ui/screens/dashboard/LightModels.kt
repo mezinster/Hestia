@@ -45,28 +45,27 @@ internal fun lightTimerEndsAt(startedAt: Double?, duration: Double?, nowEpochSec
     return nowElapsedMs + remainingSec * 1000
 }
 
-/** Un canal light a toujours sa propre tuile, jamais le bandeau multi-canaux (pensé pour les relais). */
-internal fun Device.isGroupable(): Boolean = !isLight
+/**
+ * Clé de regroupement du Tableau : adresse + nature. Les canaux light d'un même contrôleur forment
+ * leur propre bandeau, indépendant de celui des relais éventuels de la même adresse.
+ */
+internal fun Device.groupKey(): Pair<String, Boolean> = ipAddress to isLight
 
 /** Position d'un appareil dans l'affichage regroupé (bandeau multi-canaux). */
 internal data class GroupFlags(val isFirstInGroup: Boolean, val isMultiChannel: Boolean)
 
 /**
  * Décide, pour chaque appareil (dans l'ordre d'affichage), s'il ouvre un bandeau multi-canaux et
- * s'il en fait partie. Seuls les relais se regroupent par adresse : un light n'est jamais compté
- * dans un groupe et ne décale pas la détection du premier relais d'un groupe.
+ * s'il en fait partie. Les canaux se regroupent par [groupKey] : relais et lights d'une même
+ * adresse forment deux groupes distincts, l'un ne décale jamais la détection du premier de l'autre.
+ * Un canal seul (relais ou light) garde sa tuile.
  */
 internal fun computeGroupFlags(ordered: List<Device>): List<GroupFlags> {
-    val sizeByIp = ordered.filter { it.isGroupable() }.groupingBy { it.ipAddress }.eachCount()
-    var lastIp: String? = null
+    val sizeByKey = ordered.groupingBy { it.groupKey() }.eachCount()
+    val seen = mutableSetOf<Pair<String, Boolean>>()
     return ordered.map { device ->
-        if (!device.isGroupable()) {
-            GroupFlags(isFirstInGroup = true, isMultiChannel = false)
-        } else {
-            val first = device.ipAddress != lastIp
-            lastIp = device.ipAddress
-            GroupFlags(isFirstInGroup = first, isMultiChannel = sizeByIp.getValue(device.ipAddress) > 1)
-        }
+        val key = device.groupKey()
+        GroupFlags(isFirstInGroup = seen.add(key), isMultiChannel = sizeByKey.getValue(key) > 1)
     }
 }
 

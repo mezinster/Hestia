@@ -225,18 +225,29 @@ fun DashboardScreen(
                                 // Bloc multi-canaux : une seule ligne de cercles pour tout le
                                 // groupe (façon vraie multiprise), pas une tuile par canal — le
                                 // détail de chaque canal s'ouvre dans une modale au tap.
-                                val members = uiState.tiles.filter { it.device.isGroupable() && it.device.ipAddress == tile.device.ipAddress }
+                                val members = uiState.tiles.filter { it.device.groupKey() == tile.device.groupKey() }
                                 item(
                                     key = "strip-${tile.device.id}",
                                     span = { GridItemSpan(maxLineSpan) },
                                 ) {
-                                    DeviceStripRow(
-                                        groupLabel = tile.groupLabel,
-                                        members = members,
-                                        elapsedNow = elapsedNow,
-                                        onTapChannel = { quickSheetDeviceId = it.device.id },
-                                        onOpenFirmware = onOpenFirmware,
-                                    )
+                                    if (tile.device.isLight) {
+                                        // Variateur multi-light : le tap ouvre le Détail du canal.
+                                        LightStripRow(
+                                            groupLabel = tile.groupLabel,
+                                            members = members,
+                                            elapsedNow = elapsedNow,
+                                            onOpenChannel = { onOpenDetail(it.device.id) },
+                                            onOpenFirmware = onOpenFirmware,
+                                        )
+                                    } else {
+                                        DeviceStripRow(
+                                            groupLabel = tile.groupLabel,
+                                            members = members,
+                                            elapsedNow = elapsedNow,
+                                            onTapChannel = { quickSheetDeviceId = it.device.id },
+                                            onOpenFirmware = onOpenFirmware,
+                                        )
+                                    }
                                 }
                             }
                             if (!tile.isMultiChannel) {

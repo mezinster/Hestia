@@ -31,9 +31,11 @@ class LightModelsTest {
     }
 
     @Test
-    fun `un canal light n'est jamais regroupe en bandeau`() {
-        assertFalse(Device(name = "L", ipAddress = "1.2.3.4", type = DeviceType.LAMP, isLight = true).isGroupable())
-        assertTrue(Device(name = "P", ipAddress = "1.2.3.4", type = DeviceType.PLUG).isGroupable())
+    fun `la cle de groupe distingue relais et lights d'une meme adresse`() {
+        val l = Device(name = "L", ipAddress = "1.2.3.4", type = DeviceType.LAMP, isLight = true)
+        val p = Device(name = "P", ipAddress = "1.2.3.4", type = DeviceType.PLUG)
+        assertEquals("1.2.3.4" to true, l.groupKey())
+        assertEquals("1.2.3.4" to false, p.groupKey())
     }
 
     private fun plug(id: Int, ip: String = "1.2.3.4") = Device(name = "P$id", ipAddress = ip, switchId = id, type = DeviceType.PLUG)
@@ -60,6 +62,29 @@ class LightModelsTest {
         val flags = computeGroupFlags(listOf(plug(0), light()))
         assertFalse(flags[0].isMultiChannel)
         assertFalse(flags[1].isMultiChannel)
+    }
+
+    @Test
+    fun `quatre lights de meme adresse forment un seul bandeau`() {
+        val flags = computeGroupFlags(List(4) { light() })
+        assertEquals(GroupFlags(isFirstInGroup = true, isMultiChannel = true), flags[0])
+        (1..3).forEach { assertEquals(GroupFlags(isFirstInGroup = false, isMultiChannel = true), flags[it]) }
+    }
+
+    @Test
+    fun `relais et lights d'une meme adresse forment deux groupes independants`() {
+        val flags = computeGroupFlags(listOf(plug(0), plug(1), light(), light()))
+        assertEquals(GroupFlags(isFirstInGroup = true, isMultiChannel = true), flags[0])
+        assertEquals(GroupFlags(isFirstInGroup = false, isMultiChannel = true), flags[1])
+        assertEquals(GroupFlags(isFirstInGroup = true, isMultiChannel = true), flags[2])
+        assertEquals(GroupFlags(isFirstInGroup = false, isMultiChannel = true), flags[3])
+    }
+
+    @Test
+    fun `lights de deux adresses forment deux bandeaux`() {
+        val flags = computeGroupFlags(listOf(light("1.1.1.1"), light("1.1.1.1"), light("2.2.2.2"), light("2.2.2.2")))
+        assertEquals(listOf(true, false, true, false), flags.map { it.isFirstInGroup })
+        assertTrue(flags.all { it.isMultiChannel })
     }
 
     @Test
