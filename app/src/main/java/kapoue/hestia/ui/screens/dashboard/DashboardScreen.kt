@@ -246,6 +246,7 @@ fun DashboardScreen(
                                         // Détail (curseur), pas la modale rapide pensée relais.
                                         LightTile(
                                             tile = tile,
+                                            elapsedNow = elapsedNow,
                                             onToggle = { viewModel.toggleLight(tile.device, it) },
                                             onOpenDetail = { onOpenDetail(tile.device.id) },
                                             onOpenFirmware = { onOpenFirmware(tile.device.id) },

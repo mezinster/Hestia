@@ -287,10 +287,12 @@
     <string name="state_offline">Недоступно</string>
     <string name="state_loading">Загрузка…</string>
     <string name="light_state_on">Вкл · %1$d %%</string>
+    <string name="light_state_on_timer">Вкл · %1$d %% · выкл. через %2$s</string>
     <string name="light_state_off">Выкл</string>
     <string name="light_brightness">Яркость: %1$d %%</string>
     <string name="light_turn_on">Включить</string>
     <string name="light_turn_off">Выключить</string>
+    <string name="light_timer_title">Таймер</string>
 
     <!-- Bandeau global du Tableau (pas de tuile dédiée) quand la permission réseau local manque -->
     <string name="dashboard_permission_banner">Чтобы связаться с устройствами, нужно разрешение на доступ к локальной сети.</string>

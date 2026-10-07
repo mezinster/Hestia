@@ -311,12 +311,17 @@ class DetailViewModel @Inject constructor(
     }
 
     /** Marche/arrêt ou luminosité d'un variateur ; relit l'état réel ensuite, succès ou non. */
-    fun setLight(on: Boolean?, brightness: Int?) {
+    /** [toggleAfterSec] non nul : minuteur tenu par l'appareil (C1), qui s'éteint seul ensuite. */
+    fun setLight(on: Boolean?, brightness: Int?, toggleAfterSec: Int? = null) {
         if (!permissionUsable) return
         viewModelScope.launch {
             val dev = repository.getDevice(deviceId) ?: return@launch
-            logger.info(DiagnosticLogger.UI, "Variateur ${dev.ipAddress}#${dev.switchId} → on=$on luminosité=${brightness ?: "-"}")
-            val result = lightRepository.set(dev, on, brightness)
+            logger.info(
+                DiagnosticLogger.UI,
+                "Variateur ${dev.ipAddress}#${dev.switchId} → on=$on luminosité=${brightness ?: "-"}" +
+                    (toggleAfterSec?.let { " minuteur=${it}s" } ?: ""),
+            )
+            val result = lightRepository.set(dev, on, brightness, toggleAfterSec)
             if (result !is RpcResult.Success) _lightError.value = result.toUserMessageOrNull()
             _lightStatus.value = lightRepository.getStatus(dev).toLightStatus()
             _lightRevision.value += 1

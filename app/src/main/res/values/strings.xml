@@ -303,10 +303,12 @@
     <string name="state_offline">Unavailable</string>
     <string name="state_loading">Loading…</string>
     <string name="light_state_on">On · %1$d%%</string>
+    <string name="light_state_on_timer">On · %1$d%% · off in %2$s</string>
     <string name="light_state_off">Off</string>
     <string name="light_brightness">Brightness: %1$d%%</string>
     <string name="light_turn_on">Turn on</string>
     <string name="light_turn_off">Turn off</string>
+    <string name="light_timer_title">Timer</string>
 
     <!-- Bandeau global du Tableau (pas de tuile dédiée) quand la permission réseau local manque -->
     <string name="dashboard_permission_banner">Local network permission is required to reach your devices.</string>

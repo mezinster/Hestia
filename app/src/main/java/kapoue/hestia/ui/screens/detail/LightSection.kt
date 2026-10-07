@@ -2,6 +2,8 @@ package kapoue.hestia.ui.screens.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -19,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.ui.screens.dashboard.LightStatus
+import kapoue.hestia.ui.screens.dashboard.lightStateLabel
 import kotlin.math.roundToInt
 
 /**
@@ -31,7 +34,11 @@ fun LightSection(
     status: LightStatus,
     showPower: Boolean,
     revision: Int,
+    /** Horloge rafraîchie à la seconde par l'écran : décompte du minuteur (C1). */
+    elapsedNow: Long,
     onSet: (on: Boolean?, brightness: Int?) -> Unit,
+    /** Allume pour [seconds] secondes : l'appareil s'éteint seul ensuite (`toggle_after`). */
+    onStartTimer: (seconds: Int) -> Unit,
 ) {
     val online = status as? LightStatus.Online
     var sliderValue by remember { mutableFloatStateOf(online?.brightness?.toFloat() ?: 100f) }
@@ -40,16 +47,10 @@ fun LightSection(
     // incrémentée après chaque commande pour recaler aussi quand l'état relu est identique (échec).
     LaunchedEffect(online?.brightness, revision) { resyncTarget(status, dragging)?.let { sliderValue = it } }
 
+    var showCustomTimer by remember { mutableStateOf(false) }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = when {
-                online?.on == true -> stringResource(R.string.light_state_on, online.brightness)
-                online != null -> stringResource(R.string.light_state_off)
-                status is LightStatus.Offline -> stringResource(R.string.state_offline)
-                else -> stringResource(R.string.state_loading)
-            },
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Text(text = lightStateLabel(status, elapsedNow), style = MaterialTheme.typography.titleMedium)
         if (showPower) online?.powerWatts?.let { Text(formatPower(it), style = MaterialTheme.typography.bodyMedium) }
         if (online?.on == true) {
             OutlinedButton(onClick = { onSet(false, null) }) { Text(stringResource(R.string.light_turn_off)) }
@@ -64,5 +65,35 @@ fun LightSection(
             valueRange = 1f..100f,
             enabled = online != null,
         )
+        // Minuteur (C1, 2026-10-07) : tenu par l'appareil, il s'exécute même téléphone éteint ;
+        // l'annuler = éteindre, comme pour un relais (pas de bouton dédié).
+        Text(stringResource(R.string.light_timer_title), style = MaterialTheme.typography.titleSmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LIGHT_TIMER_PRESETS_SEC.forEach { seconds ->
+                AssistChip(onClick = { onStartTimer(seconds) }, label = { Text(durationLabel(seconds)) }, enabled = online != null)
+            }
+            AssistChip(
+                onClick = { showCustomTimer = true },
+                label = { Text(stringResource(R.string.detail_timer_custom)) },
+                enabled = online != null,
+            )
+        }
+    }
+
+    if (showCustomTimer) {
+        DurationPickerSheet(
+            hasPowerMetering = false,
+            title = stringResource(R.string.duration_picker_title),
+            confirmLabel = stringResource(R.string.duration_picker_start),
+            onDismiss = { showCustomTimer = false },
+            onConfirm = { seconds, _, _, _ ->
+                showCustomTimer = false
+                // « Sans limite » : simple allumage, sans minuteur.
+                if (seconds != null) onStartTimer(seconds) else onSet(true, null)
+            },
+        )
     }
 }
+
+/** Durées proposées en un tap : 30 min, 1 h, 2 h. */
+private val LIGHT_TIMER_PRESETS_SEC = listOf(1800, 3600, 7200)

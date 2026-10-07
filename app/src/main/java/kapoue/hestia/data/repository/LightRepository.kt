@@ -2,6 +2,7 @@ package kapoue.hestia.data.repository
 
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.dao.DeviceDao
+import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.LightRpcClient
@@ -22,6 +23,7 @@ class LightRepository @Inject constructor(
     private val deviceDao: DeviceDao,
     private val lightRpc: LightRpcClient,
     private val deviceRepository: DeviceRepository,
+    private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
 ) {
     // État en mémoire des variateurs démo : sans lui, le bouton et le curseur sembleraient cassés.
@@ -29,17 +31,23 @@ class LightRepository @Inject constructor(
 
     suspend fun getStatus(device: Device): RpcResult<LightStatusResult> {
         if (device.ipAddress.startsWith(DeviceRepository.DEMO_IP_PREFIX)) {
-            return RpcResult.Success(demoStates.getOrPut(device.id) { demoLightStatus(device) })
+            val now = System.currentTimeMillis() / 1000.0
+            return RpcResult.Success(
+                demoStates.compute(device.id) { _, current -> expireDemoTimer(current ?: demoLightStatus(device), now) }!!,
+            )
         }
         return deviceRepository.withIp(device) { ip -> lightRpc.getLightStatus(ip, device.switchId) }.second
     }
 
-    suspend fun set(device: Device, on: Boolean?, brightness: Int?): RpcResult<LightSetResult> {
+    /** [toggleAfterSec] : minuteur tenu par l'appareil (variateurs C1), voir [LightRpcClient.setLight]. */
+    suspend fun set(device: Device, on: Boolean?, brightness: Int?, toggleAfterSec: Int? = null): RpcResult<LightSetResult> {
         if (device.ipAddress.startsWith(DeviceRepository.DEMO_IP_PREFIX)) {
-            demoStates.compute(device.id) { _, current -> applyDemoLightSet(current ?: demoLightStatus(device), on, brightness) }
+            demoStates.compute(device.id) { _, current ->
+                applyDemoLightSet(current ?: demoLightStatus(device), on, brightness, toggleAfterSec, System.currentTimeMillis() / 1000.0)
+            }
             return RpcResult.Success(LightSetResult())
         }
-        return deviceRepository.withIp(device) { ip -> lightRpc.setLight(ip, device.switchId, on, brightness) }.second
+        return deviceRepository.withIp(device) { ip -> lightRpc.setLight(ip, device.switchId, on, brightness, toggleAfterSec) }.second
     }
 
     /**
@@ -58,7 +66,7 @@ class LightRepository @Inject constructor(
             }
             val channelName = capabilities.lightChannelNames[lightId]
                 ?: if (capabilities.lightChannels.size > 1) "$name · ${lightId + 1}" else name
-            deviceDao.insert(
+            val newId = deviceDao.insert(
                 Device(
                     name = channelName,
                     deviceName = resolvedDeviceName,
@@ -73,6 +81,11 @@ class LightRepository @Inject constructor(
                     position = position++,
                 ),
             )
+            // Nom inventé ici (absent de l'appareil) : à pousser dessus. Le Tableau le fera au
+            // prochain relevé ([DeviceRepository.nameCatchUpIfNeeded]), comme pour un relais injoignable.
+            if (capabilities.lightChannelNames[lightId] == null || capabilities.reportedName.isNullOrBlank()) {
+                appPreferences.markNameUnsynced(newId)
+            }
             added++
         }
         logger.info(DiagnosticLogger.DB, "Ajout variateur $ip : $added canal(aux) light sur ${capabilities.lightChannels.size}")
@@ -84,9 +97,33 @@ class LightRepository @Inject constructor(
 internal fun demoLightStatus(device: Device): LightStatusResult =
     LightStatusResult(id = device.switchId, output = true, brightness = 40.0, apower = 6.2)
 
-/** Applique une commande sur l'état démo : marche/arrêt et/ou luminosité, puissance recalculée. */
-internal fun applyDemoLightSet(current: LightStatusResult, on: Boolean?, brightness: Int?): LightStatusResult {
+/**
+ * Applique une commande sur l'état démo : marche/arrêt et/ou luminosité, puissance recalculée. Un
+ * minuteur ([toggleAfterSec]) est simulé comme sur l'appareil ; éteindre l'annule.
+ */
+internal fun applyDemoLightSet(
+    current: LightStatusResult,
+    on: Boolean?,
+    brightness: Int?,
+    toggleAfterSec: Int? = null,
+    nowEpochSec: Double = 0.0,
+): LightStatusResult {
     val output = on ?: current.output
     val level = brightness?.coerceIn(0, 100)?.toDouble() ?: current.brightness
-    return current.copy(output = output, brightness = level, apower = if (output) (level ?: 100.0) * 0.155 else 0.0)
+    val timed = output && toggleAfterSec != null
+    return current.copy(
+        output = output,
+        brightness = level,
+        apower = if (output) (level ?: 100.0) * 0.155 else 0.0,
+        timerStartedAt = if (timed) nowEpochSec else current.timerStartedAt.takeIf { output },
+        timerDuration = if (timed) toggleAfterSec!!.toDouble() else current.timerDuration.takeIf { output },
+    )
+}
+
+/** Minuteur démo échu : la lampe s'éteint seule, comme le ferait l'appareil (`toggle_after`). */
+internal fun expireDemoTimer(current: LightStatusResult, nowEpochSec: Double): LightStatusResult {
+    val startedAt = current.timerStartedAt ?: return current
+    val duration = current.timerDuration ?: return current
+    if (startedAt + duration > nowEpochSec) return current
+    return current.copy(output = false, apower = 0.0, timerStartedAt = null, timerDuration = null)
 }

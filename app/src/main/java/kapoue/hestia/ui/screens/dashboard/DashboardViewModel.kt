@@ -230,7 +230,15 @@ class DashboardViewModel @Inject constructor(
                     // Variateurs (light:N, 2026-10-07) : chemin séparé du relevé switch, comme les
                     // détecteurs de fumée.
                     devices.filter { it.isLight }.map { device ->
-                        async { device.id to lightRepository.getStatus(device).toLightStatus() }
+                        async {
+                            val lightStatus = lightRepository.getStatus(device).toLightStatus()
+                            // Rattrapage best-effort du nom (variateurs C1) : même principe que pour un
+                            // relais, détaché du cycle de relevé.
+                            if (lightStatus is LightStatus.Online) {
+                                viewModelScope.launch { repository.nameCatchUpIfNeeded(device) }
+                            }
+                            device.id to lightStatus
+                        }
                     }.awaitAll()
                 }
                 val presenceResults = async {
