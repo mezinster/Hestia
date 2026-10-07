@@ -16,7 +16,8 @@ import org.junit.Assert.assertNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kapoue.hestia.data.rpc.coverTimespec
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.Test
 
 /** Règles de validation avant création d'événements de volet (lot S2, 2026-10-07). */
@@ -82,55 +83,49 @@ class CoverScheduleRulesTest {
     private fun ntfy(topic: String = "t", title: String = "Volet") = coverNtfyCall(NtfyTexts(topic, title, "Ouvert"))
     private fun job(vararg calls: JsonObject) = ScheduleJob(1, true, "0 0 7 * * *", calls.map { call(it) })
 
-    @Test
-    fun `ntfy desactive avec un appel HTTP a retirer`() =
-        assertTrue(coverJobNeedsNtfyRewrite(job(action, ntfy()), null))
-
-    @Test
-    fun `ntfy desactive sans appel HTTP rien a faire`() =
-        assertFalse(coverJobNeedsNtfyRewrite(job(action), null))
-
-    @Test
-    fun `ntfy actif avec le meme appel rien a faire`() =
-        assertFalse(coverJobNeedsNtfyRewrite(job(action, ntfy()), ntfy()))
-
-    @Test
-    fun `ntfy actif sujet ou titre different a reecrire`() {
-        assertTrue(coverJobNeedsNtfyRewrite(job(action, ntfy()), ntfy(topic = "autre")))
-        assertTrue(coverJobNeedsNtfyRewrite(job(action, ntfy()), ntfy(title = "Salon")))
+    // Appel tiers en LAN (webhook domotique) : jamais touché par la resynchronisation ntfy.
+    private val lanHook = buildJsonObject {
+        put("method", "HTTP.Request")
+        put("params", buildJsonObject { put("method", "GET"); put("url", "http://192.168.1.10/hook") })
     }
 
     @Test
-    fun `ntfy actif sans appel HTTP a ajouter`() =
-        assertTrue(coverJobNeedsNtfyRewrite(job(action), ntfy()))
-
-    // --- Plan de resynchronisation ntfy ---
-    private fun jobAt(id: Int, hour: Int, topic: String?) = ScheduleJob(
-        id, true, coverTimespec(ev(hour)),
-        listOfNotNull(action, topic?.let { ntfy(topic = it) }).map { call(it) },
-    )
-    private val expectedOn: (CoverEventAction) -> JsonObject? = { ntfy() }
-
-    @Test
-    fun `perime avec copie correcte du meme creneau est supprime seul`() {
-        val plan = coverNtfyResyncPlan(listOf(jobAt(1, 7, "ancien"), jobAt(2, 7, "t")), 0, expectedOn)
-        assertEquals(NtfyResyncStep.DeleteOnly, plan[1]); assertEquals(NtfyResyncStep.Keep, plan[2])
+    fun `appel HTTP tiers conserve ntfy desactive`() {
+        assertNull(coverResyncCalls(job(action, lanHook), null))
+        assertEquals(listOf(action, lanHook), coverResyncCalls(job(action, lanHook, ntfy()), null))
     }
 
     @Test
-    fun `perime seul est reecrit`() {
-        assertEquals(NtfyResyncStep.Rewrite, coverNtfyResyncPlan(listOf(jobAt(1, 7, "ancien")), 0, expectedOn)[1])
+    fun `appel HTTP tiers conserve ntfy actif, ntfy ajoute apres lui`() {
+        assertEquals(listOf(action, lanHook, ntfy()), coverResyncCalls(job(action, lanHook), ntfy()))
     }
 
     @Test
-    fun `tout correct est conserve`() {
-        val plan = coverNtfyResyncPlan(listOf(jobAt(1, 7, "t"), jobAt(2, 8, "t")), 0, expectedOn)
-        assertTrue(plan.values.all { it == NtfyResyncStep.Keep })
+    fun `appel ntfy perime remplace`() {
+        assertEquals(listOf(action, ntfy()), coverResyncCalls(job(action, ntfy(topic = "ancien")), ntfy()))
+        assertEquals(listOf(action, ntfy()), coverResyncCalls(job(action, ntfy(title = "Salon")), ntfy()))
     }
 
     @Test
-    fun `perime d'un creneau et correct d'un autre creneau est reecrit`() {
-        val plan = coverNtfyResyncPlan(listOf(jobAt(1, 7, "ancien"), jobAt(2, 8, "t")), 0, expectedOn)
-        assertEquals(NtfyResyncStep.Rewrite, plan[1]); assertEquals(NtfyResyncStep.Keep, plan[2])
+    fun `ntfy desactive retire seulement l'appel ntfy`() {
+        assertEquals(listOf(action), coverResyncCalls(job(action, ntfy()), null))
+    }
+
+    @Test
+    fun `job deja conforme rien a mettre a jour`() {
+        assertNull(coverResyncCalls(job(action, ntfy()), ntfy()))
+        assertNull(coverResyncCalls(job(action), null))
+    }
+
+    @Test
+    fun `ntfy actif sans appel ntfy ajoute`() {
+        assertEquals(listOf(action, ntfy()), coverResyncCalls(job(action), ntfy()))
+    }
+
+    @Test
+    fun `seul un HTTP Request vers ntfy sh compte comme ntfy`() {
+        assertTrue(isCoverNtfyCall(call(ntfy())))
+        assertFalse(isCoverNtfyCall(call(lanHook)))
+        assertFalse(isCoverNtfyCall(call(action)))
     }
 }

@@ -138,4 +138,13 @@ class CoverScheduleRpcTest {
         )
         assertEquals(emptyList<CoverEvent>(), coverEventsFrom(jobs, 0))
     }
+
+    @Test
+    fun `parametres de Schedule Update sans enable ni timespec`() {
+        val calls = listOf(coverActionCall(0, CoverEventAction.Open))
+        assertEquals(
+            """{"id":4,"calls":[{"method":"Cover.Open","params":{"id":0}}]}""",
+            coverScheduleUpdateParams(4, calls).toString(),
+        )
+    }
 }

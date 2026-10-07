@@ -18,8 +18,11 @@ import kapoue.hestia.data.rpc.NtfyTexts
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.coverEventsFrom
 import kapoue.hestia.data.rpc.coverNtfyCall
+import kapoue.hestia.data.rpc.model.ScheduleCall
 import kapoue.hestia.data.rpc.model.ScheduleJob
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kapoue.hestia.domain.model.CoverEvent
@@ -65,45 +68,25 @@ internal fun validateNewEvents(
     return null
 }
 
-/**
- * Vrai si le dernier appel de [job] (ntfy) diffère de [expected] : [expected] nul = ntfy désactivé,
- * donc tout appel `HTTP.Request` final est à retirer. Couvre aussi un changement de sujet ou de titre.
- */
-internal fun coverJobNeedsNtfyRewrite(job: ScheduleJob, expected: JsonObject?): Boolean {
-    val last = job.calls.drop(1).lastOrNull()?.takeIf { it.method == "HTTP.Request" }
-    if (last == null) return expected != null
-    if (expected == null) return true
-    val actual = buildJsonObject {
-        put("method", last.method)
-        last.params?.let { put("params", it) }
-    }
-    return actual != expected
+/** Un appel compte comme ntfy seulement s'il s'agit d'un `HTTP.Request` vers `https://ntfy.sh/`. */
+internal fun isCoverNtfyCall(call: ScheduleCall): Boolean =
+    call.method == "HTTP.Request" &&
+        (call.params?.get("url") as? JsonPrimitive)?.contentOrNull?.startsWith("https://ntfy.sh/") == true
+
+private fun ScheduleCall.toJson(): JsonObject = buildJsonObject {
+    put("method", method)
+    params?.let { put("params", it) }
 }
 
-/** Décision de resynchronisation ntfy pour un job de volet. */
-internal enum class NtfyResyncStep { Keep, Rewrite, DeleteOnly }
-
 /**
- * Plan par id de job. Un job déjà conforme est conservé ; un job périmé dont une copie conforme
- * existe déjà (même créneau, même action, autre job) est seulement supprimé, sinon réécrit.
- * Évite d'accumuler des doublons quand la suppression d'un ancien job a échoué au passage précédent.
- * [expectedFor] donne l'appel ntfy attendu selon l'action (nul = ntfy désactivé).
+ * Appels attendus de [job] après resynchronisation ntfy : tous ses appels sauf ntfy, dans le même
+ * ordre (action du volet, webhooks tiers…), puis [expected] en dernier s'il est fourni (nul = ntfy
+ * désactivé). Renvoie null quand le job est déjà conforme (rien à envoyer).
  */
-internal fun coverNtfyResyncPlan(
-    jobs: List<ScheduleJob>,
-    coverId: Int,
-    expectedFor: (CoverEventAction) -> JsonObject?,
-): Map<Int, NtfyResyncStep> {
-    val entries = jobs.mapNotNull { job ->
-        coverEventsFrom(listOf(job), coverId).firstOrNull()?.let { Triple(job, it, !coverJobNeedsNtfyRewrite(job, expectedFor(it.action))) }
-    }
-    return entries.associate { (job, event, conform) ->
-        job.id to when {
-            conform -> NtfyResyncStep.Keep
-            entries.any { (other, e, ok) -> ok && other.id != job.id && e.action == event.action && e.sameSlotAs(event) } -> NtfyResyncStep.DeleteOnly
-            else -> NtfyResyncStep.Rewrite
-        }
-    }
+internal fun coverResyncCalls(job: ScheduleJob, expected: JsonObject?): List<JsonObject>? {
+    val current = job.calls.map { it.toJson() }
+    val next = job.calls.filterNot(::isCoverNtfyCall).map { it.toJson() } + listOfNotNull(expected)
+    return next.takeIf { it != current }
 }
 
 /**
@@ -272,10 +255,10 @@ class CoverScheduleRepository @Inject constructor(
     }
 
     /**
-     * Réécrit avec ou sans ntfy, selon les réglages actuels, les seuls événements dont l'appel ntfy
-     * final diffère de l'attendu (idempotent : un nouveau passage ne réécrit rien). Création du
-     * remplaçant d'abord, suppression de l'ancien seulement après succès (jamais d'événement perdu).
-     * @return faux au moindre échec (lecture, création ou suppression), pour que le rattrapage réessaie.
+     * Met en conformité l'appel ntfy de chaque événement du volet selon les réglages actuels, en
+     * place (`Schedule.Update`) : même job, même activation, appels tiers conservés. Idempotent :
+     * un job déjà conforme n'est pas touché. Couvre aussi les jobs désactivés et les uniques échus.
+     * @return faux au moindre échec (lecture ou mise à jour), pour que le rattrapage réessaie.
      */
     suspend fun resyncNtfy(device: Device): Boolean {
         if (isDemo(device)) return true
@@ -284,21 +267,15 @@ class CoverScheduleRepository @Inject constructor(
             is RpcResult.Success -> listed.value.jobs
             else -> { fail(device, "resynchronisation ntfy (lecture)", listed); return false }
         }
-        val now = LocalDateTime.now()
-        val plan = coverNtfyResyncPlan(jobs, device.switchId) { action -> ntfyTexts(device, action)?.let { coverNtfyCall(it) } }
         var ok = true
         for (job in jobs) {
-            val step = plan[job.id] ?: continue
-            if (step == NtfyResyncStep.Keep) continue
-            val event = coverEventsFrom(listOf(job), device.switchId).first()
-            if (event.isExpiredOnce(now)) continue
-            if (step == NtfyResyncStep.Rewrite) {
-                val c = create(ip, device, event)
-                if (c !is RpcResult.Success) { fail(device, "resynchronisation ntfy (création)", c); ok = false; continue }
-            }
-            val d = scheduleRpc.delete(ip, job.id)
-            if (d !is RpcResult.Success) {
-                fail(device, "resynchronisation ntfy (suppression de l'ancien job ${job.id})", d)
+            val event = coverEventsFrom(listOf(job), device.switchId).firstOrNull() ?: continue
+            val calls = coverResyncCalls(job, ntfyTexts(device, event.action)?.let { coverNtfyCall(it) }) ?: continue
+            val u = scheduleRpc.update(ip, job.id, calls)
+            if (u is RpcResult.Success) {
+                logger.info(DiagnosticLogger.RPC, "Volet ${device.id} : ntfy resynchronisé (job ${job.id})")
+            } else {
+                fail(device, "resynchronisation ntfy (mise à jour du job ${job.id})", u)
                 ok = false
             }
         }

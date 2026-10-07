@@ -6,6 +6,7 @@ import kapoue.hestia.data.rpc.model.ScheduleJob
 import kapoue.hestia.data.rpc.model.ScheduleListResult
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -117,7 +118,20 @@ internal fun coverEventsFrom(jobs: List<ScheduleJob>, coverId: Int): List<CoverE
         CoverEvent(parsed.hour, parsed.minute, days, parsed.date, action, job.id)
     }
 
-/** Programmation des volets : création, relecture et suppression des plannings natifs de l'appareil. */
+/** Réponse de `Schedule.Update` (on n'exploite que la présence d'un résultat). */
+@Serializable
+data class ScheduleUpdateResult(val rev: Int? = null)
+
+/**
+ * Paramètres de `Schedule.Update` : remplace seulement la liste des appels du job [id], en place.
+ * Ni `enable` ni `timespec` ne sont envoyés, l'appareil les conserve tels quels.
+ */
+internal fun coverScheduleUpdateParams(id: Int, calls: List<JsonObject>): JsonObject = buildJsonObject {
+    put("id", id)
+    put("calls", buildJsonArray { calls.forEach { add(it) } })
+}
+
+/** Programmation des volets : création, relecture, mise à jour et suppression des plannings natifs de l'appareil. */
 @Singleton
 class CoverScheduleRpc @Inject constructor(private val rpc: ShellyRpcClient) {
 
@@ -131,6 +145,14 @@ class CoverScheduleRpc @Inject constructor(private val rpc: ShellyRpcClient) {
         "Schedule.Create",
         coverScheduleCreateParams(coverTimespec(event), coverId, event.action, ntfy),
         ScheduleCreateResult.serializer(),
+    )
+
+    /** Réécrit en place les appels du job [id] (même id, même activation, même horaire). */
+    suspend fun update(ip: String, id: Int, calls: List<JsonObject>): RpcResult<ScheduleUpdateResult> = rpc.call(
+        ip,
+        "Schedule.Update",
+        coverScheduleUpdateParams(id, calls),
+        ScheduleUpdateResult.serializer(),
     )
 
     suspend fun list(ip: String): RpcResult<ScheduleListResult> = rpc.scheduleList(ip)
