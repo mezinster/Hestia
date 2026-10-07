@@ -568,4 +568,7 @@
     <string name="cover_fault_voltage">Arrêté : problème de tension</string>
     <string name="cover_fault_safety_switch">Arrêté : interrupteur de sécurité déclenché</string>
     <string name="cover_fault_generic">L\'appareil signale un défaut — vérifie-le.</string>
+    <string name="cover_notif_opened">Ouvert par la programmation</string>
+    <string name="cover_notif_closed">Fermé par la programmation</string>
+    <string name="cover_notif_moved">Déplacé à %1$d %% par la programmation</string>
 </resources>

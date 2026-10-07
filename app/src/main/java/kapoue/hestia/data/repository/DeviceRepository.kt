@@ -97,6 +97,7 @@ class DeviceRepository @Inject constructor(
     private val rpcClient: ShellyRpcClient,
     private val lightRpc: LightRpcClient,
     private val coverRpc: CoverRpcClient,
+    private val coverSchedules: dagger.Lazy<CoverScheduleRepository>,
     private val cloudClient: ShellyCloudClient,
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
@@ -2474,6 +2475,8 @@ class DeviceRepository @Inject constructor(
                 is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
             }
         }
+        // Volets (lot S2) : leurs événements portent aussi l'appel ntfy — à réécrire de même.
+        if (device.isCover && !coverSchedules.get().resyncNtfy(device)) reachable = false
         // Le script du minuteur de bouton physique est propre à Switch : ni variateur ni volet.
         if (device.hasScripting && !device.isLight && !device.isCover) {
             if (reachable) {

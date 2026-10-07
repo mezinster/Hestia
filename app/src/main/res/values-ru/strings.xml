@@ -551,4 +551,7 @@
     <string name="cover_fault_voltage">Остановлено: проблема с напряжением</string>
     <string name="cover_fault_safety_switch">Остановлено: сработал защитный выключатель</string>
     <string name="cover_fault_generic">Устройство сообщает об ошибке — проверь его.</string>
+    <string name="cover_notif_opened">Открыто по расписанию</string>
+    <string name="cover_notif_closed">Закрыто по расписанию</string>
+    <string name="cover_notif_moved">Перемещено на %1$d %% по расписанию</string>
 </resources>
