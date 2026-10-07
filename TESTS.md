@@ -285,3 +285,15 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Bouton mural / interrupteur d'un variateur : noter la valeur `source` observée dans le journal de diagnostic (détection « désactivé aujourd'hui » à confirmer sur matériel réel).
 - [ ] Planning créé dans l'appli Shelly avec une luminosité : le modifier depuis Hestia le recrée sans luminosité (dernier niveau) — comportement voulu.
 - [ ] Non-régression : plannings du Plug M de référence (relais) inchangés — création, relecture, extinction, coupure sur seuil, présence.
+
+## Volets (fork, 2026-10-07)
+
+- [ ] Ajout d'un 2PM en mode volet via « Volet » (et via « Prise / relais » : même résultat) ; Pro Dual Cover : deux tuiles.
+- [ ] Tuile : état écrit (Ouvert / Fermé / Ouverture… N % / Arrêté à N % / Calibration…) ; ▲ ■ ▼ fonctionnent.
+- [ ] Détail : Ouvrir / Arrêter / Fermer ; curseur de position seulement si calibré, envoi au relâchement ; volet non calibré → message + Calibrer.
+- [ ] Calibration depuis Hestia : confirmation, « Calibration… », puis curseur disponible.
+- [ ] Obstacle (ou coupure de sécurité) : message de défaut lisible.
+- [ ] Renommer un volet : nom visible dans l'interface web de l'appareil.
+- [ ] **Langues** : hors mode démo (qui force l'anglais), Réglages → Langue → English, Français, Русский, puis « Langue du système » : tuile et Détail d'un volet (états, boutons, dialogue de calibration, défauts) dans la bonne langue à chaque fois.
+- [ ] Mode démo : « Living Room Shutter » (calibré, 60 %) bouge à l'écran ; « Bedroom Shutter » demande une calibration.
+- [ ] Non-régression : relais (Plug M) et variateurs inchangés.
