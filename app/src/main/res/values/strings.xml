@@ -563,4 +563,15 @@
     <string name="cover_open">Open</string>
     <string name="cover_stop">Stop</string>
     <string name="cover_close">Close</string>
+    <string name="cover_position">Position: %1$d%%</string>
+    <string name="cover_needs_calibration">Position control needs calibration.</string>
+    <string name="cover_calibrate">Calibrate</string>
+    <string name="cover_calibrate_title">Calibrate the shutter?</string>
+    <string name="cover_calibrate_message">The motor will fully open and close the shutter (about 1–2 minutes). Keep the area clear.</string>
+    <string name="cover_fault_obstruction">Stopped: obstruction detected</string>
+    <string name="cover_fault_overpower">Stopped: power too high</string>
+    <string name="cover_fault_overtemp">Stopped: device too hot</string>
+    <string name="cover_fault_voltage">Stopped: voltage problem</string>
+    <string name="cover_fault_safety_switch">Stopped: safety switch triggered</string>
+    <string name="cover_fault_generic">The device reported a fault — check it.</string>
 </resources>

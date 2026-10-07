@@ -557,4 +557,15 @@
     <string name="cover_open">Ouvrir</string>
     <string name="cover_stop">Arrêter</string>
     <string name="cover_close">Fermer</string>
+    <string name="cover_position">Position : %1$d %%</string>
+    <string name="cover_needs_calibration">Le positionnement nécessite une calibration.</string>
+    <string name="cover_calibrate">Calibrer</string>
+    <string name="cover_calibrate_title">Calibrer le volet ?</string>
+    <string name="cover_calibrate_message">Le moteur va ouvrir et fermer complètement le volet (1 à 2 minutes). Dégage la zone.</string>
+    <string name="cover_fault_obstruction">Arrêté : obstacle détecté</string>
+    <string name="cover_fault_overpower">Arrêté : puissance trop élevée</string>
+    <string name="cover_fault_overtemp">Arrêté : appareil trop chaud</string>
+    <string name="cover_fault_voltage">Arrêté : problème de tension</string>
+    <string name="cover_fault_safety_switch">Arrêté : interrupteur de sécurité déclenché</string>
+    <string name="cover_fault_generic">L\'appareil signale un défaut — vérifie-le.</string>
 </resources>

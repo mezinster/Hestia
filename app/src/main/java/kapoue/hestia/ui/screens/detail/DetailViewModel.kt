@@ -9,6 +9,7 @@ import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.prefs.AppPreferences
+import kapoue.hestia.data.repository.CoverRepository
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.repository.LightRepository
 import kapoue.hestia.data.rpc.RpcResult
@@ -19,9 +20,12 @@ import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.common.toUserMessageOrNull
 import kapoue.hestia.ui.navigation.StackedRoutes
+import kapoue.hestia.ui.screens.dashboard.CoverStatus
 import kapoue.hestia.ui.screens.dashboard.LightStatus
 import kapoue.hestia.ui.screens.dashboard.SensorStatus
 import kapoue.hestia.ui.screens.dashboard.TileStatus
+import kapoue.hestia.ui.screens.dashboard.coverPollIntervalMs
+import kapoue.hestia.ui.screens.dashboard.toCoverStatus
 import kapoue.hestia.ui.screens.dashboard.toLightStatus
 import kapoue.hestia.ui.screens.dashboard.toSensorStatus
 import kapoue.hestia.ui.screens.dashboard.toTileStatus
@@ -40,6 +44,7 @@ class DetailViewModel @Inject constructor(
     private val repository: DeviceRepository,
     private val appPreferences: AppPreferences,
     private val lightRepository: LightRepository,
+    private val coverRepository: CoverRepository,
     private val logger: DiagnosticLogger,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -89,6 +94,22 @@ class DetailViewModel @Inject constructor(
     val lightError: StateFlow<UserMessage?> = _lightError.asStateFlow()
     fun consumeLightError() { _lightError.value = null }
 
+    /** État du volet, seulement pour un canal cover (volets, 2026-10-07). */
+    private val _coverStatus = MutableStateFlow<CoverStatus>(CoverStatus.Loading)
+    val coverStatus: StateFlow<CoverStatus> = _coverStatus.asStateFlow()
+
+    /** Incrémenté après chaque commande (succès ou échec) : force le recalage du curseur de position. */
+    private val _coverRevision = MutableStateFlow(0)
+    val coverRevision: StateFlow<Int> = _coverRevision.asStateFlow()
+
+    private val _coverError = MutableStateFlow<UserMessage?>(null)
+    val coverError: StateFlow<UserMessage?> = _coverError.asStateFlow()
+    fun consumeCoverError() { _coverError.value = null }
+
+    /** Cadence de relevé de l'écran : rapide pendant un mouvement de volet, 5 s sinon (relais, variateurs). */
+    fun pollIntervalMs(): Long =
+        if (device.value?.isCover == true) coverPollIntervalMs(_coverStatus.value) else 5_000L
+
     /** Appareils pouvant servir de cible de coupure (canaux avec relais, jamais le détecteur lui-même). */
     val cutoffCandidates: StateFlow<List<Device>> = repository.observeDevices()
         .map { devices -> devices.filter { it.supportsSwitch } }
@@ -127,6 +148,7 @@ class DetailViewModel @Inject constructor(
             // permission manquante, pas cet écran (voir DashboardScreen).
             _status.value = TileStatus.Offline
             _lightStatus.value = LightStatus.Offline
+            _coverStatus.value = CoverStatus.Offline
             return
         }
         viewModelScope.launch { fetch() }
@@ -290,6 +312,11 @@ class DetailViewModel @Inject constructor(
             _cutoffState.value = repository.getSmokeCutoffState(dev)
             return
         }
+        if (dev.isCover) {
+            _coverStatus.value = coverRepository.getStatus(dev).toCoverStatus()
+            _activeIp.value = repository.activeIp(dev)
+            return
+        }
         if (dev.isLight) {
             _lightStatus.value = lightRepository.getStatus(dev).toLightStatus()
             _activeIp.value = repository.activeIp(dev)
@@ -326,6 +353,25 @@ class DetailViewModel @Inject constructor(
             if (result !is RpcResult.Success) _lightError.value = result.toUserMessageOrNull()
             _lightStatus.value = lightRepository.getStatus(dev).toLightStatus()
             _lightRevision.value += 1
+        }
+    }
+
+    fun coverOpen() = coverAction("ouverture") { coverRepository.open(it) }
+    fun coverClose() = coverAction("fermeture") { coverRepository.close(it) }
+    fun coverStop() = coverAction("arrêt") { coverRepository.stop(it) }
+    fun coverGoTo(pos: Int) = coverAction("position=$pos") { coverRepository.goTo(it, pos) }
+    fun coverCalibrate() = coverAction("calibration") { coverRepository.calibrate(it) }
+
+    /** Commande de volet : journalise, appelle, signale un échec, puis relit l'état réel (succès ou non). */
+    private fun coverAction(label: String, call: suspend (Device) -> RpcResult<*>) {
+        if (!permissionUsable) return
+        viewModelScope.launch {
+            val dev = repository.getDevice(deviceId) ?: return@launch
+            logger.info(DiagnosticLogger.UI, "Volet ${dev.ipAddress}#${dev.switchId} → $label")
+            val result = call(dev)
+            if (result !is RpcResult.Success) _coverError.value = result.toUserMessageOrNull()
+            _coverStatus.value = coverRepository.getStatus(dev).toCoverStatus()
+            _coverRevision.value += 1
         }
     }
 
