@@ -1,0 +1,42 @@
+# Publication du fork (mezinster/Hestia) : uniquement sur un tag fork/<x.y.z>-fork.<N>.
+# Voir docs/fork/RELEASING.md. Jamais exécuté sur une branche ni une PR.
+when:
+  - event: tag
+    ref: refs/tags/fork/*
+
+clone:
+  - name: clone
+    image: woodpeckerci/plugin-git
+    settings:
+      tags: true
+      partial: false
+      depth: 0
+
+steps:
+  - name: build
+    image: eclipse-temurin:17.0.20.1_1-jdk
+    environment:
+      FORK_KEYSTORE_B64:
+        from_secret: fork_keystore_b64
+      HESTIA_FORK_STORE_PASSWORD:
+        from_secret: fork_store_password
+      HESTIA_FORK_KEY_ALIAS:
+        from_secret: fork_key_alias
+      HESTIA_FORK_KEY_PASSWORD:
+        from_secret: fork_key_password
+    commands:
+      - apt-get update -qq && apt-get install -y -qq --no-install-recommends unzip git >/dev/null
+      - scripts/fork/ci-build.sh
+
+  - name: publish
+    image: woodpeckerci/plugin-release:0.3.2
+    settings:
+      base_url: https://codeberg.org
+      api_key:
+        from_secret: codeberg_release_token
+      files:
+        - build/fork-release/dist/*
+      title: build/fork-release/title.txt
+      note: build/fork-release/notes.md
+      prerelease: false
+      file_exists: fail
