@@ -70,7 +70,7 @@ internal val coverEventDisplayOrder: Comparator<CoverEvent> =
         val d = e.date
         when {
             d != null -> ScheduleCodec.displayRank(d.dayOfWeek.value % 7)
-            e.days.isEmpty() -> 0
+            e.days.isEmpty() -> -1 // « tous les jours » avant lundi
             else -> e.days.minOf { ScheduleCodec.displayRank(it) }
         }
     }.thenBy { it.hour }.thenBy { it.minute }

@@ -44,4 +44,19 @@ class CoverEventTest {
         assertTrue(CoverEvent(7, 0, setOf(1), action = CoverEventAction.Open).sameSlotAs(CoverEvent(7, 0, setOf(1), action = CoverEventAction.Close)))
         assertFalse(CoverEvent(7, 0, setOf(1), action = CoverEventAction.Open).sameSlotAs(CoverEvent(7, 0, setOf(2), action = CoverEventAction.Open)))
     }
+
+    @Test
+    fun `limites et ordre`() {
+        // Égalité avec now : pas retournée (strictement après) → semaine suivante
+        assertEquals(LocalDateTime.of(2026, 10, 14, 10, 0), CoverEvent(10, 0, setOf(3), action = CoverEventAction.Open).nextOccurrence(now))
+        assertTrue(CoverEvent(10, 0, date = LocalDate.of(2026, 10, 7), action = CoverEventAction.Open).isExpiredOnce(now))
+        // Dimanche = 0 (2026-10-11)
+        assertEquals(LocalDateTime.of(2026, 10, 11, 8, 0), CoverEvent(8, 0, setOf(0), action = CoverEventAction.Open).nextOccurrence(now))
+        // Tri : tous les jours < lundi 9h < dimanche (unique 5h, puis hebdo 6h)
+        val everyDay = CoverEvent(23, 0, action = CoverEventAction.Close)
+        val mon = CoverEvent(9, 0, setOf(1), action = CoverEventAction.Open)
+        val sun = CoverEvent(6, 0, setOf(0), action = CoverEventAction.Open)
+        val sunOnce = CoverEvent(5, 0, date = LocalDate.of(2026, 10, 11), action = CoverEventAction.Open)
+        assertEquals(listOf(everyDay, mon, sunOnce, sun), listOf(sun, sunOnce, mon, everyDay).sortedWith(coverEventDisplayOrder))
+    }
 }
