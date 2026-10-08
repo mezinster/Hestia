@@ -56,6 +56,7 @@ Before tagging, add a `## <x.y.z>-fork.<N>` section (same heading, for testers) 
 changelogs `docs/fork/CHANGELOG.md` (English), `CHANGELOG.fr.md` and `CHANGELOG.ru.md`, and commit them
 on `fork/main`: the Release notes publish the English section (failing that, the raw list of commits),
 followed by the French and Russian ones in collapsible blocks (omitted if the translated section is missing).
+The tag message (the "Summary") appears only in the English part: write it in English.
 
 ```bash
 git switch fork/main && git pull
@@ -110,11 +111,17 @@ gh secret list "${E[@]}"
 Never display these values in a shared terminal, a log or a conversation. The workflow
 steps do not display them (no `set -x`).
 
+Two tag rulesets (*Settings → Rules → Rulesets*) protect `refs/tags/fork/*`: **"fork release tags
+immutable"** blocks moving or deleting a pushed release tag, for everyone, with no bypass; **"fork
+release tags: admin-only creation"** lets only the admin role create one. A wrong tag is therefore
+never fixed by re-tagging: publish `N + 1`.
+
 ## 4bis. Codeberg mirror
 
 `.github/workflows/codeberg-mirror.yml` pushes all branches and all tags to
-<https://codeberg.org/mezinster/Hestia> on every push to `fork/main`, every 6 h (catches up on
-other branches and tags), or on demand (`gh workflow run codeberg-mirror.yml --ref fork/main`).
+<https://codeberg.org/mezinster/Hestia> on every push to `fork/main` (including the tags and other
+branches already pushed at that moment, so a release tag pushed together with `fork/main` is mirrored
+right away), every 6 h (catches up on everything else), or on demand (`gh workflow run codeberg-mirror.yml --ref fork/main`).
 Whatever is deleted on GitHub is deleted on Codeberg too.
 
 - **Dedicated** SSH key (`~/.ssh/codeberg-mirror-hestia`, ed25519, no passphrase): private

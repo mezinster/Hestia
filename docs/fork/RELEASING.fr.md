@@ -56,6 +56,7 @@ Avant de tagger, ajouter une section `## <x.y.z>-fork.<N>` (même titre, pour le
 journaux `docs/fork/CHANGELOG.md` (anglais), `CHANGELOG.fr.md` et `CHANGELOG.ru.md`, et les committer sur
 `fork/main` : les notes de la Release publient la section anglaise (à défaut, la liste brute des
 commits), puis les sections française et russe en blocs repliables (omises si la section traduite manque).
+Le message du tag (le « Summary ») n'apparaît que dans la partie anglaise : l'écrire en anglais.
 
 ```bash
 git switch fork/main && git pull
@@ -110,11 +111,17 @@ gh secret list "${E[@]}"
 Ne jamais afficher ces valeurs dans un terminal partagé, un journal ou une conversation. Les étapes
 du workflow ne les affichent pas (pas de `set -x`).
 
+Deux rulesets de tags (*Settings → Rules → Rulesets*) protègent `refs/tags/fork/*` : **« fork release
+tags immutable »** interdit de déplacer ou supprimer un tag de publication poussé, pour tout le monde,
+sans exception ; **« fork release tags: admin-only creation »** réserve leur création au rôle admin.
+Un tag erroné ne se corrige donc jamais en re-taggant : publier `N + 1`.
+
 ## 4bis. Miroir Codeberg
 
 `.github/workflows/codeberg-mirror.yml` pousse toutes les branches et tous les tags vers
-<https://codeberg.org/mezinster/Hestia> à chaque push sur `fork/main`, toutes les 6 h (rattrape les
-autres branches et les tags), ou à la demande (`gh workflow run codeberg-mirror.yml --ref fork/main`).
+<https://codeberg.org/mezinster/Hestia> à chaque push sur `fork/main` (avec les tags et autres branches
+déjà poussés à ce moment : un tag de publication poussé avec `fork/main` part donc aussitôt), toutes
+les 6 h (rattrape tout le reste), ou à la demande (`gh workflow run codeberg-mirror.yml --ref fork/main`).
 Ce qui est supprimé sur GitHub l'est aussi sur Codeberg.
 
 - Clé SSH **dédiée** (`~/.ssh/codeberg-mirror-hestia`, ed25519, sans phrase de passe) : clé

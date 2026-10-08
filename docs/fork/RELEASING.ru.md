@@ -56,6 +56,7 @@ git push origin fork/main
 три журнала — `docs/fork/CHANGELOG.md` (английский), `CHANGELOG.fr.md` и `CHANGELOG.ru.md` — и закоммить
 их в `fork/main`: заметки Release публикуют английский раздел (если его нет — просто список
 коммитов), а за ним французский и русский в сворачиваемых блоках (без них, если переведённого раздела нет).
+Сообщение тега («Summary») попадает только в английскую часть: пиши его по-английски.
 
 ```bash
 git switch fork/main && git pull
@@ -110,11 +111,17 @@ gh secret list "${E[@]}"
 Никогда не выводи эти значения в общем терминале, журнале или переписке. Шаги
 workflow их не выводят (без `set -x`).
 
+Два ruleset для тегов (*Settings → Rules → Rulesets*) защищают `refs/tags/fork/*`: **«fork release
+tags immutable»** запрещает перемещать или удалять запушенный тег релиза — всем, без исключений;
+**«fork release tags: admin-only creation»** разрешает создавать такие теги только роли admin.
+Поэтому ошибочный тег никогда не исправляют перетегированием: публикуй `N + 1`.
+
 ## 4bis. Зеркало Codeberg
 
 `.github/workflows/codeberg-mirror.yml` пушит все ветки и все теги в
-<https://codeberg.org/mezinster/Hestia> при каждом пуше в `fork/main`, каждые 6 ч (подхватывает
-остальные ветки и теги) или по запросу (`gh workflow run codeberg-mirror.yml --ref fork/main`).
+<https://codeberg.org/mezinster/Hestia> при каждом пуше в `fork/main` (вместе с тегами и другими
+ветками, уже запушенными к этому моменту, — тег релиза, запушенный вместе с `fork/main`, уходит
+сразу), каждые 6 ч (подхватывает всё остальное) или по запросу (`gh workflow run codeberg-mirror.yml --ref fork/main`).
 Всё, что удалено на GitHub, удаляется и на Codeberg.
 
 - **Отдельный** SSH-ключ (`~/.ssh/codeberg-mirror-hestia`, ed25519, без парольной фразы): приватный
