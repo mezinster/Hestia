@@ -125,6 +125,12 @@ Ce qui est supprimé sur GitHub l'est aussi sur Codeberg.
   `ssh-keyscan codeberg.org`, empreintes comparées à <https://docs.codeberg.org/security/ssh-fingerprint/>).
 - Pour arrêter le miroir : désactiver le workflow (`gh workflow disable codeberg-mirror.yml`) et
   supprimer la clé de déploiement sur Codeberg.
+- GitHub **suspend les workflows planifiés après 60 jours sans activité** dans un dépôt public : un
+  push sur `fork/main` reste aussitôt mis en miroir, mais les autres branches, les tags et `main`
+  (synchronisations amont) n'arriveraient plus sur Codeberg, sans autre avertissement qu'un e-mail de
+  GitHub. Après une longue pause, vérifier *Actions → Codeberg mirror* : le réactiver si besoin
+  (`gh workflow enable codeberg-mirror.yml`), puis le lancer une fois
+  (`gh workflow run codeberg-mirror.yml --ref fork/main`).
 
 ## 5. Repli local (CI indisponible)
 

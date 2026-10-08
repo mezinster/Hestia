@@ -125,6 +125,12 @@ workflow их не выводят (без `set -x`).
   `ssh-keyscan codeberg.org`, отпечатки сверены с <https://docs.codeberg.org/security/ssh-fingerprint/>).
 - Чтобы остановить зеркало: отключи workflow (`gh workflow disable codeberg-mirror.yml`) и
   удали deploy key на Codeberg.
+- GitHub **приостанавливает запланированные workflow после 60 дней без активности** в публичном
+  репозитории: push в `fork/main` по-прежнему сразу попадает в зеркало, но остальные ветки, теги и
+  `main` (синхронизация с апстримом) перестанут доходить до Codeberg — предупреждением будет только
+  письмо от GitHub. После долгого перерыва проверь *Actions → Codeberg mirror*: при необходимости
+  включи его снова (`gh workflow enable codeberg-mirror.yml`) и запусти один раз
+  (`gh workflow run codeberg-mirror.yml --ref fork/main`).
 
 ## 5. Локальный запасной вариант (CI недоступен)
 

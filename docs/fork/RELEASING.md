@@ -125,6 +125,11 @@ Whatever is deleted on GitHub is deleted on Codeberg too.
   `ssh-keyscan codeberg.org`, fingerprints compared with <https://docs.codeberg.org/security/ssh-fingerprint/>).
 - To stop the mirror: disable the workflow (`gh workflow disable codeberg-mirror.yml`) and
   delete the deploy key on Codeberg.
+- GitHub **pauses scheduled workflows after 60 days without activity** in a public repository: pushes
+  to `fork/main` still mirror immediately, but other branches, tags and `main` (upstream syncs) would
+  no longer reach Codeberg, without any warning (except an email from GitHub). After a long pause,
+  check *Actions → Codeberg mirror*: re-enable it if needed (`gh workflow enable codeberg-mirror.yml`),
+  then run it once (`gh workflow run codeberg-mirror.yml --ref fork/main`).
 
 ## 5. Local fallback (CI unavailable)
 
