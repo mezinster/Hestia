@@ -22,8 +22,8 @@ It runs on **Android 10 to 17**.
 
 ### Install
 
-1. Open <https://codeberg.org/mezinster/Hestia/releases/latest> on your phone.
-2. Download `hestia-<version>.apk`.
+1. Open <https://github.com/mezinster/Hestia/releases/latest> on your phone.
+2. Under **Assets**, download `hestia-<version>.apk`.
 3. Open the file. If Android asks, allow installing apps from your browser or file manager.
 
 The app appears as **« Hestia (test) »**. It installs **next to** the official Hestia from F-Droid:
@@ -32,8 +32,8 @@ both can live on the same phone, each with its own devices and settings.
 ### Update
 
 Download the newer APK from the same link and install it over the old one. Your devices and settings
-are kept. There are no automatic updates: check the link from time to time, or watch the repository
-on Codeberg.
+are kept. There are no automatic updates: check the link from time to time, or watch the repository's releases
+on GitHub (Watch → Custom → Releases).
 
 ### If installation is blocked
 
@@ -69,7 +69,7 @@ you enter.
 
 ### Report a bug
 
-Open an issue at <https://codeberg.org/mezinster/Hestia/issues> with:
+Open an issue at <https://github.com/mezinster/Hestia/issues> with:
 
 - your Android version and phone model;
 - the Shelly model (and generation, if you know it);
@@ -102,8 +102,8 @@ Open an issue at <https://codeberg.org/mezinster/Hestia/issues> with:
 
 ### Установка
 
-1. Открой на телефоне <https://codeberg.org/mezinster/Hestia/releases/latest>.
-2. Скачай `hestia-<версия>.apk`.
+1. Открой на телефоне <https://github.com/mezinster/Hestia/releases/latest>.
+2. В разделе **Assets** скачай `hestia-<версия>.apk`.
 3. Открой файл. Если Android спросит, разреши установку приложений из браузера или файлового
    менеджера.
 
@@ -114,7 +114,7 @@ Open an issue at <https://codeberg.org/mezinster/Hestia/issues> with:
 
 Скачай более новый APK по той же ссылке и установи поверх старого. Устройства и настройки
 сохранятся. Автоматических обновлений нет: время от времени заглядывай по ссылке или подпишись на
-репозиторий на Codeberg.
+релизы репозитория на GitHub (Watch → Custom → Releases).
 
 ### Если установка блокируется
 
@@ -149,7 +149,7 @@ Open an issue at <https://codeberg.org/mezinster/Hestia/issues> with:
 
 ### Сообщить об ошибке
 
-Создай issue на <https://codeberg.org/mezinster/Hestia/issues> и укажи:
+Создай issue на <https://github.com/mezinster/Hestia/issues> и укажи:
 
 - версию Android и модель телефона;
 - модель Shelly (и поколение, если знаешь);

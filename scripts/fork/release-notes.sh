@@ -8,7 +8,7 @@ prev="$(git tag -l 'fork/*' --sort=-creatordate --merged "$tag" | grep -vxF "$ta
 cat <<'NOTES'
 **Unofficial test build** of [Hestia](https://codeberg.org/kapoue/Hestia) with the features of this fork. Runs on Android 10 to 17. It installs **alongside** the official F-Droid version (separate app "Hestia (test)", separate settings).
 
-How to install, update and report a bug: [tester guide](https://codeberg.org/mezinster/Hestia/src/branch/fork/main/docs/fork/TESTING.md) · [issues](https://codeberg.org/mezinster/Hestia/issues)
+How to install, update and report a bug: [tester guide](https://github.com/mezinster/Hestia/blob/fork/main/docs/fork/TESTING.md) · [issues](https://github.com/mezinster/Hestia/issues)
 
 > Independence: Hestia is an independent project, with no connection to Shelly or Allterco Robotics. It is neither commissioned, sponsored, nor endorsed by Shelly. Shelly is a registered trademark of its respective owner; it is mentioned only for technical compatibility.
 

@@ -51,7 +51,7 @@ Installs over 2.16.1-fork.1 (same "Hestia (test)" app, your devices and settings
 ### Good to know
 
 - Shutters and dimmer schedules have **not been tested on real hardware yet**. If you own one, your
-  feedback is very welcome — see the [tester guide](https://codeberg.org/mezinster/Hestia/src/branch/fork/main/docs/fork/TESTING.md).
+  feedback is very welcome — see the [tester guide](https://github.com/mezinster/Hestia/blob/fork/main/docs/fork/TESTING.md).
 - The app's local database is upgraded on first launch. Going back to 2.16.1-fork.1 afterwards
   requires uninstalling "Hestia (test)" first.
 - The tester guide now explains what to do when Play Protect or Android blocks the installation.
