@@ -1,0 +1,45 @@
+# Miroir à sens unique GitHub → Codeberg (codeberg.org/mezinster/Hestia) : branches et tags, avec
+# suppression de ce qui n'existe plus ici. Le planning rattrape les pushes qui ne déclenchent pas ce
+# workflow (branche main = miroir de l'amont, sans .github/). Voir docs/fork/RELEASING.md § 4bis.
+name: Miroir Codeberg
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeberg-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    if: github.repository == 'mezinster/Hestia'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Clé SSH
+        env:
+          KEY: ${{ secrets.CODEBERG_MIRROR_SSH_KEY }}
+          KNOWN_HOSTS: ${{ vars.CODEBERG_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          (umask 077; printf '%s\n' "$KEY" > ~/.ssh/codeberg)
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      # Clone nu : seulement refs/heads/* et refs/tags/* (pas les refs/pull/* de GitHub, que
+      # Codeberg refuserait).
+      - name: Miroir
+        env:
+          GIT_SSH_COMMAND: ssh -i ~/.ssh/codeberg -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes
+        run: |
+          git clone --bare --quiet "https://github.com/${GITHUB_REPOSITORY}.git" repo.git
+          git -C repo.git push --prune ssh://git@codeberg.org/mezinster/Hestia.git \
+            '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+      - name: Nettoyage
+        if: always()
+        run: rm -f ~/.ssh/codeberg

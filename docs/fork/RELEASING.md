@@ -106,6 +106,20 @@ gh secret list "${E[@]}"
 Ne jamais afficher ces valeurs dans un terminal partagé, un journal ou une conversation. Les étapes
 du workflow ne les affichent pas (pas de `set -x`).
 
+## 4bis. Miroir Codeberg
+
+`.github/workflows/codeberg-mirror.yml` pousse toutes les branches et tous les tags vers
+<https://codeberg.org/mezinster/Hestia> à chaque push sur GitHub, toutes les 6 h, ou à la demande
+(`gh workflow run codeberg-mirror.yml`). Ce qui est supprimé sur GitHub l'est aussi sur Codeberg.
+
+- Clé SSH **dédiée** (`~/.ssh/codeberg-mirror-hestia`, ed25519, sans phrase de passe) : clé
+  privée dans le secret de dépôt `CODEBERG_MIRROR_SSH_KEY`, clé publique en *clé de déploiement
+  avec écriture* sur Codeberg (*Settings → Deploy keys* du dépôt), jamais une clé de compte.
+- Clés d'hôte de Codeberg dans la variable de dépôt `CODEBERG_KNOWN_HOSTS` (obtenues par
+  `ssh-keyscan codeberg.org`, empreintes comparées à <https://docs.codeberg.org/security/ssh-fingerprint/>).
+- Pour arrêter le miroir : désactiver le workflow (`gh workflow disable codeberg-mirror.yml`) et
+  supprimer la clé de déploiement sur Codeberg.
+
 ## 5. Repli local (CI indisponible)
 
 ```bash
