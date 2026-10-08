@@ -71,7 +71,7 @@ Suivre avec `gh run watch` (ou l'onglet *Actions*), puis vérifier
 
 Essai sans publier : *Actions → Fork release → Run workflow* (ou
 `gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) reconstruit un tag
-existant (forcément contenu dans `fork/main`) et crée la Release **toujours en brouillon** ; la
+existant (refusé s'il n'est pas dans `fork/main`) et crée la Release **toujours en brouillon** ; la
 publier ensuite dans l'interface ou avec `gh release edit <tag> --draft=false`. La supprimer ensuite (`gh release delete <tag> --yes`)
 si ce n'était qu'un essai ; si une Release existe déjà pour ce tag, le workflow échoue sans rien
 écraser.

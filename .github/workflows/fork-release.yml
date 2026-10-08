@@ -1,8 +1,9 @@
 # Publication du fork (mezinster/Hestia) : sur un tag fork/<x.y.z>-fork.<N> poussé, ou à la main
 # (workflow_dispatch) pour reconstruire un tag existant, toujours en brouillon. Voir
 # docs/fork/RELEASING.md. Les secrets de signature ne sont accessibles qu'à l'environnement
-# fork-release, limité aux tags fork/* et à la branche fork/main (lancements manuels), et seul un
-# tag contenu dans fork/main est construit.
+# fork-release, limité aux tags fork/* et à la branche fork/main (lancements manuels). Un lancement
+# manuel refuse tout tag absent de fork/main. Sur un push de tag, GitHub exécute le workflow du commit
+# tagué : la vraie barrière est alors que seuls les mainteneurs peuvent pousser des tags fork/*.
 name: Fork release
 
 on:
@@ -45,9 +46,12 @@ jobs:
           git fetch --force --tags --quiet origin
       # L'environnement ne contrôle que la référence qui lance le workflow, pas le commit construit :
       # on refuse tout tag qui n'est pas dans l'historique de fork/main avant d'exposer les secrets.
+      # Contrôle fait ici, sans exécuter le moindre script venant du tag (check-tag.sh tourne ensuite
+      # dans ci-build.sh, une fois l'origine du tag vérifiée).
       - name: Origine du tag
         run: |
-          scripts/fork/check-tag.sh "$TAG" >/dev/null
+          [[ "$TAG" =~ ^fork/[0-9]+\.[0-9]+\.[0-9]+-fork\.[1-9][0-9]*$ ]] \
+            || { echo "Tag invalide : $TAG" >&2; exit 1; }
           git fetch --quiet origin refs/heads/fork/main:refs/remotes/origin/fork/main
           git merge-base --is-ancestor "refs/tags/$TAG" refs/remotes/origin/fork/main \
             || { echo "Le tag $TAG n'est pas dans fork/main : publication refusée" >&2; exit 1; }

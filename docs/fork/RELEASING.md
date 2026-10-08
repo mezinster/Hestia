@@ -71,7 +71,7 @@ Follow it with `gh run watch` (or the *Actions* tab), then check
 
 Dry run without publishing: *Actions → Fork release → Run workflow* (or
 `gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) rebuilds an
-existing tag (necessarily contained in `fork/main`) and creates the Release **always as a draft**;
+existing tag (refused unless it is in `fork/main`) and creates the Release **always as a draft**;
 then publish it in the web UI or with `gh release edit <tag> --draft=false`. Delete it afterwards (`gh release delete <tag> --yes`)
 if it was only a trial; if a Release already exists for this tag, the workflow fails without
 overwriting anything.

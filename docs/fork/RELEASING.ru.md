@@ -71,7 +71,7 @@ Workflow `.github/workflows/fork-release.yml` запускается по это
 
 Пробный прогон без публикации: *Actions → Fork release → Run workflow* (или
 `gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) пересобирает
-существующий тег (обязательно входящий в `fork/main`) и создаёт Release **всегда как черновик**;
+существующий тег (отклоняется, если его нет в `fork/main`) и создаёт Release **всегда как черновик**;
 затем опубликуй его в веб-интерфейсе или командой `gh release edit <tag> --draft=false`. Потом удали его (`gh release delete <tag> --yes`),
 если это была лишь проба; если Release для этого тега уже существует, workflow падает, ничего
 не перезаписывая.
