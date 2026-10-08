@@ -1,5 +1,7 @@
 # Changelog — Hestia fork test builds
 
+**English** · [Français](CHANGELOG.fr.md) · [Русский](CHANGELOG.ru.md)
+
 Changes in each unofficial test build of this fork, written for testers. The release notes of a
 `fork/<version>` tag publish the section of the same name (`## <version>`); without one, they fall
 back to the list of commits.

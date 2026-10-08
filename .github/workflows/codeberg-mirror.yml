@@ -2,7 +2,7 @@
 # suppression de ce qui n'existe plus ici. La clé d'écriture Codeberg est dans l'environnement
 # codeberg-mirror, limité à fork/main : seul le code de fork/main y a accès. Les autres branches et
 # les tags sont rattrapés par le planning (toutes les 6 h). Voir docs/fork/RELEASING.md § 4bis.
-name: Miroir Codeberg
+name: Codeberg mirror
 
 on:
   push:

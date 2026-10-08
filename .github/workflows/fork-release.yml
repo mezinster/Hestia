@@ -3,7 +3,7 @@
 # docs/fork/RELEASING.md. Les secrets de signature ne sont accessibles qu'à l'environnement
 # fork-release, limité aux tags fork/* et à la branche fork/main (lancements manuels), et seul un
 # tag contenu dans fork/main est construit.
-name: Publication du fork
+name: Fork release
 
 on:
   push:

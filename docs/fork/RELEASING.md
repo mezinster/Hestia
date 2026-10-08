@@ -1,98 +1,101 @@
-# Publier une version du fork (mezinster/Hestia)
+# Publishing a fork release (mezinster/Hestia)
 
-Procédure du mainteneur du fork. Les testeurs ont leur propre guide : [TESTING.md](TESTING.md).
+**English** · [Français](RELEASING.fr.md) · [Русский](RELEASING.ru.md)
+
+Procedure for the fork maintainer. Testers have their own guide: [TESTING.md](TESTING.md).
 
 ## 1. Branches
 
-Dépôt principal : <https://github.com/mezinster/Hestia> (`origin`). <https://codeberg.org/mezinster/Hestia>
-est un **miroir en lecture seule** alimenté par `.github/workflows/codeberg-mirror.yml` (voir § 4bis) :
-ne jamais y pousser ni y fusionner quoi que ce soit. L'amont reste `upstream` =
-<https://codeberg.org/kapoue/Hestia> (lecture seule).
+Main repository: <https://github.com/mezinster/Hestia> (`origin`). <https://codeberg.org/mezinster/Hestia>
+is a **read-only mirror** fed by `.github/workflows/codeberg-mirror.yml` (see § 4bis):
+never push or merge anything there. Upstream remains `upstream` =
+<https://codeberg.org/kapoue/Hestia> (read-only).
 
-- `main` : miroir exact de `upstream/main` (kapoue/Hestia). Jamais de commit propre au fork.
-- `fork/main` : branche d'intégration = amont + branches de fonctionnalité du fork + configuration
-  de publication (bloc en fin de `app/build.gradle.kts`, `app/src/release/AndroidManifest.xml`,
-  `scripts/fork/`, `.github/`, `docs/fork/`). **Les publications sont taguées uniquement ici.**
-- `feature/*` : une branche par fonctionnalité, fusionnée dans `fork/main` une fois prête.
+- `main`: exact mirror of `upstream/main` (kapoue/Hestia). Never a fork-specific commit.
+- `fork/main`: integration branch = upstream + fork feature branches + release configuration
+  (block at the end of `app/build.gradle.kts`, `app/src/release/AndroidManifest.xml`,
+  `scripts/fork/`, `.github/`, `docs/fork/`). **Releases are tagged only here.**
+- `feature/*`: one branch per feature, merged into `fork/main` once ready.
 
-Synchroniser avec l'amont :
+Syncing with upstream:
 
 ```bash
 git fetch upstream
 git switch main && git merge --ff-only upstream/main && git push origin main
 git switch fork/main && git merge main
-git merge feature/<nouvelle-fonctionnalité>     # le cas échéant
+git merge feature/<new-feature>     # if applicable
 ./gradlew testDebugUnitTest
 git push origin fork/main
 ```
 
-La configuration du fork n'ajoute que des lignes (jamais de modification de lignes amont) : une
-synchronisation ne devrait pas produire de conflit à cause d'elle.
+The fork configuration only adds lines (it never modifies upstream lines): a sync should not
+produce conflicts because of it.
 
-Conflits attendus à la synchronisation (plannings des variateurs, lot C3) : `ShellyRpcClient.scheduleCreate`
-et `DeviceRepository.reconstructPlannings` ont une signature générique (`control, channelId` au lieu de
-`switchId`) ; `applyIfAlreadyActive`/`deletePlanning` appellent `setChannelAt`. Si l'amont modifie ces
-fonctions, reporter ses changements en gardant ces paramètres. Les conditions élargies
-(`supportsSwitch || isLight`) dans `DetailScreen`, `DetailViewModel`, `DashboardViewModel` et
-`NotificationWorker`, ainsi que la logique du bouton mural des relais (`disablesPlanningToday`) dans
-`DashboardViewModel`, sont aussi des changements du fork.
+Expected conflicts when syncing (dimmer schedules, batch C3): `ShellyRpcClient.scheduleCreate`
+and `DeviceRepository.reconstructPlannings` have a generic signature (`control, channelId` instead of
+`switchId`); `applyIfAlreadyActive`/`deletePlanning` call `setChannelAt`. If upstream changes these
+functions, carry its changes over while keeping these parameters. The widened conditions
+(`supportsSwitch || isLight`) in `DetailScreen`, `DetailViewModel`, `DashboardViewModel` and
+`NotificationWorker`, as well as the relay wall-switch logic (`disablesPlanningToday`) in
+`DashboardViewModel`, are also fork changes.
 
-## 2. Numérotation
+## 2. Numbering
 
-- Tag : `fork/<versionName amont>-fork.<N>`, p. ex. `fork/2.16.1-fork.3`.
-- `N` est un compteur unique du fork, **jamais remis à zéro** (même quand l'amont change de
-  version) : `versionCode = 1000 + N` croît toujours, donc chaque APK s'installe par-dessus le
-  précédent.
-- `versionName` de l'APK : `<versionName amont>-fork.<N>`.
-- Dernier `N` utilisé : `git tag -l 'fork/*' --sort=-creatordate | head -1`.
-- `defaultConfig.versionCode`/`versionName` (lus par F-Droid côté amont) ne sont jamais modifiés.
-- Un build release sans `-PforkBuild=N` échoue volontairement.
+- Tag: `fork/<upstream versionName>-fork.<N>`, e.g. `fork/2.16.1-fork.3`.
+- `N` is a single fork-wide counter, **never reset** (even when upstream changes
+  version): `versionCode = 1000 + N` always increases, so each APK installs over the
+  previous one.
+- APK `versionName`: `<upstream versionName>-fork.<N>`.
+- Last `N` used: `git tag -l 'fork/*' --sort=-creatordate | head -1`.
+- `defaultConfig.versionCode`/`versionName` (read by F-Droid on the upstream side) are never modified.
+- A release build without `-PforkBuild=N` fails on purpose.
 
-## 3. Publier
+## 3. Publishing
 
-Avant de tagger, ajouter à `docs/fork/CHANGELOG.md` une section `## <x.y.z>-fork.<N>` (en anglais,
-pour les testeurs) et la committer sur `fork/main` : les notes de la Release publient cette section
-(à défaut, la liste brute des commits).
+Before tagging, add a `## <x.y.z>-fork.<N>` section (same heading, for testers) to the three
+changelogs `docs/fork/CHANGELOG.md` (English), `CHANGELOG.fr.md` and `CHANGELOG.ru.md`, and commit them
+on `fork/main`: the Release notes publish the English section (failing that, the raw list of commits),
+followed by the French and Russian ones in collapsible blocks (omitted if the translated section is missing).
 
 ```bash
 git switch fork/main && git pull
-git tag -a fork/<x.y.z>-fork.<N> -m "<résumé d'une ligne en anglais pour les testeurs>"
+git tag -a fork/<x.y.z>-fork.<N> -m "<one-line English summary for testers>"
 git push origin fork/main fork/<x.y.z>-fork.<N>
 ```
 
-Le workflow `.github/workflows/fork-release.yml` démarre sur ce tag (et uniquement sur un tag
-`fork/*`) : contrôle du tag (`scripts/fork/check-tag.sh`), tests unitaires, build release signé,
-puis Release GitHub avec l'APK, son `.sha256` et les notes (`scripts/fork/release-notes.sh`).
-Suivre avec `gh run watch` (ou l'onglet *Actions*), puis vérifier
+The `.github/workflows/fork-release.yml` workflow starts on this tag (and only on a
+`fork/*` tag): tag check (`scripts/fork/check-tag.sh`), unit tests, signed release build,
+then a GitHub Release with the APK, its `.sha256` and the notes (`scripts/fork/release-notes.sh`).
+Follow it with `gh run watch` (or the *Actions* tab), then check
 <https://github.com/mezinster/Hestia/releases/latest>.
 
-Essai sans publier : *Actions → Publication du fork → Run workflow* (ou
-`gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) reconstruit un tag
-existant (forcément contenu dans `fork/main`) et crée la Release **toujours en brouillon** ; la
-publier ensuite dans l'interface ou avec `gh release edit <tag> --draft=false`. La supprimer ensuite (`gh release delete <tag> --yes`)
-si ce n'était qu'un essai ; si une Release existe déjà pour ce tag, le workflow échoue sans rien
-écraser.
+Dry run without publishing: *Actions → Fork release → Run workflow* (or
+`gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) rebuilds an
+existing tag (necessarily contained in `fork/main`) and creates the Release **always as a draft**;
+then publish it in the web UI or with `gh release edit <tag> --draft=false`. Delete it afterwards (`gh release delete <tag> --yes`)
+if it was only a trial; if a Release already exists for this tag, the workflow fails without
+overwriting anything.
 
-En cas d'échec : corriger sur `fork/main` et publier `N + 1` (un numéro perdu est sans conséquence ;
-ne jamais réutiliser un tag déjà poussé).
+On failure: fix on `fork/main` and publish `N + 1` (a lost number does not matter;
+never reuse a tag that has already been pushed).
 
-## 4. Secrets GitHub
+## 4. GitHub secrets
 
-Environnement `fork-release` (*Settings → Environments*), règles de déploiement limitées aux tags
-`fork/*` et à la branche `fork/main` (lancements manuels) : un workflow lancé depuis une autre
-branche n'y a pas accès. Secrets d'environnement :
+`fork-release` environment (*Settings → Environments*), deployment rules limited to
+`fork/*` tags and the `fork/main` branch (manual runs): a workflow started from another
+branch has no access to it. Environment secrets:
 
-| Secret | Contenu |
+| Secret | Content |
 |---|---|
-| `FORK_KEYSTORE_B64` | `~/.android-keys/hestia-fork-test.jks` encodé en base64 (une ligne) |
-| `FORK_STORE_PASSWORD` | valeur de `HESTIA_FORK_STORE_PASSWORD` |
-| `FORK_KEY_ALIAS` | valeur de `HESTIA_FORK_KEY_ALIAS` |
-| `FORK_KEY_PASSWORD` | valeur de `HESTIA_FORK_KEY_PASSWORD` |
+| `FORK_KEYSTORE_B64` | `~/.android-keys/hestia-fork-test.jks` base64-encoded (one line) |
+| `FORK_STORE_PASSWORD` | value of `HESTIA_FORK_STORE_PASSWORD` |
+| `FORK_KEY_ALIAS` | value of `HESTIA_FORK_KEY_ALIAS` |
+| `FORK_KEY_PASSWORD` | value of `HESTIA_FORK_KEY_PASSWORD` |
 
-La publication utilise le jeton éphémère du workflow (`github.token`, `contents: write` sur le
-seul job `publish`, qui n'a pas accès aux secrets de signature) : aucun jeton personnel.
+Publishing uses the workflow's ephemeral token (`github.token`, `contents: write` on the
+`publish` job only, which has no access to the signing secrets): no personal token.
 
-Déclarer les secrets **sans les afficher** (`gh secret set` lit l'entrée standard) :
+Set the secrets **without displaying them** (`gh secret set` reads standard input):
 
 ```bash
 E=(--repo mezinster/Hestia --env fork-release)
@@ -104,48 +107,48 @@ done
 gh secret list "${E[@]}"
 ```
 
-Ne jamais afficher ces valeurs dans un terminal partagé, un journal ou une conversation. Les étapes
-du workflow ne les affichent pas (pas de `set -x`).
+Never display these values in a shared terminal, a log or a conversation. The workflow
+steps do not display them (no `set -x`).
 
-## 4bis. Miroir Codeberg
+## 4bis. Codeberg mirror
 
-`.github/workflows/codeberg-mirror.yml` pousse toutes les branches et tous les tags vers
-<https://codeberg.org/mezinster/Hestia> à chaque push sur `fork/main`, toutes les 6 h (rattrape les
-autres branches et les tags), ou à la demande (`gh workflow run codeberg-mirror.yml --ref fork/main`).
-Ce qui est supprimé sur GitHub l'est aussi sur Codeberg.
+`.github/workflows/codeberg-mirror.yml` pushes all branches and all tags to
+<https://codeberg.org/mezinster/Hestia> on every push to `fork/main`, every 6 h (catches up on
+other branches and tags), or on demand (`gh workflow run codeberg-mirror.yml --ref fork/main`).
+Whatever is deleted on GitHub is deleted on Codeberg too.
 
-- Clé SSH **dédiée** (`~/.ssh/codeberg-mirror-hestia`, ed25519, sans phrase de passe) : clé
-  privée dans le secret `CODEBERG_MIRROR_SSH_KEY` de l'environnement `codeberg-mirror` (règle de
-  déploiement : branche `fork/main` uniquement), clé publique en *clé de déploiement
-  avec écriture* sur Codeberg (*Settings → Deploy keys* du dépôt), jamais une clé de compte.
-- Clés d'hôte de Codeberg dans la variable de dépôt `CODEBERG_KNOWN_HOSTS` (obtenues par
-  `ssh-keyscan codeberg.org`, empreintes comparées à <https://docs.codeberg.org/security/ssh-fingerprint/>).
-- Pour arrêter le miroir : désactiver le workflow (`gh workflow disable codeberg-mirror.yml`) et
-  supprimer la clé de déploiement sur Codeberg.
+- **Dedicated** SSH key (`~/.ssh/codeberg-mirror-hestia`, ed25519, no passphrase): private
+  key in the `CODEBERG_MIRROR_SSH_KEY` secret of the `codeberg-mirror` environment (deployment
+  rule: `fork/main` branch only), public key as a *deploy key
+  with write access* on Codeberg (repository *Settings → Deploy keys*), never an account key.
+- Codeberg host keys in the `CODEBERG_KNOWN_HOSTS` repository variable (obtained with
+  `ssh-keyscan codeberg.org`, fingerprints compared with <https://docs.codeberg.org/security/ssh-fingerprint/>).
+- To stop the mirror: disable the workflow (`gh workflow disable codeberg-mirror.yml`) and
+  delete the deploy key on Codeberg.
 
-## 5. Repli local (CI indisponible)
+## 5. Local fallback (CI unavailable)
 
 ```bash
-git tag -a fork/<x.y.z>-fork.<N> -m "<résumé>"
+git tag -a fork/<x.y.z>-fork.<N> -m "<summary>"
 ANDROID_HOME=~/Android/Sdk CI_COMMIT_TAG=fork/<x.y.z>-fork.<N> scripts/fork/ci-build.sh
-git push origin fork/main fork/<x.y.z>-fork.<N>   # lance aussi le workflow : l'annuler (gh run cancel) pour publier à la main
+git push origin fork/main fork/<x.y.z>-fork.<N>   # also starts the workflow: cancel it (gh run cancel) to publish by hand
 gh release create fork/<x.y.z>-fork.<N> build/fork-release/dist/* --repo mezinster/Hestia --verify-tag \
   --title "$(cat build/fork-release/title.txt)" --notes-file build/fork-release/notes.md
 ```
 
-Si le workflow a déjà publié la Release, ne pas la recréer à la main (`gh release create`
-échouerait).
+If the workflow has already published the Release, do not recreate it by hand (`gh release create`
+would fail).
 
-La signature locale lit `HESTIA_FORK_*` dans `~/.gradle/gradle.properties`.
+Local signing reads `HESTIA_FORK_*` from `~/.gradle/gradle.properties`.
 
-## 6. Base Room
+## 6. Room database
 
-Le fork utilise la version 20 de la base (variateurs `isLight` en v18, volets `isCover` en v19, événements de volet
-en pause `paused_cover_events` en v20). Si l'amont publie à son tour une base v18, v19 ou v20 (autre contenu),
-renuméroter les migrations du fork (v21 et suivantes, n'ajoutant `isLight` et `isCover` que si la colonne est absente,
-et `paused_cover_events` avec `CREATE TABLE IF NOT EXISTS`) **avant** de publier une version fusionnée.
+The fork uses database version 20 (dimmers `isLight` in v18, shutters `isCover` in v19, paused
+shutter events `paused_cover_events` in v20). If upstream in turn publishes a v18, v19 or v20 database (different content),
+renumber the fork's migrations (v21 and later, adding `isLight` and `isCover` only if the column is missing,
+and `paused_cover_events` with `CREATE TABLE IF NOT EXISTS`) **before** publishing a merged release.
 
-## 7. Tests des scripts
+## 7. Script tests
 
 ```bash
 scripts/fork/test-check-tag.sh
