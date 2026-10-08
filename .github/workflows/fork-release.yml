@@ -1,7 +1,8 @@
 # Publication du fork (mezinster/Hestia) : sur un tag fork/<x.y.z>-fork.<N> poussé, ou à la main
-# (workflow_dispatch) pour reconstruire un tag existant, en brouillon par défaut. Voir
+# (workflow_dispatch) pour reconstruire un tag existant, toujours en brouillon. Voir
 # docs/fork/RELEASING.md. Les secrets de signature ne sont accessibles qu'à l'environnement
-# fork-release, limité aux tags fork/* et à la branche fork/main (lancements manuels).
+# fork-release, limité aux tags fork/* et à la branche fork/main (lancements manuels), et seul un
+# tag contenu dans fork/main est construit.
 name: Publication du fork
 
 on:
@@ -10,12 +11,8 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag fork/<x.y.z>-fork.<N> existant
+        description: Tag fork/<x.y.z>-fork.<N> existant (Release créée en brouillon)
         required: true
-      draft:
-        description: Créer la Release en brouillon
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -46,6 +43,14 @@ jobs:
         run: |
           git config --global --add safe.directory '*'
           git fetch --force --tags --quiet origin
+      # L'environnement ne contrôle que la référence qui lance le workflow, pas le commit construit :
+      # on refuse tout tag qui n'est pas dans l'historique de fork/main avant d'exposer les secrets.
+      - name: Origine du tag
+        run: |
+          scripts/fork/check-tag.sh "$TAG" >/dev/null
+          git fetch --quiet origin refs/heads/fork/main:refs/remotes/origin/fork/main
+          git merge-base --is-ancestor "refs/tags/$TAG" refs/remotes/origin/fork/main \
+            || { echo "Le tag $TAG n'est pas dans fork/main : publication refusée" >&2; exit 1; }
       - name: Construction
         env:
           CI_COMMIT_TAG: ${{ env.TAG }}
@@ -68,7 +73,7 @@ jobs:
       contents: write
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
-      DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft }}
+      DRAFT: ${{ github.event_name == 'workflow_dispatch' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

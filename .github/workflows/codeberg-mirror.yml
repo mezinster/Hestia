@@ -1,12 +1,12 @@
 # Miroir à sens unique GitHub → Codeberg (codeberg.org/mezinster/Hestia) : branches et tags, avec
-# suppression de ce qui n'existe plus ici. Le planning rattrape les pushes qui ne déclenchent pas ce
-# workflow (branche main = miroir de l'amont, sans .github/). Voir docs/fork/RELEASING.md § 4bis.
+# suppression de ce qui n'existe plus ici. La clé d'écriture Codeberg est dans l'environnement
+# codeberg-mirror, limité à fork/main : seul le code de fork/main y a accès. Les autres branches et
+# les tags sont rattrapés par le planning (toutes les 6 h). Voir docs/fork/RELEASING.md § 4bis.
 name: Miroir Codeberg
 
 on:
   push:
-    branches: ['**']
-    tags: ['**']
+    branches: [fork/main]
   schedule:
     - cron: '17 */6 * * *'
   workflow_dispatch:
@@ -22,6 +22,7 @@ jobs:
   mirror:
     if: github.repository == 'mezinster/Hestia'
     runs-on: ubuntu-24.04
+    environment: codeberg-mirror
     steps:
       - name: Clé SSH
         env:

@@ -68,7 +68,8 @@ Suivre avec `gh run watch` (ou l'onglet *Actions*), puis vérifier
 
 Essai sans publier : *Actions → Publication du fork → Run workflow* (ou
 `gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) reconstruit un tag
-existant et crée la Release **en brouillon**. La supprimer ensuite (`gh release delete <tag> --yes`)
+existant (forcément contenu dans `fork/main`) et crée la Release **toujours en brouillon** ; la
+publier ensuite dans l'interface ou avec `gh release edit <tag> --draft=false`. La supprimer ensuite (`gh release delete <tag> --yes`)
 si ce n'était qu'un essai ; si une Release existe déjà pour ce tag, le workflow échoue sans rien
 écraser.
 
@@ -109,11 +110,13 @@ du workflow ne les affichent pas (pas de `set -x`).
 ## 4bis. Miroir Codeberg
 
 `.github/workflows/codeberg-mirror.yml` pousse toutes les branches et tous les tags vers
-<https://codeberg.org/mezinster/Hestia> à chaque push sur GitHub, toutes les 6 h, ou à la demande
-(`gh workflow run codeberg-mirror.yml`). Ce qui est supprimé sur GitHub l'est aussi sur Codeberg.
+<https://codeberg.org/mezinster/Hestia> à chaque push sur `fork/main`, toutes les 6 h (rattrape les
+autres branches et les tags), ou à la demande (`gh workflow run codeberg-mirror.yml --ref fork/main`).
+Ce qui est supprimé sur GitHub l'est aussi sur Codeberg.
 
 - Clé SSH **dédiée** (`~/.ssh/codeberg-mirror-hestia`, ed25519, sans phrase de passe) : clé
-  privée dans le secret de dépôt `CODEBERG_MIRROR_SSH_KEY`, clé publique en *clé de déploiement
+  privée dans le secret `CODEBERG_MIRROR_SSH_KEY` de l'environnement `codeberg-mirror` (règle de
+  déploiement : branche `fork/main` uniquement), clé publique en *clé de déploiement
   avec écriture* sur Codeberg (*Settings → Deploy keys* du dépôt), jamais une clé de compte.
 - Clés d'hôte de Codeberg dans la variable de dépôt `CODEBERG_KNOWN_HOSTS` (obtenues par
   `ssh-keyscan codeberg.org`, empreintes comparées à <https://docs.codeberg.org/security/ssh-fingerprint/>).
