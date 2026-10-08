@@ -4,10 +4,15 @@ Procédure du mainteneur du fork. Les testeurs ont leur propre guide : [TESTING.
 
 ## 1. Branches
 
+Dépôt principal : <https://github.com/mezinster/Hestia> (`origin`). <https://codeberg.org/mezinster/Hestia>
+est un **miroir en lecture seule** alimenté par `.github/workflows/codeberg-mirror.yml` (voir § 4bis) :
+ne jamais y pousser ni y fusionner quoi que ce soit. L'amont reste `upstream` =
+<https://codeberg.org/kapoue/Hestia> (lecture seule).
+
 - `main` : miroir exact de `upstream/main` (kapoue/Hestia). Jamais de commit propre au fork.
 - `fork/main` : branche d'intégration = amont + branches de fonctionnalité du fork + configuration
   de publication (bloc en fin de `app/build.gradle.kts`, `app/src/release/AndroidManifest.xml`,
-  `scripts/fork/`, `.woodpecker/`, `docs/fork/`). **Les publications sont taguées uniquement ici.**
+  `scripts/fork/`, `.github/`, `docs/fork/`). **Les publications sont taguées uniquement ici.**
 - `feature/*` : une branche par fonctionnalité, fusionnée dans `fork/main` une fois prête.
 
 Synchroniser avec l'amont :
@@ -55,63 +60,66 @@ git tag -a fork/<x.y.z>-fork.<N> -m "<résumé d'une ligne en anglais pour les t
 git push origin fork/main fork/<x.y.z>-fork.<N>
 ```
 
-Le pipeline `.woodpecker/release.yaml` démarre sur ce tag (et uniquement sur un tag `fork/*`) :
-contrôle du tag (`scripts/fork/check-tag.sh`), tests unitaires, build release signé, puis Release
-Codeberg avec l'APK, son `.sha256` et les notes (`scripts/fork/release-notes.sh`). Suivre sur
-<https://ci.codeberg.org>, puis vérifier <https://codeberg.org/mezinster/Hestia/releases/latest>.
+Le workflow `.github/workflows/fork-release.yml` démarre sur ce tag (et uniquement sur un tag
+`fork/*`) : contrôle du tag (`scripts/fork/check-tag.sh`), tests unitaires, build release signé,
+puis Release GitHub avec l'APK, son `.sha256` et les notes (`scripts/fork/release-notes.sh`).
+Suivre avec `gh run watch` (ou l'onglet *Actions*), puis vérifier
+<https://github.com/mezinster/Hestia/releases/latest>.
+
+Essai sans publier : *Actions → Publication du fork → Run workflow* (ou
+`gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) reconstruit un tag
+existant et crée la Release **en brouillon**. La supprimer ensuite (`gh release delete <tag> --yes`)
+si ce n'était qu'un essai ; si une Release existe déjà pour ce tag, le workflow échoue sans rien
+écraser.
 
 En cas d'échec : corriger sur `fork/main` et publier `N + 1` (un numéro perdu est sans conséquence ;
 ne jamais réutiliser un tag déjà poussé).
 
-## 4. Secrets Woodpecker
+## 4. Secrets GitHub
 
-Une fois l'accès à ci.codeberg.org accordé et le dépôt `mezinster/Hestia` activé dans Woodpecker,
-déclarer dans *Settings → Secrets* du dépôt :
+Environnement `fork-release` (*Settings → Environments*), règles de déploiement limitées aux tags
+`fork/*` et à la branche `fork/main` (lancements manuels) : un workflow lancé depuis une autre
+branche n'y a pas accès. Secrets d'environnement :
 
-| Secret | Contenu | Restriction |
-|---|---|---|
-| `fork_keystore_b64` | `~/.android-keys/hestia-fork-test.jks` encodé en base64 (une ligne) | événement `tag` |
-| `fork_store_password` | valeur de `HESTIA_FORK_STORE_PASSWORD` | événement `tag` |
-| `fork_key_alias` | valeur de `HESTIA_FORK_KEY_ALIAS` | événement `tag` |
-| `fork_key_password` | valeur de `HESTIA_FORK_KEY_PASSWORD` | événement `tag` |
-| `codeberg_release_token` | jeton Codeberg **dédié** (voir ci-dessous) | événement `tag` + image `woodpeckerci/plugin-release` uniquement |
+| Secret | Contenu |
+|---|---|
+| `FORK_KEYSTORE_B64` | `~/.android-keys/hestia-fork-test.jks` encodé en base64 (une ligne) |
+| `FORK_STORE_PASSWORD` | valeur de `HESTIA_FORK_STORE_PASSWORD` |
+| `FORK_KEY_ALIAS` | valeur de `HESTIA_FORK_KEY_ALIAS` |
+| `FORK_KEY_PASSWORD` | valeur de `HESTIA_FORK_KEY_PASSWORD` |
 
-Encoder la clé **sans l'afficher** :
+La publication utilise le jeton éphémère du workflow (`github.token`, `contents: write` sur le
+seul job `publish`, qui n'a pas accès aux secrets de signature) : aucun jeton personnel.
+
+Déclarer les secrets **sans les afficher** (`gh secret set` lit l'entrée standard) :
 
 ```bash
-(umask 077; base64 -w0 ~/.android-keys/hestia-fork-test.jks > /tmp/fork-key.b64)
-# ouvrir /tmp/fork-key.b64 dans un éditeur, copier son contenu dans Woodpecker, puis :
-shred -u /tmp/fork-key.b64
+E=(--repo mezinster/Hestia --env fork-release)
+base64 -w0 ~/.android-keys/hestia-fork-test.jks | gh secret set FORK_KEYSTORE_B64 "${E[@]}"
+for p in STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+  printf '%s' "$(sed -n "s/^HESTIA_FORK_${p}=//p" ~/.gradle/gradle.properties)" |
+    gh secret set "FORK_${p}" "${E[@]}"
+done
+gh secret list "${E[@]}"
 ```
 
-Jeton de publication : Codeberg → *Settings → Applications → Generate New Token*, nom
-`woodpecker-release`, permissions **repository : Read and write** et **misc : Read** (exigé par
-l'extension de publication sur Forgejo), tout le reste sur *No access*. Ne jamais réutiliser le
-jeton personnel de `tea`.
-
 Ne jamais afficher ces valeurs dans un terminal partagé, un journal ou une conversation. Les étapes
-du pipeline ne les affichent pas (pas de `set -x`).
+du workflow ne les affichent pas (pas de `set -x`).
 
 ## 5. Repli local (CI indisponible)
 
 ```bash
 git tag -a fork/<x.y.z>-fork.<N> -m "<résumé>"
 ANDROID_HOME=~/Android/Sdk CI_COMMIT_TAG=fork/<x.y.z>-fork.<N> scripts/fork/ci-build.sh
-git push origin fork/main fork/<x.y.z>-fork.<N>   # sans accès Woodpecker, aucun pipeline ne démarre
-tea releases create --login codeberg --repo mezinster/Hestia --tag fork/<x.y.z>-fork.<N> \
-  --title "$(cat build/fork-release/title.txt)" --note-file build/fork-release/notes.md
-for f in build/fork-release/dist/*; do
-  tea releases assets create --login codeberg --repo mezinster/Hestia fork/<x.y.z>-fork.<N> "$f"
-done
+git push origin fork/main fork/<x.y.z>-fork.<N>   # lance aussi le workflow : l'annuler (gh run cancel) pour publier à la main
+gh release create fork/<x.y.z>-fork.<N> build/fork-release/dist/* --repo mezinster/Hestia --verify-tag \
+  --title "$(cat build/fork-release/title.txt)" --notes-file build/fork-release/notes.md
 ```
 
-`--asset` directement sur `tea releases create` (tea 0.16) échoue sans message et ne crée rien
-(constaté sur `fork/2.16.1-fork.1`) : créer la Release d'abord, puis joindre les fichiers.
+Si le workflow a déjà publié la Release, ne pas la recréer à la main (`gh release create`
+échouerait).
 
 La signature locale lit `HESTIA_FORK_*` dans `~/.gradle/gradle.properties`.
-
-Si Woodpecker **est** actif pour le dépôt, pousser le tag suffit : ne pas créer la Release à la main
-en plus (le pipeline échouerait sur la Release existante).
 
 ## 6. Base Room
 

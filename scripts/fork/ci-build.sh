@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Construction d'une publication du fork, exécutée par Woodpecker (.woodpecker/release.yaml) sur un
+# Construction d'une publication du fork, exécutée par GitHub Actions (.github/workflows/fork-release.yml) sur un
 # tag fork/*. Utilisable en local pour tester (voir docs/fork/RELEASING.md). N'affiche jamais de secret.
 set -euo pipefail
 tag="${CI_COMMIT_TAG:?CI_COMMIT_TAG manquant}"
