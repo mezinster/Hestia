@@ -17,6 +17,23 @@
   `scripts/fork/`, `.github/`, `docs/fork/`). **Релизы тегируются только здесь.**
 - `feature/*`: одна ветка на функцию, сливается в `fork/main`, когда готова.
 
+Новая функция: создай ветку от `fork/main`, запушь её на GitHub и открой pull request там
+(`gh pr create --base fork/main`); после слияния удали ветку.
+
+Настройка нового клона (оба remote на Codeberg намеренно только для чтения):
+
+```bash
+git clone git@github.com:mezinster/Hestia.git && cd Hestia
+git remote add upstream https://codeberg.org/kapoue/Hestia.git
+git remote set-url --push upstream DISABLED
+git remote add codeberg https://codeberg.org/mezinster/Hestia.git   # необязательно: зеркало
+git remote set-url --push codeberg DISABLED
+```
+
+Главная страница на GitHub: `.github/README.md` (+ `README.fr.md`, `README.ru.md`) имеет приоритет
+над корневым `README.md`, который остаётся README апстрима и здесь никогда не правится. Codeberg
+игнорирует `.github/README.md` и показывает README апстрима; описание репозитория ведёт на GitHub.
+
 Синхронизация с апстримом:
 
 ```bash

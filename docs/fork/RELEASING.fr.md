@@ -17,6 +17,23 @@ ne jamais y pousser ni y fusionner quoi que ce soit. L'amont reste `upstream` =
   `scripts/fork/`, `.github/`, `docs/fork/`). **Les publications sont taguées uniquement ici.**
 - `feature/*` : une branche par fonctionnalité, fusionnée dans `fork/main` une fois prête.
 
+Pour une nouvelle fonctionnalité : créer la branche depuis `fork/main`, la pousser sur GitHub et y
+ouvrir la pull request (`gh pr create --base fork/main`) ; supprimer la branche une fois fusionnée.
+
+Préparer un nouveau clone (les deux remotes Codeberg sont volontairement en lecture seule) :
+
+```bash
+git clone git@github.com:mezinster/Hestia.git && cd Hestia
+git remote add upstream https://codeberg.org/kapoue/Hestia.git
+git remote set-url --push upstream DISABLED
+git remote add codeberg https://codeberg.org/mezinster/Hestia.git   # facultatif : le miroir
+git remote set-url --push codeberg DISABLED
+```
+
+Page d'accueil GitHub : `.github/README.md` (+ `README.fr.md`, `README.ru.md`) a priorité sur le
+`README.md` racine, qui reste celui de l'amont et n'est jamais modifié ici. Codeberg ignore
+`.github/README.md` et affiche le README de l'amont ; la description du dépôt renvoie vers GitHub.
+
 Synchroniser avec l'amont :
 
 ```bash

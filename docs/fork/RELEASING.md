@@ -17,6 +17,23 @@ never push or merge anything there. Upstream remains `upstream` =
   `scripts/fork/`, `.github/`, `docs/fork/`). **Releases are tagged only here.**
 - `feature/*`: one branch per feature, merged into `fork/main` once ready.
 
+Workflow for a new feature: branch off `fork/main`, push it to GitHub and open the pull request
+there (`gh pr create --base fork/main`); delete the branch once merged.
+
+Setting up a fresh clone (the two Codeberg remotes are read-only on purpose):
+
+```bash
+git clone git@github.com:mezinster/Hestia.git && cd Hestia
+git remote add upstream https://codeberg.org/kapoue/Hestia.git
+git remote set-url --push upstream DISABLED
+git remote add codeberg https://codeberg.org/mezinster/Hestia.git   # optional: the mirror
+git remote set-url --push codeberg DISABLED
+```
+
+GitHub front page: `.github/README.md` (+ `README.fr.md`, `README.ru.md`) takes precedence over the
+root `README.md`, which stays upstream's and is never edited here. Codeberg ignores `.github/README.md`
+and shows upstream's README; its repository description points to GitHub.
+
 Syncing with upstream:
 
 ```bash
