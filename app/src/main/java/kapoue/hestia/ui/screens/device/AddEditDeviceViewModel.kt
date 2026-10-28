@@ -121,6 +121,10 @@ data class AddEditUiState(
     val cloudToggling: Boolean = false,
     /** Non nul tant que l'utilisateur doit accepter ou refuser le certificat d'un appareil HTTPS. */
     val certificatePrompt: CertificatePrompt? = null,
+    /** Vrai quand l'appareil exige un mot de passe : l'écran affiche le champ. */
+    val passwordPrompt: Boolean = false,
+    /** Saisie du mot de passe — jamais journalisée, vidée dès l'envoi. */
+    val passwordInput: String = "",
     /** Connexion chiffrée de l'appareil édité ; null = HTTP simple, section masquée. */
     val tlsState: TlsState? = null,
 )
@@ -329,10 +333,12 @@ class AddEditDeviceViewModel @Inject constructor(
         probeJob?.cancel()
         // Changement d'IP : la confiance provisoire accordée à l'ancienne adresse n'a plus de sens.
         repository.forgetProvisionalCertificate(_uiState.value.ipAddress.trim())
+        repository.forgetProvisionalPassword(_uiState.value.ipAddress.trim())
         _uiState.update {
             val next = it.copy(
                 ipAddress = value, ipError = null, error = null,
                 foundDeviceName = null, autoProbing = false, certificatePrompt = null,
+                passwordPrompt = false, passwordInput = "",
             )
             next.copy(isDirty = isDirty(next))
         }
@@ -373,7 +379,7 @@ class AddEditDeviceViewModel @Inject constructor(
                     // Le nom trouvé alimente aussi `name` (champ alors masqué à l'écran) : le
                     // reste du parcours (addChannels, validateFields…) continue de lire ce champ
                     // sans rien savoir de la sonde automatique.
-                    it.copy(autoProbing = false, foundDeviceName = found, name = found ?: it.name)
+                    it.copy(autoProbing = false, foundDeviceName = found, name = found ?: it.name, passwordPrompt = false)
                 }
             }
             is RpcResult.Failure -> {
@@ -382,6 +388,9 @@ class AddEditDeviceViewModel @Inject constructor(
                 if (result.kind == RpcFailure.HTTPS_REQUIRED) {
                     val peekError = promptForCertificate(ip)
                     _uiState.update { it.copy(autoProbing = false, foundDeviceName = null, error = peekError) }
+                } else if (result.kind == RpcFailure.PASSWORD_REQUIRED || result.kind == RpcFailure.PASSWORD_WRONG) {
+                    val message = promptForPassword(ip, result.kind)
+                    _uiState.update { it.copy(autoProbing = false, foundDeviceName = null, error = message) }
                 } else {
                     _uiState.update { it.copy(autoProbing = false, foundDeviceName = null) }
                 }
@@ -413,6 +422,38 @@ class AddEditDeviceViewModel @Inject constructor(
                 UserMessage(R.string.tls_peek_failed)
             }
         }
+
+    /**
+     * Appareil protégé par mot de passe : affiche le champ (jamais tant qu'un dialogue de certificat
+     * est ouvert, le certificat passe d'abord) et renvoie l'erreur à montrer. En cas de refus, le
+     * champ est conservé tel quel pour correction.
+     */
+    private fun promptForPassword(ip: String, kind: RpcFailure): UserMessage {
+        if (kind == RpcFailure.PASSWORD_REQUIRED) {
+            logger.info(DiagnosticLogger.UI, "Mot de passe demandé ($ip)")
+        } else {
+            logger.warn(DiagnosticLogger.UI, "Mot de passe refusé par l'appareil ($ip)")
+        }
+        _uiState.update { it.copy(passwordPrompt = it.certificatePrompt == null) }
+        return UserMessage(
+            if (kind == RpcFailure.PASSWORD_REQUIRED) R.string.error_password_required else R.string.error_password_wrong,
+        )
+    }
+
+    fun onPasswordChange(value: String) = _uiState.update { it.copy(passwordInput = value, error = null) }
+
+    /** Confie le mot de passe saisi au registre (provisoire), vide le champ et relance la sonde. */
+    fun onSubmitPassword() {
+        val state = _uiState.value
+        val input = state.passwordInput
+        if (input.isEmpty()) return
+        val ip = state.ipAddress.trim()
+        logger.info(DiagnosticLogger.UI, "Mot de passe saisi ($ip)")
+        repository.trustPasswordProvisionally(ip, input)
+        _uiState.update { it.copy(passwordInput = "", error = null) }
+        probeJob?.cancel()
+        probeJob = viewModelScope.launch { runAutoProbe(ip) }
+    }
 
     /** Accepte le certificat affiché (confiance provisoire, validée à l'ajout) et relance la sonde. */
     fun onTrustCertificate() {
@@ -477,6 +518,7 @@ class AddEditDeviceViewModel @Inject constructor(
 
     override fun onCleared() {
         repository.forgetProvisionalCertificate(_uiState.value.ipAddress.trim())
+        repository.forgetProvisionalPassword(_uiState.value.ipAddress.trim())
         super.onCleared()
     }
 
@@ -581,6 +623,8 @@ class AddEditDeviceViewModel @Inject constructor(
                     is RpcResult.Failure -> {
                         val message = if (result.kind == RpcFailure.HTTPS_REQUIRED) {
                             promptForCertificate(ip)
+                        } else if (result.kind == RpcFailure.PASSWORD_REQUIRED || result.kind == RpcFailure.PASSWORD_WRONG) {
+                            promptForPassword(ip, result.kind)
                         } else {
                             result.toUserMessageOrNull()
                         }
@@ -607,7 +651,7 @@ class AddEditDeviceViewModel @Inject constructor(
                 if (added == 0) {
                     _uiState.update { it.copy(isTesting = false, error = UserMessage(R.string.error_device_exists)) }
                 } else {
-                    repository.commitProvisionalCertificate(ip)
+                    repository.commitProvisionalAccess(ip)
                     repository.resyncSmokeRelay()
                     confirmThenClose(caps.reportedName?.takeIf { it.isNotBlank() } ?: _uiState.value.name.trim())
                 }
@@ -722,7 +766,7 @@ class AddEditDeviceViewModel @Inject constructor(
             // changement de réglage ntfy (retour David, 2026-09-17 : « j'ai ajouté une prise, elle
             // n'a pas le picto relais, comment l'avoir ? »). Best-effort, silencieux si non
             // pertinent (pas de détecteur, ou déjà de la place ailleurs — voir resyncSmokeRelay).
-            repository.commitProvisionalCertificate(state.ipAddress.trim())
+            repository.commitProvisionalAccess(state.ipAddress.trim())
             repository.resyncSmokeRelay()
             val resolvedName = caps.reportedName?.takeIf { it.isNotBlank() } ?: state.name.trim()
             confirmThenClose(resolvedName)

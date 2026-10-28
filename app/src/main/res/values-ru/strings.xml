@@ -216,6 +216,11 @@
     <string name="error_password_required">Это устройство защищено паролем. Введи пароль его веб-интерфейса.</string>
     <string name="error_password_wrong">Устройство отклонило этот пароль. Проверь его и введи снова.</string>
     <string name="error_throttled">Устройство временно отклоняет подключения. Повтори попытку через несколько минут.</string>
+    <string name="password_field_label">Пароль устройства</string>
+    <string name="password_field_hint">Пароль его веб-интерфейса. Хранится зашифрованным на этом телефоне и никогда не экспортируется.</string>
+    <string name="password_submit">Продолжить</string>
+    <string name="password_show">Показать</string>
+    <string name="password_hide">Скрыть</string>
     <string name="tls_peek_failed">Не удалось прочитать сертификат устройства. Проверь, что оно включено и подключено к той же сети Wi-Fi.</string>
     <string name="tls_dialog_title">Зашифрованное соединение</string>
     <string name="tls_dialog_message">Это устройство принимает только зашифрованные соединения (HTTPS) с сертификатом, выпущенным Shelly, который твой телефон не может проверить сам. Убедись, что отпечаток совпадает с показанным в веб-интерфейсе устройства, и доверяй ему: Hestia будет принимать только этот сертификат.</string>

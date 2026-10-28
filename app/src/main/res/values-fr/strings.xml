@@ -218,6 +218,11 @@
     <string name="error_password_required">Cet appareil est protégé par un mot de passe. Saisis celui de son interface web.</string>
     <string name="error_password_wrong">L\'appareil a refusé ce mot de passe. Vérifie-le et saisis-le à nouveau.</string>
     <string name="error_throttled">L\'appareil refuse temporairement les connexions. Réessaie dans quelques minutes.</string>
+    <string name="password_field_label">Mot de passe de l\'appareil</string>
+    <string name="password_field_hint">Celui de son interface web. Chiffré sur ce téléphone, jamais exporté.</string>
+    <string name="password_submit">Continuer</string>
+    <string name="password_show">Afficher</string>
+    <string name="password_hide">Masquer</string>
     <string name="tls_peek_failed">Impossible de lire le certificat de l\'appareil. Vérifie qu\'il est allumé et sur le même réseau Wi-Fi.</string>
     <string name="tls_dialog_title">Connexion chiffrée</string>
     <string name="tls_dialog_message">Cet appareil n\'accepte que les connexions chiffrées (HTTPS), avec un certificat émis par Shelly que ton téléphone ne peut pas vérifier seul. Vérifie que l\'empreinte correspond à celle affichée dans l\'interface web de l\'appareil, puis fais-lui confiance : Hestia n\'acceptera plus que ce certificat.</string>

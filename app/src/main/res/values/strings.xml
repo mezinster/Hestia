@@ -224,6 +224,11 @@
     <string name="error_password_required">This device is protected by a password. Enter the password of its web interface.</string>
     <string name="error_password_wrong">The device refused this password. Check it and enter it again.</string>
     <string name="error_throttled">The device is temporarily refusing connections. Try again in a few minutes.</string>
+    <string name="password_field_label">Device password</string>
+    <string name="password_field_hint">The one of its web interface. Encrypted on this phone, never exported.</string>
+    <string name="password_submit">Continue</string>
+    <string name="password_show">Show</string>
+    <string name="password_hide">Hide</string>
     <string name="tls_peek_failed">Couldn\'t read the device\'s certificate. Check that it\'s on and on the same Wi-Fi network.</string>
     <string name="tls_dialog_title">Encrypted connection</string>
     <string name="tls_dialog_message">This device only accepts encrypted connections (HTTPS), with a certificate issued by Shelly that your phone can\'t verify on its own. Check that the fingerprint matches the one shown in the device\'s web interface, then trust it: Hestia will accept only this certificate from now on.</string>

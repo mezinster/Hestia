@@ -29,6 +29,10 @@ import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Power
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -332,6 +336,43 @@ fun AddEditDeviceScreen(
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(Modifier.width(8.dp))
                             Text(stringResource(R.string.add_device_testing), style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+
+                    // Mot de passe de l'appareil (lot C2) : jamais tant qu'un dialogue de certificat est ouvert.
+                    if (state.passwordPrompt && state.certificatePrompt == null) {
+                        var showPassword by remember { mutableStateOf(false) }
+                        OutlinedTextField(
+                            value = state.passwordInput,
+                            onValueChange = viewModel::onPasswordChange,
+                            label = { Text(stringResource(R.string.password_field_label)) },
+                            supportingText = { Text(stringResource(R.string.password_field_hint)) },
+                            singleLine = true,
+                            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(
+                                keyboardType = KeyboardType.Password,
+                                autoCorrectEnabled = false,
+                                imeAction = ImeAction.Done,
+                            ),
+                            keyboardActions = KeyboardActions(onDone = { viewModel.onSubmitPassword() }),
+                            trailingIcon = {
+                                IconButton(onClick = { showPassword = !showPassword }) {
+                                    Icon(
+                                        imageVector = if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                        contentDescription = stringResource(
+                                            if (showPassword) R.string.password_hide else R.string.password_show,
+                                        ),
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Button(
+                            onClick = viewModel::onSubmitPassword,
+                            enabled = state.passwordInput.isNotEmpty(),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.password_submit))
                         }
                     }
 
