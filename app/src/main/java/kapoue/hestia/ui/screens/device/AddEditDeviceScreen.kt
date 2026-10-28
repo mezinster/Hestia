@@ -551,7 +551,13 @@ fun AddEditDeviceScreen(
         AlertDialog(
             onDismissRequest = { showForgetCertConfirm = false },
             title = { Text(stringResource(R.string.tls_section_forget)) },
-            text = { Text(stringResource(R.string.tls_forget_confirm)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.tls_forget_confirm))
+                    // Oublier l'épingle retire aussi le mot de passe (jamais de digest en HTTP clair).
+                    if (state.passwordSaved) Text(stringResource(R.string.tls_forget_password_suspended))
+                }
+            },
             confirmButton = {
                 TextButton(onClick = {
                     showForgetCertConfirm = false

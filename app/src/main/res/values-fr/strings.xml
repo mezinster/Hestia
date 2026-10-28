@@ -639,6 +639,7 @@
     <string name="tls_section_check">Vérifier le certificat</string>
     <string name="tls_section_forget">Oublier le certificat</string>
     <string name="tls_forget_confirm">Hestia contactera de nouveau cet appareil en HTTP simple. Ne le fais que si tu as désactivé HTTPS sur l\'appareil.</string>
+    <string name="tls_forget_password_suspended">Le mot de passe enregistré sera aussi retiré : saisis-le à nouveau ensuite.</string>
     <string name="password_section_title">Mot de passe de l\'appareil</string>
     <string name="password_state_accepted">Enregistré et accepté par l\'appareil.</string>
     <string name="password_state_unverified">Enregistré, pas encore vérifié : l\'appareil n\'a pas répondu depuis.</string>

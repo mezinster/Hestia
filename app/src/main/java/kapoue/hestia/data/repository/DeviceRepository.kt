@@ -241,9 +241,9 @@ class DeviceRepository @Inject constructor(
         // inconnue. On relit la ligne en base (pas l'instantané de l'écran) et on retire le mot de
         // passe AVANT d'accorder la nouvelle confiance (ordre imposé, décision D1).
         val fresh = deviceDao.getAllOnce().firstOrNull { it.id == device.id }
-        if (fresh?.certPin != null && fresh.certPin != pin && devicePasswords.hasPassword(fresh)) {
+        if (fresh != null && passwordMustBeSuspended(fresh.certPin, pin, devicePasswords.hasPassword(fresh))) {
             devicePasswords.remove(device.ipAddress)
-            accessRegistry.reload()
+            reloadSavedPins("mot de passe suspendu")
             logger.info(DiagnosticLogger.RPC, "Mot de passe suspendu (certificat changé) ${device.ipAddress}")
         }
         // Confiance provisoire sur les deux adresses AVANT l'écriture en base : ferme la fenêtre où un
@@ -333,7 +333,26 @@ class DeviceRepository @Inject constructor(
     }
 
     suspend fun forgetCertificate(device: Device) {
+        // Sans épingle, l'appareil repasse en HTTP : un mot de passe conservé partirait en digest
+        // (craquable hors ligne) dès le premier 401 en clair. On le retire AVANT d'effacer l'épingle
+        // (même règle que [trustCertificate], décision D1 ; ferme aussi « oublier puis faire confiance »).
+        val fresh = deviceDao.getAllOnce().firstOrNull { it.id == device.id } ?: device
+        val hadPassword = devicePasswords.hasPassword(fresh)
+        val suspended = passwordMustBeSuspended(fresh.certPin, null, hadPassword)
+        if (suspended) {
+            devicePasswords.remove(device.ipAddress)
+            clearDigestSessions(device)
+            reloadSavedPins("mot de passe suspendu")
+            logger.info(DiagnosticLogger.RPC, "Mot de passe suspendu (certificat oublié) ${device.ipAddress}")
+        }
         val n = writePin(device, null)
+        // Plus aucun mot de passe : l'appareil peut de nouveau être contacté en HTTP simple sans que
+        // la consigne « HTTPS vu » du processus bloque le signalement d'un futur HTTPS requis.
+        if (!hadPassword || suspended) {
+            listOfNotNull(device.ipAddress, device.ip2Address?.takeIf { it.isNotBlank() }).forEach {
+                accessRegistry.clearHttpsSeen(it)
+            }
+        }
         logger.info(DiagnosticLogger.RPC, "Certificat oublié ${device.ipAddress} ($n canal/canaux)")
     }
 

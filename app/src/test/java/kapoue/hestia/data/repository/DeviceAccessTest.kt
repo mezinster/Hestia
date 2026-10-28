@@ -4,7 +4,9 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.rpc.AccessIssue
 import kapoue.hestia.domain.model.DeviceType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DeviceAccessTest {
@@ -57,5 +59,18 @@ class DeviceAccessTest {
     fun `wrong password wins over unverified`() {
         val issues = mapOf("a" to AccessIssue.PASSWORD_UNVERIFIED, "b" to AccessIssue.PASSWORD_WRONG)
         assertEquals(AccessIssue.PASSWORD_WRONG, accessIssueFor(device("a", "b"), issues))
+    }
+
+    @Test
+    fun `a password is suspended only when a known pin changes or is dropped`() {
+        // Certificat changé puis accepté (D1).
+        assertTrue(passwordMustBeSuspended(savedPin = "A", newPin = "B", hasPassword = true))
+        // Certificat oublié (finding 1).
+        assertTrue(passwordMustBeSuspended(savedPin = "A", newPin = null, hasPassword = true))
+        // Même certificat reconfirmé, premier épinglage, ou aucun mot de passe : rien à retirer.
+        assertFalse(passwordMustBeSuspended(savedPin = "A", newPin = "A", hasPassword = true))
+        assertFalse(passwordMustBeSuspended(savedPin = null, newPin = "B", hasPassword = true))
+        assertFalse(passwordMustBeSuspended(savedPin = "A", newPin = "B", hasPassword = false))
+        assertFalse(passwordMustBeSuspended(savedPin = "A", newPin = null, hasPassword = false))
     }
 }

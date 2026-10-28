@@ -217,6 +217,7 @@ class AddEditDeviceViewModel @Inject constructor(
                                 tlsState = device?.let { d -> tlsStateOf(d, issues) },
                                 passwordSection = passwordSection,
                                 passwordHttpNote = device != null && device.certPin == null,
+                                passwordSaved = stored != null,
                             )
                         }
                     }

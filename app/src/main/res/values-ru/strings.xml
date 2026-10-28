@@ -622,6 +622,7 @@
     <string name="tls_section_check">Проверить сертификат</string>
     <string name="tls_section_forget">Забыть сертификат</string>
     <string name="tls_forget_confirm">Hestia снова будет обращаться к этому устройству по обычному HTTP. Делай это, только если ты отключил HTTPS на устройстве.</string>
+    <string name="tls_forget_password_suspended">Сохранённый пароль тоже будет удалён: введи его снова потом.</string>
     <string name="password_section_title">Пароль устройства</string>
     <string name="password_state_accepted">Сохранён и принят устройством.</string>
     <string name="password_state_unverified">Сохранён, ещё не проверен: устройство с тех пор не отвечало.</string>

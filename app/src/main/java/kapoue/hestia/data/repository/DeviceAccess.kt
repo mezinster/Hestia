@@ -34,3 +34,11 @@ fun accessIssueFor(device: Device, issues: Map<String, AccessIssue>): AccessIssu
     val second = device.ip2Address?.takeIf { it.isNotBlank() }?.let { issues[it] }
     return ISSUE_PRIORITY.firstOrNull { it == first || it == second }
 }
+
+/**
+ * Vrai si le mot de passe enregistré doit être retiré avant de remplacer l'épingle [savedPin] par
+ * [newPin] (décision D1) : certificat changé puis accepté, ou certificat oublié ([newPin] null). Un
+ * mot de passe ne part jamais vers une identité inconnue, ni en HTTP clair après un oubli.
+ */
+fun passwordMustBeSuspended(savedPin: String?, newPin: String?, hasPassword: Boolean): Boolean =
+    hasPassword && savedPin != null && newPin != savedPin
