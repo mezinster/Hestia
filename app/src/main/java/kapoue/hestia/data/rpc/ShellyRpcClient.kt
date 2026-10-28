@@ -141,6 +141,10 @@ class ShellyRpcClient @Inject constructor(
             // Attendu une fois le certificat capturé : le trust manager interrompt toujours la
             // poignée de main. Sans capture, c'est un vrai échec (port fermé, pas de TLS…).
             failure = e.javaClass.simpleName
+        } catch (e: SecurityException) {
+            // Accès au réseau local refusé (Android 17, ACCESS_LOCAL_NETWORK) : peut remonter ainsi
+            // plutôt qu'en IOException. Échec propre, jamais de plantage dans viewModelScope.
+            failure = "accès réseau local refusé"
         }
         val elapsed = System.currentTimeMillis() - startedAt
         val cert = captured
