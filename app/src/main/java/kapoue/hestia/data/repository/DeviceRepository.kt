@@ -2041,11 +2041,8 @@ class DeviceRepository @Inject constructor(
             if (!cloudEnabled) continue
             val result = checkFirmwareUpdate(first)
             val available = result is FirmwareCheckResult.UpdateAvailable
-            for (member in members) {
-                if (member.firmwareUpdateAvailable != available) {
-                    deviceDao.update(member.copy(firmwareUpdateAvailable = available))
-                }
-            }
+            // Lignes relues en base : l'instantané date d'avant les appels réseau ci-dessus.
+            deviceDao.updateFresh(members.map { it.id }) { it.copy(firmwareUpdateAvailable = available) }
         }
         appPreferences.lastFirmwareCheckDate = today
     }
@@ -2072,9 +2069,8 @@ class DeviceRepository @Inject constructor(
     }
 
     private suspend fun clearFirmwareUpdateAvailable(device: Device) {
-        for (member in listOf(device) + siblingsSharingIp(device)) {
-            if (member.firmwareUpdateAvailable) deviceDao.update(member.copy(firmwareUpdateAvailable = false))
-        }
+        val ids = (listOf(device) + siblingsSharingIp(device)).map { it.id }
+        deviceDao.updateFresh(ids) { it.copy(firmwareUpdateAvailable = false) }
     }
 
     /**
@@ -2115,12 +2111,11 @@ class DeviceRepository @Inject constructor(
     /**
      * Met en cache le MAC (« Cloud ID ») sur tous les canaux d'un même appareil physique — lu une
      * fois en local, il reste disponible ensuite même hors réseau, pour le repli cloud (lot 3).
-     * N'écrit que les canaux dont la valeur a effectivement changé.
+     * N'écrit que les canaux dont la valeur a effectivement changé. [members] ne sert qu'à désigner
+     * les lignes : elles sont relues en base avant écriture (une copie périmée effacerait l'épingle).
      */
     suspend fun cacheCloudId(members: List<Device>, macId: String) {
-        for (device in members) {
-            if (device.cloudId != macId) deviceDao.update(device.copy(cloudId = macId))
-        }
+        deviceDao.updateFresh(members.map { it.id }) { it.withCloudId(macId) }
     }
 
     /** Active/désactive le canal Cloud du firmware. Toujours à la demande explicite de l'utilisateur. */
@@ -2243,10 +2238,6 @@ class DeviceRepository @Inject constructor(
         val physicalName = deviceInfoResult.getOrNull()?.name?.takeIf { it.isNotBlank() }
         val monoChannel = members.size == 1
         for (device in relevant) {
-            var updated = device
-            if (physicalName != null && physicalName != updated.deviceName) {
-                updated = updated.copy(deviceName = physicalName)
-            }
             val channelName = when (channelNameRpc(device)) {
                 ChannelNameRpc.SWITCH -> rpcClient.getSwitchConfig(ip, device.switchId).getOrNull()?.name
                 ChannelNameRpc.LIGHT -> lightRpc.getConfig(ip, device.switchId).getOrNull()?.name
@@ -2255,12 +2246,19 @@ class DeviceRepository @Inject constructor(
             }?.takeIf { it.isNotBlank() }
             // Un variateur garde le nom de son canal lu à l'ajout : pas de repli sur le nom physique.
             val resolvedName = channelName ?: physicalName.takeIf { monoChannel && !device.isLight && !device.isCover }
-            if (resolvedName != null && resolvedName != updated.name) {
-                updated = updated.copy(name = resolvedName)
+            // Ligne relue en base : [device] date d'avant les appels réseau (épingle HTTPS comprise).
+            val written = deviceDao.updateFresh(listOf(device.id)) { current ->
+                var updated = current
+                if (physicalName != null && physicalName != updated.deviceName) {
+                    updated = updated.copy(deviceName = physicalName)
+                }
+                if (resolvedName != null && resolvedName != updated.name) {
+                    updated = updated.copy(name = resolvedName)
+                }
+                updated
             }
-            if (updated != device) {
-                deviceDao.update(updated)
-                logger.info(DiagnosticLogger.DB, "Nom resynchronisé depuis l'appareil : ${device.name} → ${updated.name}")
+            if (written > 0) {
+                logger.info(DiagnosticLogger.DB, "Nom resynchronisé depuis l'appareil : ${device.name} → ${resolvedName ?: device.name}")
             }
         }
     }
@@ -2330,7 +2328,9 @@ class DeviceRepository @Inject constructor(
      * Met à jour les champs partagés d'un appareil physique (nom, adresses IP, type) sur **tous**
      * ses canaux d'un coup — jamais leurs noms de canal individuels ([Device.name], laissés tels
      * quels). Évite qu'une IP modifiée sur un seul canal d'un bloc multi-canaux laisse les autres
-     * pointer sur l'ancienne (ils partagent tous la même prise physique).
+     * pointer sur l'ancienne (ils partagent tous la même prise physique). [members] ne sert qu'à
+     * désigner les lignes : elles sont relues en base avant écriture, jamais recopiées depuis un
+     * instantané d'écran (qui effacerait une épingle HTTPS acceptée depuis, ou la ferait revenir).
      */
     suspend fun updateDeviceGroup(
         members: List<Device>,
@@ -2341,17 +2341,8 @@ class DeviceRepository @Inject constructor(
         ip2Name: String?,
         type: DeviceType,
     ) {
-        for (device in members) {
-            deviceDao.update(
-                device.copy(
-                    deviceName = deviceName,
-                    ipAddress = ipAddress,
-                    ip2Address = ip2Address,
-                    ipName = ipName,
-                    ip2Name = ip2Name,
-                    type = type,
-                ),
-            )
+        deviceDao.updateFresh(members.map { it.id }) {
+            it.withSharedFields(deviceName, ipAddress, ip2Address, ipName, ip2Name, type)
         }
     }
 
@@ -2455,8 +2446,9 @@ class DeviceRepository @Inject constructor(
      * façon strictement séquentielle pour refléter ce nouvel ordre.
      */
     suspend fun reorderDevices(orderedDevices: List<Device>) {
+        // Lignes relues en base : la liste vient de l'écran et peut être périmée.
         orderedDevices.forEachIndexed { index, device ->
-            if (device.position != index) deviceDao.update(device.copy(position = index))
+            if (device.position != index) deviceDao.updateFresh(listOf(device.id)) { it.copy(position = index) }
         }
     }
 
