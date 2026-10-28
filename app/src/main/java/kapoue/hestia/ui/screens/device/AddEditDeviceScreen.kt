@@ -353,7 +353,7 @@ fun AddEditDeviceScreen(
                     // Mot de passe de l'appareil (lot C2) : jamais tant qu'un dialogue de certificat est ouvert.
                     if (state.passwordPrompt && state.certificatePrompt == null && state.type.usesProbe()) {
                         PasswordField(
-                            value = state.passwordInput,
+                            value = state.passwordInput.value,
                             onValueChange = viewModel::onPasswordChange,
                             onDone = viewModel::onSubmitPassword,
                         )

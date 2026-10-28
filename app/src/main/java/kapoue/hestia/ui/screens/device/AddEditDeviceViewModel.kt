@@ -125,14 +125,16 @@ data class AddEditUiState(
     val certificatePrompt: CertificatePrompt? = null,
     /** Vrai quand l'appareil exige un mot de passe : l'écran affiche le champ. */
     val passwordPrompt: Boolean = false,
-    /** Saisie du mot de passe — jamais journalisée, vidée dès l'envoi. */
-    val passwordInput: String = "",
+    /** Saisie du mot de passe — jamais journalisée ni imprimée ([SecretText]), vidée dès l'envoi. */
+    val passwordInput: SecretText = SecretText.EMPTY,
     /** Connexion chiffrée de l'appareil édité ; null = HTTP simple, section masquée. */
     val tlsState: TlsState? = null,
     /** Section « Mot de passe de l'appareil » (mode édition) ; null = masquée (D5). */
     val passwordSection: PasswordSectionState? = null,
     /** Vrai si l'appareil n'a pas d'épingle : le mot de passe passe par un défi digest en HTTP clair. */
     val passwordHttpNote: Boolean = false,
+    /** Vrai si un mot de passe est enregistré : oublier le certificat le retire aussi (revue finale C2, 1). */
+    val passwordSaved: Boolean = false,
 )
 
 @HiltViewModel
@@ -364,7 +366,7 @@ class AddEditDeviceViewModel @Inject constructor(
             val next = it.copy(
                 ipAddress = value, ipError = null, error = null,
                 foundDeviceName = null, autoProbing = false, certificatePrompt = null,
-                passwordPrompt = false, passwordInput = "",
+                passwordPrompt = false, passwordInput = SecretText.EMPTY,
             )
             next.copy(isDirty = isDirty(next))
         }
@@ -466,17 +468,17 @@ class AddEditDeviceViewModel @Inject constructor(
         )
     }
 
-    fun onPasswordChange(value: String) = _uiState.update { it.copy(passwordInput = value, error = null) }
+    fun onPasswordChange(value: String) = _uiState.update { it.copy(passwordInput = SecretText(value), error = null) }
 
     /** Confie le mot de passe saisi au registre (provisoire), vide le champ et relance la sonde. */
     fun onSubmitPassword() {
         val state = _uiState.value
-        val input = state.passwordInput
+        val input = state.passwordInput.value
         if (input.isEmpty()) return
         val ip = state.ipAddress.trim()
         logger.info(DiagnosticLogger.UI, "Mot de passe saisi ($ip)")
         repository.trustPasswordProvisionally(ip, input)
-        _uiState.update { it.copy(passwordInput = "", error = null) }
+        _uiState.update { it.copy(passwordInput = SecretText.EMPTY, error = null) }
         probeJob?.cancel()
         probeJob = viewModelScope.launch { runAutoProbe(ip) }
     }
@@ -601,7 +603,7 @@ class AddEditDeviceViewModel @Inject constructor(
         _uiState.update {
             val next = it.copy(
                 passwordPrompt = if (switching) false else it.passwordPrompt,
-                passwordInput = if (switching) "" else it.passwordInput,
+                passwordInput = if (switching) SecretText.EMPTY else it.passwordInput,
                 type = value,
                 typeChosen = true,
                 foundDeviceName = if (switching) null else it.foundDeviceName,
