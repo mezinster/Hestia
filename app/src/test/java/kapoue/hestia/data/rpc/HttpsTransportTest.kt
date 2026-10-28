@@ -23,9 +23,12 @@ import java.util.concurrent.TimeUnit
  */
 class HttpsTransportTest {
 
+    /** Lignes du journal de diagnostic, pour vérifier le protocole tracé (revue finale C1, F3). */
+    private val logLines = java.util.Collections.synchronizedList(mutableListOf<String>())
+
     private val logger = object : DiagnosticLogger {
-        override fun info(tag: String, message: String) = Unit
-        override fun warn(tag: String, message: String) = Unit
+        override fun info(tag: String, message: String) { logLines += message }
+        override fun warn(tag: String, message: String) { logLines += message }
         override fun error(tag: String, message: String, throwable: Throwable?) = Unit
     }
 
@@ -107,6 +110,9 @@ class HttpsTransportTest {
         server.enqueue(ok())
         val r = client.reboot(address)
         assertTrue("aucun succès attendu, obtenu $r", r !is RpcResult.Success)
+        // L'échec est tracé comme un appel HTTPS, jamais HTTP.
+        assertTrue("journal : $logLines", logLines.any { it.contains("@ https://$address → ") })
+        assertTrue("journal : $logLines", logLines.none { it.contains("http://") })
         // MockWebServer compte comme « requête » ratée les octets TLS illisibles qu'il reçoit :
         // on vérifie donc qu'aucune n'est une vraie requête HTTP (toutes en échec d'analyse).
         repeat(server.requestCount) {
@@ -124,6 +130,7 @@ class HttpsTransportTest {
         val r = client.reboot(address)
         assertTrue("attendu Success, obtenu $r", r is RpcResult.Success)
         assertTrue(registry.issues.value.isEmpty())
+        assertTrue("journal : $logLines", logLines.any { it.contains("@ http://$address → 200") })
     }
 
     @Test
@@ -161,6 +168,7 @@ class HttpsTransportTest {
         assertTrue("attendu Success, obtenu $r", r is RpcResult.Success)
         val recorded = server.takeRequest(1, TimeUnit.SECONDS)!!
         assertEquals("https", recorded.url.scheme)
+        assertTrue("journal : $logLines", logLines.any { it.contains("@ https://$address → 200") })
     }
 
     @Test

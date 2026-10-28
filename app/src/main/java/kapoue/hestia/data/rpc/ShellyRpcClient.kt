@@ -632,6 +632,9 @@ class ShellyRpcClient @Inject constructor(
         // Adresse épinglée : HTTPS uniquement, avec ce seul certificat. Jamais de repli en HTTP.
         val pin = access.pinFor(ip)
         val (client, url) = if (pin != null) pinnedClient(ip, pin) to "https://$ip/rpc" else localClient to "http://$ip/rpc"
+        // Protocole tracé sur chaque ligne (http/https) : TESTS.md vérifie « aucun appel http:// »
+        // vers un appareil épinglé à partir du seul journal de diagnostic.
+        val target = if (pin != null) "https://$ip" else "http://$ip"
         val request = Request.Builder()
             .url(url)
             .post(payload.toRequestBody(jsonMediaType))
@@ -644,11 +647,11 @@ class ShellyRpcClient @Inject constructor(
                 if (response.isRedirect) {
                     val location = response.header("Location").orEmpty()
                     if (location.startsWith("https://", ignoreCase = true)) {
-                        logger.warn(DiagnosticLogger.RPC, "$method @ $ip → redirigé vers HTTPS, certificat à confirmer (${elapsed}ms)")
+                        logger.warn(DiagnosticLogger.RPC, "$method @ $target → redirigé vers HTTPS, certificat à confirmer (${elapsed}ms)")
                         access.report(ip, AccessIssue.HTTPS_REQUIRED)
                         return@withContext RpcResult.Failure(RpcFailure.HTTPS_REQUIRED)
                     }
-                    logger.warn(DiagnosticLogger.RPC, "$method @ $ip → redirection inattendue ${response.code} (${elapsed}ms)")
+                    logger.warn(DiagnosticLogger.RPC, "$method @ $target → redirection inattendue ${response.code} (${elapsed}ms)")
                     return@withContext RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE)
                 }
                 // L'appareil a répondu sans redirection : tout problème d'accès signalé est levé.
@@ -656,12 +659,12 @@ class ShellyRpcClient @Inject constructor(
                 val body = response.body?.string().orEmpty()
                 val envelope = runCatching { json.decodeFromString(RpcEnvelope.serializer(), body) }
                     .getOrElse {
-                        logger.warn(DiagnosticLogger.RPC, "$method @ $ip → réponse illisible (${elapsed}ms)")
+                        logger.warn(DiagnosticLogger.RPC, "$method @ $target → réponse illisible (${elapsed}ms)")
                         return@withContext RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE)
                     }
 
                 envelope.error?.let { err ->
-                    logger.warn(DiagnosticLogger.RPC, "$method @ $ip → erreur ${err.code} (${elapsed}ms)")
+                    logger.warn(DiagnosticLogger.RPC, "$method @ $target → erreur ${err.code} (${elapsed}ms)")
                     return@withContext RpcResult.RpcError(err.code, err.message)
                 }
 
@@ -676,7 +679,7 @@ class ShellyRpcClient @Inject constructor(
 
                 val decoded = runCatching { json.decodeFromJsonElement(serializer, result) }
                     .getOrElse {
-                        logger.warn(DiagnosticLogger.RPC, "$method @ $ip → résultat inattendu (${elapsed}ms)")
+                        logger.warn(DiagnosticLogger.RPC, "$method @ $target → résultat inattendu (${elapsed}ms)")
                         return@withContext RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE)
                     }
 
@@ -685,28 +688,28 @@ class ShellyRpcClient @Inject constructor(
                 // routine, au détriment des entrées vraiment utiles à un diagnostic. Les échecs
                 // (avertissements ci-dessus/ci-dessous) restent journalisés, eux, dans tous les cas.
                 if (method !in QUIET_ON_SUCCESS) {
-                    logger.info(DiagnosticLogger.RPC, "$method @ $ip → ${response.code} (${elapsed}ms)")
+                    logger.info(DiagnosticLogger.RPC, "$method @ $target → ${response.code} (${elapsed}ms)")
                 }
                 RpcResult.Success(decoded)
             }
         } catch (e: SocketTimeoutException) {
-            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → timeout")
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → timeout")
             RpcResult.Failure(RpcFailure.TIMEOUT)
         } catch (e: java.io.InterruptedIOException) {
             // callTimeout global d'OkHttp.
-            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → timeout (callTimeout)")
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → timeout (callTimeout)")
             RpcResult.Failure(RpcFailure.TIMEOUT)
         } catch (e: ConnectException) {
-            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → injoignable")
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → injoignable")
             RpcResult.Failure(RpcFailure.UNREACHABLE)
         } catch (e: IOException) {
             if (pin != null && e.hasPinMismatch()) {
                 // Certificat différent de l'épingle : refus net, aucun nouvel essai (ni HTTP ni autre).
-                logger.warn(DiagnosticLogger.RPC, "$method @ $ip → certificat différent de l'épingle, appel refusé")
+                logger.warn(DiagnosticLogger.RPC, "$method @ $target → certificat différent de l'épingle, appel refusé")
                 access.report(ip, AccessIssue.CERT_CHANGED)
                 return@withContext RpcResult.Failure(RpcFailure.CERT_CHANGED)
             }
-            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → échec réseau : ${e.javaClass.simpleName}")
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → échec réseau : ${e.javaClass.simpleName}")
             RpcResult.Failure(RpcFailure.UNREACHABLE)
         }
     }
