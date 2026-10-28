@@ -641,4 +641,15 @@
     <string name="tls_section_check">Check the certificate</string>
     <string name="tls_section_forget">Forget the certificate</string>
     <string name="tls_forget_confirm">Hestia will contact this device over plain HTTP again. Only do this if you turned HTTPS off on the device.</string>
+    <string name="password_section_title">Device password</string>
+    <string name="password_state_accepted">Saved and accepted by the device.</string>
+    <string name="password_state_unverified">Saved, not yet checked: the device has not answered since.</string>
+    <string name="password_state_required">The device asks for a password.</string>
+    <string name="password_state_rejected">The device refused the saved password. Hestia stopped trying so the device does not lock itself.</string>
+    <string name="password_http_note">Over plain HTTP the password itself is never sent, only a one-time proof.</string>
+    <string name="password_save">Save</string>
+    <string name="password_remove">Remove</string>
+    <string name="password_remove_confirm_title">Remove the password?</string>
+    <string name="password_remove_confirm">Hestia will forget this password and contact the device without one. If the device is protected, it will ask for the password again.</string>
+    <string name="tls_dialog_password_suspended">The saved password will be suspended: enter it again after accepting.</string>
 </resources>

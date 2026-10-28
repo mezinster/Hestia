@@ -107,6 +107,7 @@ fun AddEditDeviceScreen(
     var showFirmwareInstallConfirm by remember { mutableStateOf(false) }
     var showRebootConfirm by remember { mutableStateOf(false) }
     var showForgetCertConfirm by remember { mutableStateOf(false) }
+    var showRemovePasswordConfirm by remember { mutableStateOf(false) }
     // Confirmation avant suppression de la 2ᵉ adresse IP (retour David, 2026-09-17) : le geste
     // reste sans effet tant qu'Enregistrer n'est pas tapé (comme tout ce formulaire), mais une
     // suppression appelle une confirmation par habitude d'usage, contrairement à une simple
@@ -289,6 +290,17 @@ fun AddEditDeviceScreen(
                     )
                 }
 
+                state.passwordSection?.let { pw ->
+                    HorizontalDivider()
+                    LaunchedEffect(pw) { viewModel.onPasswordSectionShown(pw) }
+                    PasswordSection(
+                        state = pw,
+                        showHttpNote = state.passwordHttpNote,
+                        onSave = viewModel::savePassword,
+                        onRemove = { showRemovePasswordConfirm = true },
+                    )
+                }
+
                 HorizontalDivider()
                 CloudSection(
                     info = state.cloudInfo,
@@ -341,31 +353,10 @@ fun AddEditDeviceScreen(
 
                     // Mot de passe de l'appareil (lot C2) : jamais tant qu'un dialogue de certificat est ouvert.
                     if (state.passwordPrompt && state.certificatePrompt == null && state.type.usesProbe()) {
-                        var showPassword by remember { mutableStateOf(false) }
-                        OutlinedTextField(
+                        PasswordField(
                             value = state.passwordInput,
                             onValueChange = viewModel::onPasswordChange,
-                            label = { Text(stringResource(R.string.password_field_label)) },
-                            supportingText = { Text(stringResource(R.string.password_field_hint)) },
-                            singleLine = true,
-                            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(
-                                keyboardType = KeyboardType.Password,
-                                autoCorrectEnabled = false,
-                                imeAction = ImeAction.Done,
-                            ),
-                            keyboardActions = KeyboardActions(onDone = { viewModel.onSubmitPassword() }),
-                            trailingIcon = {
-                                IconButton(onClick = { showPassword = !showPassword }) {
-                                    Icon(
-                                        imageVector = if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
-                                        contentDescription = stringResource(
-                                            if (showPassword) R.string.password_hide else R.string.password_show,
-                                        ),
-                                    )
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth(),
+                            onDone = viewModel::onSubmitPassword,
                         )
                         Button(
                             onClick = viewModel::onSubmitPassword,
@@ -570,6 +561,23 @@ fun AddEditDeviceScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showForgetCertConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
+        )
+    }
+
+    if (showRemovePasswordConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRemovePasswordConfirm = false },
+            title = { Text(stringResource(R.string.password_remove_confirm_title)) },
+            text = { Text(stringResource(R.string.password_remove_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRemovePasswordConfirm = false
+                    viewModel.removePassword()
+                }) { Text(stringResource(R.string.password_remove)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRemovePasswordConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
             },
         )
     }
@@ -969,6 +977,88 @@ private fun TlsSection(state: TlsState, onCheck: () -> Unit, onForget: () -> Uni
         OutlinedButton(onClick = onCheck) { Text(stringResource(R.string.tls_section_check)) }
         if (state != TlsState.REQUIRED) {
             TextButton(onClick = onForget) { Text(stringResource(R.string.tls_section_forget)) }
+        }
+    }
+}
+
+/** Champ de mot de passe masqué avec bascule afficher/masquer (ajout et section Modifier). */
+@Composable
+private fun PasswordField(value: String, onValueChange: (String) -> Unit, onDone: () -> Unit) {
+    var showPassword by remember { mutableStateOf(false) }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(stringResource(R.string.password_field_label)) },
+        supportingText = { Text(stringResource(R.string.password_field_hint)) },
+        singleLine = true,
+        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Password,
+            autoCorrectEnabled = false,
+            imeAction = ImeAction.Done,
+        ),
+        keyboardActions = KeyboardActions(onDone = { onDone() }),
+        trailingIcon = {
+            IconButton(onClick = { showPassword = !showPassword }) {
+                Icon(
+                    imageVector = if (showPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                    contentDescription = stringResource(
+                        if (showPassword) R.string.password_hide else R.string.password_show,
+                    ),
+                )
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+/**
+ * Mot de passe de l'appareil : état en toutes lettres, saisie d'un nouveau mot de passe et retrait
+ * (confirmé). Le champ est vidé dès l'enregistrement : la valeur ne reste ni dans l'état d'écran ni
+ * dans le journal.
+ */
+@Composable
+private fun PasswordSection(
+    state: PasswordSectionState,
+    showHttpNote: Boolean,
+    onSave: (String) -> Unit,
+    onRemove: () -> Unit,
+) {
+    var input by remember { mutableStateOf("") }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.password_section_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(
+                when (state) {
+                    PasswordSectionState.ACCEPTED -> R.string.password_state_accepted
+                    PasswordSectionState.UNVERIFIED -> R.string.password_state_unverified
+                    PasswordSectionState.REQUIRED -> R.string.password_state_required
+                    PasswordSectionState.REJECTED -> R.string.password_state_rejected
+                },
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (state == PasswordSectionState.REJECTED) MaterialTheme.colorScheme.error else Color.Unspecified,
+        )
+        PasswordField(value = input, onValueChange = { input = it }, onDone = {})
+        if (showHttpNote) {
+            Text(
+                text = stringResource(R.string.password_http_note),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Button(
+            onClick = {
+                onSave(input)
+                input = ""
+            },
+            enabled = input.isNotEmpty(),
+        ) { Text(stringResource(R.string.password_save)) }
+        if (state != PasswordSectionState.REQUIRED) {
+            TextButton(onClick = onRemove) { Text(stringResource(R.string.password_remove)) }
         }
     }
 }

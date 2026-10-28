@@ -53,6 +53,8 @@ data class CertificatePrompt(
     val ip: String,
     val certificate: PeekedCertificate,
     val changed: Boolean,
+    /** Vrai si un mot de passe est enregistré : accepter le nouveau certificat le suspend (D1). */
+    val passwordWillBeSuspended: Boolean = false,
 )
 
 data class AddEditUiState(
@@ -127,6 +129,10 @@ data class AddEditUiState(
     val passwordInput: String = "",
     /** Connexion chiffrée de l'appareil édité ; null = HTTP simple, section masquée. */
     val tlsState: TlsState? = null,
+    /** Section « Mot de passe de l'appareil » (mode édition) ; null = masquée (D5). */
+    val passwordSection: PasswordSectionState? = null,
+    /** Vrai si l'appareil n'a pas d'épingle : le mot de passe passe par un défi digest en HTTP clair. */
+    val passwordHttpNote: Boolean = false,
 )
 
 @HiltViewModel
@@ -190,7 +196,18 @@ class AddEditDeviceViewModel @Inject constructor(
                 combine(repository.observeDevice(id), repository.accessIssues) { device, issues -> device to issues }
                     .collect { (device, issues) ->
                         observedDevice = device
-                        _uiState.update { it.copy(tlsState = device?.let { d -> tlsStateOf(d, issues) }) }
+                        // Chaque changement du coffre s'accompagne d'un changement de problème d'accès :
+                        // relire le coffre à chaque émission suffit à rester à jour (sans réseau).
+                        val passwordSection = device?.let { d ->
+                            passwordSectionStateOf(repository.passwordStateOf(d), passwordIssueFor(d, issues))
+                        }
+                        _uiState.update {
+                            it.copy(
+                                tlsState = device?.let { d -> tlsStateOf(d, issues) },
+                                passwordSection = passwordSection,
+                                passwordHttpNote = device != null && device.certPin == null,
+                            )
+                        }
                     }
             }
         }
@@ -498,7 +515,14 @@ class AddEditDeviceViewModel @Inject constructor(
                         "Certificat lu (${device.ipAddress}, ${peek.value.fingerprint}, modifié=$changed)",
                     )
                     _uiState.update {
-                        it.copy(certificatePrompt = CertificatePrompt(device.ipAddress, peek.value, changed))
+                        it.copy(
+                            certificatePrompt = CertificatePrompt(
+                                device.ipAddress,
+                                peek.value,
+                                changed,
+                                passwordWillBeSuspended = changed && repository.passwordStateOf(device) != null,
+                            ),
+                        )
                     }
                 }
                 else -> {
@@ -514,6 +538,26 @@ class AddEditDeviceViewModel @Inject constructor(
         val device = observedDevice ?: return
         logger.info(DiagnosticLogger.UI, "Certificat oublié par l'utilisateur (${device.ipAddress})")
         viewModelScope.launch { repository.forgetCertificate(device) }
+    }
+
+    /** Mode édition : enregistre le mot de passe saisi (chiffré, jamais journalisé) puis le vérifie. */
+    fun savePassword(value: String) {
+        val device = observedDevice ?: return
+        if (value.isEmpty()) return
+        logger.info(DiagnosticLogger.UI, "Mot de passe enregistré depuis Modifier (${device.ipAddress})")
+        viewModelScope.launch { repository.savePassword(device, value) }
+    }
+
+    /** Mode édition : retire le mot de passe enregistré (après confirmation). */
+    fun removePassword() {
+        val device = observedDevice ?: return
+        logger.info(DiagnosticLogger.UI, "Mot de passe retiré depuis Modifier (${device.ipAddress})")
+        viewModelScope.launch { repository.removePassword(device) }
+    }
+
+    /** Journalise l'apparition de la section mot de passe (une fois par état affiché). */
+    fun onPasswordSectionShown(state: PasswordSectionState) {
+        logger.info(DiagnosticLogger.UI, "Section mot de passe affichée ($state)")
     }
 
     override fun onCleared() {
