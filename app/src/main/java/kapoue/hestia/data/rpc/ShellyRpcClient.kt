@@ -1,6 +1,7 @@
 package kapoue.hestia.data.rpc
 
 import kapoue.hestia.core.log.DiagnosticLogger
+import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.model.CheckForUpdateResult
 import kapoue.hestia.data.rpc.model.CloudConfigResult
 import kapoue.hestia.data.rpc.model.CloudStatusResult
@@ -522,6 +523,14 @@ class ShellyRpcClient @Inject constructor(
         params: JsonElement?,
         serializer: kotlinx.serialization.KSerializer<T>,
     ): RpcResult<T> = withContext(Dispatchers.IO) {
+        // Filet de sécurité du mode démo (2026-10-29) : aucune requête ne part jamais vers les
+        // adresses fictives, quel que soit l'appelant — upstream 2.17.0 a dû colmater isSmokeRelay
+        // et resyncSmokeRelay un par un (3 s d'attente chacun). Les chemins démo connus répondent
+        // en amont avec des données factices ; arriver ici trahit un oubli, d'où la trace.
+        if (ip.startsWith(DeviceRepository.DEMO_IP_PREFIX)) {
+            logger.info(DiagnosticLogger.RPC, "$method @ $ip → appareil démo, aucun appel réseau")
+            return@withContext RpcResult.Failure(RpcFailure.UNREACHABLE)
+        }
         val id = requestIds.getAndIncrement()
         val payload = json.encodeToString(RpcRequest.serializer(), RpcRequest(id, method, params))
         val request = Request.Builder()

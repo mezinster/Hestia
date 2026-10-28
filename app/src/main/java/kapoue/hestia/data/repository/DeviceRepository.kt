@@ -2549,6 +2549,8 @@ class DeviceRepository @Inject constructor(
      * physique (même IP, script partagé).
      */
     suspend fun isSmokeRelay(device: Device): Boolean {
+        // Appareils démo : jamais relais (le transport refuse de toute façon leurs adresses).
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return false
         val (_, result) = withIp(device) { ip -> rpcClient.scriptList(ip) }
         return result.getOrNull()?.scripts?.any { it.name == SmokeRelayScriptGenerator.SCRIPT_NAME } == true
     }
@@ -2570,7 +2572,8 @@ class DeviceRepository @Inject constructor(
 
     /** @return les détecteurs réellement joints (webhooks reposés ou confirmés sans changement) — pas ceux restés injoignables. */
     private suspend fun resyncSmokeRelayInternal(): Set<Long> {
-        val all = getDevicesOnce()
+        // Jamais de relais à déployer sur des appareils démo, ni de détecteur démo à rebrancher.
+        val all = getDevicesOnce().filterNot { it.ipAddress.startsWith(DEMO_IP_PREFIX) }
         val detectors = all.filter { it.type == DeviceType.SMOKE_DETECTOR }
         if (detectors.isEmpty()) return emptySet()
 
