@@ -190,16 +190,24 @@ class AddEditDeviceViewModel @Inject constructor(
     // Appareil édité tel que lu en base (épingle à jour) — sert à la vérification/confirmation/oubli du certificat.
     private var observedDevice: Device? = null
 
+    // Déclencheur de relecture du coffre : retirer un mot de passe ACCEPTÉ ne change ni les problèmes
+    // d'accès ni l'appareil en base, donc rien d'autre ne ferait réémettre le combine ci-dessous.
+    private val passwordRefresh = MutableStateFlow(0)
+
     init {
         editingDeviceId?.let { id ->
             viewModelScope.launch {
-                combine(repository.observeDevice(id), repository.accessIssues) { device, issues -> device to issues }
+                combine(repository.observeDevice(id), repository.accessIssues, passwordRefresh) { device, issues, _ -> device to issues }
                     .collect { (device, issues) ->
                         observedDevice = device
-                        // Chaque changement du coffre s'accompagne d'un changement de problème d'accès :
-                        // relire le coffre à chaque émission suffit à rester à jour (sans réseau).
+                        // Le coffre est relu (sans réseau) à chaque émission : changement de problème
+                        // d'accès, d'appareil, ou déclencheur [passwordRefresh] après une action locale.
+                        val wasHidden = _uiState.value.passwordSection == null
                         val passwordSection = device?.let { d ->
                             passwordSectionStateOf(repository.passwordStateOf(d), passwordIssueFor(d, issues))
+                        }
+                        if (wasHidden && passwordSection != null) {
+                            logger.info(DiagnosticLogger.UI, "Section mot de passe affichée ($passwordSection)")
                         }
                         _uiState.update {
                             it.copy(
@@ -480,7 +488,10 @@ class AddEditDeviceViewModel @Inject constructor(
         if (_uiState.value.isEditMode && editing != null) {
             // Édition : l'épingle est écrite tout de suite sur tous les canaux de l'appareil.
             _uiState.update { it.copy(certificatePrompt = null, error = null) }
-            viewModelScope.launch { repository.trustCertificate(editing, prompt.certificate.pin) }
+            viewModelScope.launch {
+                repository.trustCertificate(editing, prompt.certificate.pin)
+                passwordRefresh.update { it + 1 }
+            }
             return
         }
         repository.trustCertificateProvisionally(prompt.ip, prompt.certificate.pin)
@@ -545,19 +556,20 @@ class AddEditDeviceViewModel @Inject constructor(
         val device = observedDevice ?: return
         if (value.isEmpty()) return
         logger.info(DiagnosticLogger.UI, "Mot de passe enregistré depuis Modifier (${device.ipAddress})")
-        viewModelScope.launch { repository.savePassword(device, value) }
+        viewModelScope.launch {
+            repository.savePassword(device, value)
+            passwordRefresh.update { it + 1 }
+        }
     }
 
     /** Mode édition : retire le mot de passe enregistré (après confirmation). */
     fun removePassword() {
         val device = observedDevice ?: return
         logger.info(DiagnosticLogger.UI, "Mot de passe retiré depuis Modifier (${device.ipAddress})")
-        viewModelScope.launch { repository.removePassword(device) }
-    }
-
-    /** Journalise l'apparition de la section mot de passe (une fois par état affiché). */
-    fun onPasswordSectionShown(state: PasswordSectionState) {
-        logger.info(DiagnosticLogger.UI, "Section mot de passe affichée ($state)")
+        viewModelScope.launch {
+            repository.removePassword(device)
+            passwordRefresh.update { it + 1 }
+        }
     }
 
     override fun onCleared() {

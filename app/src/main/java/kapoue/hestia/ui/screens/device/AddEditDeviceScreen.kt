@@ -292,7 +292,6 @@ fun AddEditDeviceScreen(
 
                 state.passwordSection?.let { pw ->
                     HorizontalDivider()
-                    LaunchedEffect(pw) { viewModel.onPasswordSectionShown(pw) }
                     PasswordSection(
                         state = pw,
                         showHttpNote = state.passwordHttpNote,
