@@ -222,6 +222,12 @@
     <string name="error_https_required">This device requires an encrypted connection (HTTPS). Open Edit device to check and trust its certificate.</string>
     <string name="error_cert_changed">This device\'s security certificate has changed. If you reset the device, open Edit device to confirm the new one; otherwise check your network.</string>
     <string name="tls_peek_failed">Couldn\'t read the device\'s certificate. Check that it\'s on and on the same Wi-Fi network.</string>
+    <string name="tls_dialog_title">Encrypted connection</string>
+    <string name="tls_dialog_message">This device only accepts encrypted connections (HTTPS), with a certificate issued by Shelly that your phone can\'t verify on its own. Check that the fingerprint matches the one shown in the device\'s web interface, then trust it: Hestia will accept only this certificate from now on.</string>
+    <string name="tls_dialog_message_changed">The certificate presented by this device is not the one you accepted. That\'s expected after a factory reset; otherwise someone may be impersonating the device. Trust the new one only if you reset it.</string>
+    <string name="tls_dialog_fingerprint">Fingerprint (SHA-256):</string>
+    <string name="tls_dialog_trust">Trust</string>
+    <string name="tls_dialog_cancel">Cancel</string>
     <string name="error_unsupported_cover">This device is set up as a shutter controller, which Hestia doesn\'t support yet. If it\'s a 2PM, you can switch it to relay mode in its web interface.</string>
     <string name="error_unsupported_color_light">This light controller is set to a colour mode, which Hestia doesn\'t support yet. Dimmers (white light) are supported.</string>
     <string name="error_unsupported_energy_meter">This device is an energy meter without a relay, which Hestia doesn\'t support yet.</string>

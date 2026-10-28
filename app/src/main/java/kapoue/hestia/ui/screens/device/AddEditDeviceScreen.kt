@@ -462,6 +462,14 @@ fun AddEditDeviceScreen(
         )
     }
 
+    state.certificatePrompt?.let { prompt ->
+        CertificateDialog(
+            prompt = prompt,
+            onTrust = viewModel::onTrustCertificate,
+            onDismiss = viewModel::onDismissCertificate,
+        )
+    }
+
     if (showUnsavedDialog) {
         UnsavedChangesDialog(
             onDiscard = {
