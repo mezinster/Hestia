@@ -799,6 +799,8 @@ class ShellyRpcClient @Inject constructor(
         first.close()
         if (clearTextForbidden) {
             logger.warn(DiagnosticLogger.RPC, "$method @ $target → authentification demandée en HTTP, HTTPS requis : aucun envoi")
+            // Signalé comme tout HTTPS_REQUIRED : la tuile et Modifier proposent d'accepter le certificat.
+            access.report(ip, AccessIssue.HTTPS_REQUIRED)
             return Exchange.Failed(RpcFailure.HTTPS_REQUIRED)
         }
         if (password == null) {

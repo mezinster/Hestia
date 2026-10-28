@@ -334,4 +334,15 @@ class DigestTransportTest {
         assertTrue(take().authorization() != null)
         assertEquals(PasswordState.UNVERIFIED, passwords[address]!!.state)
     }
+
+    @Test
+    fun `a clear-text challenge refused for https flags HTTPS_REQUIRED`() = runTest {
+        startHttp()
+        knownPassword()
+        registry.markHttpsSeen(address)
+        server.enqueue(challenge())
+        assertEquals(RpcResult.Failure(RpcFailure.HTTPS_REQUIRED), client.reboot(address))
+        assertEquals(AccessIssue.HTTPS_REQUIRED, registry.issues.value[address])
+        assertNull(take().authorization())
+    }
 }
