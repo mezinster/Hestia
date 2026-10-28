@@ -106,4 +106,14 @@ class DevicePasswordsTest {
         assertEquals(writes, vault.writes)
         assertEquals(PasswordState.UNVERIFIED, vault.read(1)?.state)
     }
+
+    @Test
+    fun `save can record an accepted password`() = runTest {
+        val list = listOf(device(1, ".96", 0), device(2, ".96", 1))
+        val vault = InMemoryPasswordVault()
+        val passwords = DevicePasswords({ list }, vault)
+        assertEquals(2, passwords.save(".96", "pw", PasswordState.ACCEPTED))
+        assertEquals(PasswordState.ACCEPTED, vault.read(1)?.state)
+        assertEquals(PasswordState.ACCEPTED, passwords.stateOf(list[1]))
+    }
 }

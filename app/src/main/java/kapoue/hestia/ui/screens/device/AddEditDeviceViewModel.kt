@@ -203,8 +203,9 @@ class AddEditDeviceViewModel @Inject constructor(
                         // Le coffre est relu (sans réseau) à chaque émission : changement de problème
                         // d'accès, d'appareil, ou déclencheur [passwordRefresh] après une action locale.
                         val wasHidden = _uiState.value.passwordSection == null
+                        val stored = device?.let { d -> repository.passwordStateOf(d) }
                         val passwordSection = device?.let { d ->
-                            passwordSectionStateOf(repository.passwordStateOf(d), passwordIssueFor(d, issues))
+                            passwordSectionStateOf(stored, passwordIssueFor(d, issues))
                         }
                         if (wasHidden && passwordSection != null) {
                             logger.info(DiagnosticLogger.UI, "Section mot de passe affichée ($passwordSection)")
@@ -525,13 +526,15 @@ class AddEditDeviceViewModel @Inject constructor(
                         DiagnosticLogger.UI,
                         "Certificat lu (${device.ipAddress}, ${peek.value.fingerprint}, modifié=$changed)",
                     )
+                    // Lecture du coffre hors de update {} : une fonction suspendue n'a rien à faire dans sa boucle CAS.
+                    val suspendsPassword = changed && repository.passwordStateOf(device) != null
                     _uiState.update {
                         it.copy(
                             certificatePrompt = CertificatePrompt(
                                 device.ipAddress,
                                 peek.value,
                                 changed,
-                                passwordWillBeSuspended = changed && repository.passwordStateOf(device) != null,
+                                passwordWillBeSuspended = suspendsPassword,
                             ),
                         )
                     }

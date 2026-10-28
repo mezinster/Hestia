@@ -268,8 +268,8 @@ class DeviceRepository @Inject constructor(
 
     // --- Mot de passe de l'appareil (lot C2, fork) ---
 
-    /** État du mot de passe stocké (lecture du coffre, sans réseau) ; null = aucun. */
-    fun passwordStateOf(device: Device): PasswordState? = devicePasswords.stateOf(device)
+    /** État du mot de passe stocké (lecture du coffre hors thread principal, sans réseau) ; null = aucun. */
+    suspend fun passwordStateOf(device: Device): PasswordState? = devicePasswords.stateOf(device)
 
     fun trustPasswordProvisionally(ip: String, password: String) =
         accessRegistry.trustPasswordProvisionally(ip, password)
