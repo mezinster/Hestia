@@ -54,6 +54,8 @@ data class DeviceBackup(
     val isLight: Boolean = false,
     /** Canal volet (lot S1). Absent d'une ancienne sauvegarde = relais. */
     val isCover: Boolean = false,
+    /** Épingle HTTPS (lot C1). Absente d'une ancienne sauvegarde = HTTP. */
+    val certPin: String? = null,
 )
 
 /** Réservé — aucune préférence manuelle en V1 (le thème suit le système). */

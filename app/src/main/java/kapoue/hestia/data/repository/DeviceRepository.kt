@@ -19,7 +19,10 @@ import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
 import kapoue.hestia.data.presence.SmokeRelayScriptGenerator
 import kapoue.hestia.data.presence.TimerNotifyScriptGenerator
+import kapoue.hestia.data.rpc.AccessIssue
 import kapoue.hestia.data.rpc.ChannelControl
+import kapoue.hestia.data.rpc.DeviceAccessRegistry
+import kapoue.hestia.data.rpc.PeekedCertificate
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
@@ -55,7 +58,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -102,6 +107,7 @@ class DeviceRepository @Inject constructor(
     private val cloudClient: ShellyCloudClient,
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
+    private val accessRegistry: DeviceAccessRegistry,
     @ApplicationContext private val context: Context,
     @ApplicationScope private val appScope: CoroutineScope,
 ) {
@@ -167,7 +173,9 @@ class DeviceRepository @Inject constructor(
      * valable pour tous les écrans qui listent les appareils (Tableau, Réglages…) puisqu'ils
      * passent tous par [observeDevices] ou [getDevicesOnce].
      */
-    fun observeDevices(): Flow<List<Device>> = deviceDao.observeAll().map { filterForDemo(it) }
+    fun observeDevices(): Flow<List<Device>> = deviceDao.observeAll()
+        .onEach { accessRegistry.syncSavedPins(pinsByAddress(it)) } // liste non filtrée
+        .map { filterForDemo(it) }
 
     private fun filterForDemo(devices: List<Device>): List<Device> {
         val demo = devices.filter { it.ipAddress.startsWith(DEMO_IP_PREFIX) }
@@ -185,7 +193,50 @@ class DeviceRepository @Inject constructor(
     fun observeDevice(id: Long): Flow<Device?> = deviceDao.observeById(id)
 
     /** Même filtrage démo que [observeDevices] — voir sa doc. */
-    suspend fun getDevicesOnce(): List<Device> = filterForDemo(deviceDao.getAllOnce())
+    suspend fun getDevicesOnce(): List<Device> {
+        val all = deviceDao.getAllOnce()
+        accessRegistry.syncSavedPins(pinsByAddress(all))
+        return filterForDemo(all)
+    }
+
+    // --- Épingle HTTPS (lot C1, fork) ---
+
+    /** Problèmes d'accès par adresse (HTTPS requis, certificat changé). */
+    val accessIssues: StateFlow<Map<String, AccessIssue>> get() = accessRegistry.issues
+
+    suspend fun peekCertificate(ip: String): RpcResult<PeekedCertificate> = rpcClient.peekCertificate(ip)
+
+    fun trustCertificateProvisionally(ip: String, pin: String) = accessRegistry.trustProvisionally(ip, pin)
+
+    fun forgetProvisionalCertificate(ip: String) = accessRegistry.forgetProvisional(ip)
+
+    /** Écrit [pin] (ou null) sur tous les canaux de [ip], resynchronise le registre, efface les problèmes. */
+    private suspend fun writePin(device: Device, pin: String?): Int {
+        val group = deviceDao.getAllOnce().filter { it.ipAddress == device.ipAddress }
+        group.forEach { deviceDao.update(it.copy(certPin = pin)) }
+        accessRegistry.syncSavedPins(pinsByAddress(deviceDao.getAllOnce()))
+        accessRegistry.report(device.ipAddress, null)
+        device.ip2Address?.takeIf { it.isNotBlank() }?.let { accessRegistry.report(it, null) }
+        return group.size
+    }
+
+    suspend fun trustCertificate(device: Device, pin: String) {
+        val n = writePin(device, pin)
+        logger.info(DiagnosticLogger.RPC, "Certificat accepté ${device.ipAddress} ($n canal/canaux)")
+    }
+
+    suspend fun commitProvisionalCertificate(ip: String) {
+        val pin = accessRegistry.pinFor(ip) ?: return
+        val device = deviceDao.getAllOnce().firstOrNull { it.ipAddress == ip } ?: return
+        val n = writePin(device, pin)
+        accessRegistry.forgetProvisional(ip)
+        logger.info(DiagnosticLogger.RPC, "Certificat provisoire enregistré $ip ($n canal/canaux)")
+    }
+
+    suspend fun forgetCertificate(device: Device) {
+        val n = writePin(device, null)
+        logger.info(DiagnosticLogger.RPC, "Certificat oublié ${device.ipAddress} ($n canal/canaux)")
+    }
 
     suspend fun getDevice(id: Long): Device? = deviceDao.getById(id)
 

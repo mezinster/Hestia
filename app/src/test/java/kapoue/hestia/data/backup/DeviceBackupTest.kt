@@ -1,7 +1,9 @@
 package kapoue.hestia.data.backup
 
 import kotlinx.serialization.json.Json
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,5 +29,13 @@ class DeviceBackupTest {
         assertFalse(json.decodeFromString(DeviceBackup.serializer(), old).isCover)
         val cover = """{"name":"V","ipAddress":"1.2.3.4","switchId":0,"type":"SHUTTER","driver":"SHELLY_GEN2","isCover":true}"""
         assertTrue(json.decodeFromString(DeviceBackup.serializer(), cover).isCover)
+    }
+
+    @Test
+    fun `certPin absent from an old backup is null and kept when present`() {
+        val old = """{"name":"P","ipAddress":"1.2.3.4","switchId":0,"type":"PLUG","driver":"SHELLY_GEN2"}"""
+        assertNull(json.decodeFromString(DeviceBackup.serializer(), old).certPin)
+        val pinned = """{"name":"P","ipAddress":"1.2.3.4","switchId":0,"type":"PLUG","driver":"SHELLY_GEN2","certPin":"sha256/abc"}"""
+        assertEquals("sha256/abc", json.decodeFromString(DeviceBackup.serializer(), pinned).certPin)
     }
 }

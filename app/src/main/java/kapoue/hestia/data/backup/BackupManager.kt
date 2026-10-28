@@ -108,6 +108,7 @@ private fun Device.toBackup() = DeviceBackup(
     ip2Name = ip2Name,
     isLight = isLight,
     isCover = isCover,
+    certPin = certPin,
 )
 
 private fun DeviceBackup.toEntity() = Device(
@@ -134,4 +135,5 @@ private fun DeviceBackup.toEntity() = Device(
     ip2Name = ip2Name,
     isLight = isLight,
     isCover = isCover,
+    certPin = certPin,
 )

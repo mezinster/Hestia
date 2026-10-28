@@ -1,0 +1,49 @@
+package kapoue.hestia.data.repository
+
+import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.rpc.AccessIssue
+import kapoue.hestia.domain.model.DeviceType
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class DeviceAccessTest {
+
+    private fun device(ip: String, ip2: String? = null, pin: String? = null, ch: Int = 0) =
+        Device(name = "d", ipAddress = ip, switchId = ch, type = DeviceType.PLUG, ip2Address = ip2, certPin = pin)
+
+    @Test
+    fun `pins cover both addresses`() {
+        val map = pinsByAddress(listOf(device("a", "b", "P")))
+        assertEquals(mapOf("a" to "P", "b" to "P"), map)
+        assertEquals("P", map["a"])
+        assertEquals("P", map["b"])
+    }
+
+    @Test
+    fun `unpinned devices and blank second address are skipped`() {
+        assertEquals(emptyMap<String, String>(), pinsByAddress(listOf(device("a", "b", null))))
+        assertEquals(mapOf("a" to "P"), pinsByAddress(listOf(device("a", "", "P"))))
+    }
+
+    @Test
+    fun `every channel of a strip maps to the same pin`() {
+        val strip = (0..2).map { device("a", pin = "P", ch = it) }
+        assertEquals(mapOf("a" to "P"), pinsByAddress(strip))
+    }
+
+    @Test
+    fun `issue of the second address is reported`() {
+        assertEquals(
+            AccessIssue.HTTPS_REQUIRED,
+            accessIssueFor(device("a", "b"), mapOf("b" to AccessIssue.HTTPS_REQUIRED)),
+        )
+    }
+
+    @Test
+    fun `certificate change wins over https required`() {
+        val issues = mapOf("a" to AccessIssue.HTTPS_REQUIRED, "b" to AccessIssue.CERT_CHANGED)
+        assertEquals(AccessIssue.CERT_CHANGED, accessIssueFor(device("a", "b"), issues))
+        assertNull(accessIssueFor(device("a", "b"), emptyMap()))
+    }
+}
