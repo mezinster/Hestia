@@ -215,6 +215,9 @@
     <string name="error_gen1_unsupported">Cet appareil est un Shelly Gen1, non pris en charge. Seuls les Gen2 et ultérieurs le sont.</string>
     <string name="error_https_required">Cet appareil exige une connexion chiffrée (HTTPS). Ouvre Modifier l\'appareil pour vérifier son certificat et lui faire confiance.</string>
     <string name="error_cert_changed">Le certificat de sécurité de cet appareil a changé. Si tu as réinitialisé l\'appareil, ouvre Modifier l\'appareil pour confirmer le nouveau ; sinon, vérifie ton réseau.</string>
+    <string name="error_password_required">Cet appareil est protégé par un mot de passe. Saisis celui de son interface web.</string>
+    <string name="error_password_wrong">L\'appareil a refusé ce mot de passe. Vérifie-le et saisis-le à nouveau.</string>
+    <string name="error_throttled">L\'appareil refuse temporairement les connexions. Réessaie dans quelques minutes.</string>
     <string name="tls_peek_failed">Impossible de lire le certificat de l\'appareil. Vérifie qu\'il est allumé et sur le même réseau Wi-Fi.</string>
     <string name="tls_dialog_title">Connexion chiffrée</string>
     <string name="tls_dialog_message">Cet appareil n\'accepte que les connexions chiffrées (HTTPS), avec un certificat émis par Shelly que ton téléphone ne peut pas vérifier seul. Vérifie que l\'empreinte correspond à celle affichée dans l\'interface web de l\'appareil, puis fais-lui confiance : Hestia n\'acceptera plus que ce certificat.</string>

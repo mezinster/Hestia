@@ -27,6 +27,7 @@ import kapoue.hestia.data.rpc.model.SwitchStatusResult
 import kapoue.hestia.data.rpc.model.WebhookCreateResult
 import kapoue.hestia.data.rpc.model.WebhookListResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -40,6 +41,7 @@ import kotlinx.serialization.json.put
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.net.ConnectException
@@ -631,6 +633,11 @@ class ShellyRpcClient @Inject constructor(
             logger.warn(DiagnosticLogger.RPC, "$method @ $ip → épingles HTTPS illisibles, appel refusé")
             return@withContext RpcResult.Failure(RpcFailure.UNREACHABLE)
         }
+        // Mot de passe refusé ou pause après un 429 : aucune requête ne part.
+        access.blockedFor(ip)?.let { blocked ->
+            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → appel bloqué (${blocked.name})")
+            return@withContext RpcResult.Failure(blocked)
+        }
         val id = requestIds.getAndIncrement()
         val payload = json.encodeToString(RpcRequest.serializer(), RpcRequest(id, method, params))
         // Adresse épinglée : HTTPS uniquement, avec ce seul certificat. Jamais de repli en HTTP.
@@ -646,7 +653,21 @@ class ShellyRpcClient @Inject constructor(
 
         val startedAt = System.currentTimeMillis()
         try {
-            client.newCall(request).execute().use { response ->
+            // Mot de passe connu : tout l'échange (envoi, défi, renvoi) est sérialisé par adresse,
+            // pour que les compteurs nc d'une même session arrivent dans l'ordre à l'appareil.
+            val password = access.passwordFor(ip)
+            val exchange = if (password != null) {
+                access.lockFor(ip).withLock { exchange(client, request, ip, target, method, password) }
+            } else {
+                exchange(client, request, ip, target, method, null)
+            }
+            val sent = when (exchange) {
+                is Exchange.Failed -> return@withContext RpcResult.Failure(exchange.failure)
+                is Exchange.Done -> exchange
+            }
+            // Réponse obtenue avec un en-tête Authorization : le mot de passe envoyé est accepté.
+            sent.passwordSent?.let { access.onAuthAccepted(ip, it) }
+            sent.response.use { response ->
                 val elapsed = System.currentTimeMillis() - startedAt
                 if (response.isRedirect) {
                     val location = response.header("Location").orEmpty()
@@ -722,6 +743,95 @@ class ShellyRpcClient @Inject constructor(
         }
     }
 
+    /** Issue de l'échange authentifié : réponse finale à traiter, ou échec décidé sans elle. */
+    private sealed interface Exchange {
+        /** [passwordSent] : mot de passe réellement envoyé sur la requête qui a obtenu [response]. */
+        class Done(val response: Response, val passwordSent: String?) : Exchange
+        class Failed(val failure: RpcFailure) : Exchange
+    }
+
+    /**
+     * Envoie [request], répond au défi digest éventuel par **un seul** renvoi authentifié, et
+     * renvoie la réponse finale (non lue) ou l'échec décidé. Les corps des 401/429 intermédiaires
+     * sont fermés ici. Ne journalise jamais l'en-tête Authorization ni le mot de passe.
+     */
+    private suspend fun exchange(
+        client: OkHttpClient,
+        request: Request,
+        ip: String,
+        target: String,
+        method: String,
+        password: String?,
+    ): Exchange {
+        // Jamais d'identifiants en HTTP clair vers un appareil signalé HTTPS : ni préemptifs ni renvoi.
+        val clearTextForbidden = target.startsWith("http://") && access.issues.value[ip].let {
+            it == AccessIssue.HTTPS_REQUIRED || it == AccessIssue.CERT_CHANGED
+        }
+        // Session réutilisée seulement sur la même cible (http://ip ≠ https://ip).
+        val existing = if (password != null && !clearTextForbidden) access.sessionFor(target) else null
+        val first = client.newCall(
+            if (existing != null) authorized(request, existing, password!!) else request,
+        ).execute()
+        when (first.code) {
+            HTTP_TOO_MANY_REQUESTS -> {
+                first.close()
+                return throttled(ip, target, method)
+            }
+            HTTP_UNAUTHORIZED -> Unit
+            else -> return Exchange.Done(first, if (existing != null) password else null)
+        }
+        val challenge = first.headers("WWW-Authenticate").firstNotNullOfOrNull(DigestAuth::parseChallenge)
+        first.close()
+        if (clearTextForbidden) {
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → authentification demandée en HTTP, HTTPS requis : aucun envoi")
+            return Exchange.Failed(RpcFailure.HTTPS_REQUIRED)
+        }
+        if (password == null || challenge == null) {
+            if (existing != null) access.setSession(target, null)
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → authentification demandée, aucun mot de passe utilisable")
+            access.report(ip, AccessIssue.PASSWORD_REQUIRED)
+            return Exchange.Failed(RpcFailure.PASSWORD_REQUIRED)
+        }
+        // Nouveau défi (premier contact ou nonce expiré) : nouvelle session, un seul renvoi.
+        logger.info(DiagnosticLogger.RPC, "$method @ $target → authentification demandée")
+        val session = DigestSession(challenge.realm, challenge.nonce)
+        access.setSession(target, session)
+        val second = client.newCall(authorized(request, session, password)).execute()
+        return when (second.code) {
+            HTTP_TOO_MANY_REQUESTS -> {
+                second.close()
+                throttled(ip, target, method)
+            }
+            HTTP_UNAUTHORIZED -> {
+                // 401 sur un nonce tout frais : le mot de passe est faux, plus aucun essai.
+                second.close()
+                access.setSession(target, null)
+                access.onAuthRejected(ip, password)
+                access.report(ip, AccessIssue.PASSWORD_WRONG)
+                logger.warn(DiagnosticLogger.RPC, "$method @ $target → mot de passe refusé")
+                Exchange.Failed(RpcFailure.PASSWORD_WRONG)
+            }
+            else -> Exchange.Done(second, password)
+        }
+    }
+
+    /** Copie de [request] portant l'en-tête digest du compteur suivant de [session]. */
+    private fun authorized(request: Request, session: DigestSession, password: String): Request =
+        request.newBuilder()
+            .header(
+                "Authorization",
+                DigestAuth.authorizationHeader(session.realm, session.nonce, session.nextNc(), DigestAuth.newCnonce(), password),
+            )
+            .build()
+
+    /** HTTP 429 : pause pour [ip], signalée, sans aucun nouvel essai. */
+    private fun throttled(ip: String, target: String, method: String): Exchange {
+        access.onThrottled(ip)
+        access.report(ip, AccessIssue.THROTTLED)
+        logger.warn(DiagnosticLogger.RPC, "$method @ $target → limité (429)")
+        return Exchange.Failed(RpcFailure.THROTTLED)
+    }
+
     /** Cherche une [PinMismatchException] dans la chaîne de causes (bornée, contre les cycles). */
     private fun Throwable.hasPinMismatch(): Boolean {
         var current: Throwable? = this
@@ -748,6 +858,8 @@ class ShellyRpcClient @Inject constructor(
         const val HTTPS_PORT = 443
         const val PEEK_TIMEOUT_MS = 5_000
         const val MAX_CAUSE_DEPTH = 8
+        const val HTTP_UNAUTHORIZED = 401
+        const val HTTP_TOO_MANY_REQUESTS = 429
 
         /** Empreintes tronquées dans le journal (≤ 11 caractères, « AB:CD:EF:01 »). */
         const val LOGGED_FINGERPRINT_CHARS = 11
