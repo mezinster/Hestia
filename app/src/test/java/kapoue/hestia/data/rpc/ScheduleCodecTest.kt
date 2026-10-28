@@ -43,4 +43,18 @@ class ScheduleCodecTest {
         val today = LocalDate.of(2028, 3, 2)
         assertEquals(LocalDate.of(2028, 2, 29), ScheduleCodec.resolveYear(2, 29, today))
     }
+
+    @Test
+    fun `resolveYear keeps a Unique created far ahead in the Shelly app in the future`() {
+        // Tâche créée dans l'appli Shelly officielle (aucune limite à J+6) : 8 mois plus tard.
+        // « La date la plus proche » la lisait l'an dernier, donc expirée, donc purgée.
+        val today = LocalDate.of(2026, 10, 29)
+        assertEquals(LocalDate.of(2027, 6, 15), ScheduleCodec.resolveYear(6, 15, today))
+    }
+
+    @Test
+    fun `resolveYear still sees a Unique of last month as past`() {
+        val today = LocalDate.of(2026, 10, 29)
+        assertEquals(LocalDate.of(2026, 9, 30), ScheduleCodec.resolveYear(9, 30, today))
+    }
 }

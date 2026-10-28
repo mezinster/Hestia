@@ -57,23 +57,30 @@ object ScheduleCodec {
 
     /**
      * Année d'un planning Unique, que le timespec Shelly ne porte pas (aucun champ année) et que
-     * Hestia ne stocke pas : parmi l'année précédente, la courante et la suivante, on retient la
-     * date **la plus proche d'aujourd'hui**.
+     * Hestia ne stocke pas : la **première** date possible qui ne remonte pas à plus de
+     * [PAST_UNIQUE_WINDOW_DAYS] jours. Fenêtre volontairement asymétrique (60 j en arrière, ~10 mois
+     * en avant) : Hestia ne propose un Unique qu'entre aujourd'hui et J+6, mais l'appli Shelly
+     * officielle n'a aucune limite — « la date la plus proche » (upstream 2.16.2) aurait lu une
+     * tâche à 8 mois comme passée, donc expirée, donc **purgée**. Contrepartie acceptée : un Unique
+     * passé que personne ne relit pendant plus de 60 jours reste sur l'appareil (l'ancien défaut).
      *
      * Avant le 2026-10-29, c'était « cette année si pas encore passée, sinon l'année suivante » :
      * un Unique non relu entre sa fin et minuit passait dès le lendemain pour un planning de l'an
      * prochain — jamais vu expiré donc jamais nettoyé (l'appareil l'aurait rejoué un an plus tard),
      * et source de faux conflits sur le jour de semaine de cette date future. Le `plusYears(1)`
-     * ramenait aussi un 29 février au 28 février suivant. Même correctif qu'upstream 2.16.2.
+     * ramenait aussi un 29 février au 28 février suivant.
      *
-     * Ne tient que parce que l'écran ne propose un Unique qu'entre aujourd'hui et J+6 (prises,
-     * volets, variateurs) : à ne pas élargir sans revoir cette règle. 29 février sans année
-     * bissextile voisine → null.
+     * 29 février sans année bissextile dans la fenêtre → null.
      */
-    internal fun resolveYear(month: Int, day: Int, today: LocalDate = LocalDate.now()): LocalDate? =
-        (today.year - 1..today.year + 1)
+    internal fun resolveYear(month: Int, day: Int, today: LocalDate = LocalDate.now()): LocalDate? {
+        val earliest = today.minusDays(PAST_UNIQUE_WINDOW_DAYS)
+        return (today.year - 1..today.year + 1)
             .mapNotNull { year -> runCatching { LocalDate.of(year, month, day) }.getOrNull() }
-            .minByOrNull { kotlin.math.abs(it.toEpochDay() - today.toEpochDay()) }
+            .firstOrNull { !it.isBefore(earliest) }
+    }
+
+    /** Ancienneté maximale d'un Unique encore lu comme passé, voir [resolveYear]. */
+    private const val PAST_UNIQUE_WINDOW_DAYS = 60L
 
     /** Prochaine date (aujourd'hui incluse) dont le jour de semaine cron est [cronDay]. */
     fun nextOccurrence(cronDay: Int, from: LocalDate = LocalDate.now()): LocalDate {
