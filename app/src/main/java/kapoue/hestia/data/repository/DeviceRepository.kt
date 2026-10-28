@@ -174,7 +174,8 @@ class DeviceRepository @Inject constructor(
      * passent tous par [observeDevices] ou [getDevicesOnce].
      */
     fun observeDevices(): Flow<List<Device>> = deviceDao.observeAll()
-        .onEach { accessRegistry.syncSavedPins(pinsByAddress(it)) } // liste non filtrée
+        // Le registre relit lui-même la base (jamais cette émission, peut-être déjà périmée).
+        .onEach { reloadSavedPins("liste des appareils") }
         .map { filterForDemo(it) }
 
     private fun filterForDemo(devices: List<Device>): List<Device> {
@@ -195,7 +196,7 @@ class DeviceRepository @Inject constructor(
     /** Même filtrage démo que [observeDevices] — voir sa doc. */
     suspend fun getDevicesOnce(): List<Device> {
         val all = deviceDao.getAllOnce()
-        accessRegistry.syncSavedPins(pinsByAddress(all))
+        reloadSavedPins("liste des appareils")
         return filterForDemo(all)
     }
 
@@ -210,14 +211,27 @@ class DeviceRepository @Inject constructor(
 
     fun forgetProvisionalCertificate(ip: String) = accessRegistry.forgetProvisional(ip)
 
-    /** Écrit [pin] (ou null) sur tous les canaux de [ip], resynchronise le registre, efface les problèmes. */
+    /**
+     * Fait relire au registre les épingles en base (lecture sérialisée par le registre : une
+     * lecture lancée après une écriture validée la voit toujours). En cas d'échec, le registre
+     * garde ses épingles précédentes ; on le trace sans plus.
+     */
+    private suspend fun reloadSavedPins(reason: String) {
+        if (!accessRegistry.reload()) {
+            logger.warn(DiagnosticLogger.DB, "Épingles HTTPS illisibles ($reason), épingles précédentes conservées")
+        }
+    }
+
+    /**
+     * Écrit [pin] (ou null) sur tous les canaux de [ip] par une requête ciblée (jamais de réécriture
+     * de ligne entière), fait relire le registre, efface les problèmes.
+     */
     private suspend fun writePin(device: Device, pin: String?): Int {
-        val group = deviceDao.getAllOnce().filter { it.ipAddress == device.ipAddress }
-        group.forEach { deviceDao.update(it.copy(certPin = pin)) }
-        accessRegistry.syncSavedPins(pinsByAddress(deviceDao.getAllOnce()))
+        val n = deviceDao.updateCertPin(device.ipAddress, pin)
+        reloadSavedPins("épingle modifiée")
         accessRegistry.report(device.ipAddress, null)
         device.ip2Address?.takeIf { it.isNotBlank() }?.let { accessRegistry.report(it, null) }
-        return group.size
+        return n
     }
 
     suspend fun trustCertificate(device: Device, pin: String) {

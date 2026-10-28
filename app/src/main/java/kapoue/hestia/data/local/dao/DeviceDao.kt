@@ -41,6 +41,13 @@ interface DeviceDao {
     @Query("UPDATE devices SET lastWorkingIpSlot = :slot WHERE id = :deviceId")
     suspend fun updateLastWorkingIpSlot(deviceId: Long, slot: Int)
 
+    /**
+     * Écrit l'épingle HTTPS de tous les canaux de [ip] sans réécrire leurs lignes (une copie
+     * périmée ne doit jamais écraser une autre colonne, ni être écrasée). Renvoie le nombre de canaux.
+     */
+    @Query("UPDATE devices SET certPin = :pin WHERE ipAddress = :ip")
+    suspend fun updateCertPin(ip: String, pin: String?): Int
+
     @Delete
     suspend fun delete(device: Device)
 

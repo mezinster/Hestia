@@ -1,7 +1,9 @@
 package kapoue.hestia.data.rpc
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,31 +14,40 @@ import org.junit.Test
 class DeviceAccessRegistryTest {
     private val ip = "192.168.1.96"
 
-    @Test fun `provisional pin wins over saved pin`() {
-        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() })
-        r.syncSavedPins(mapOf(ip to "A"))
+    /** Base factice : les tests y « écrivent » puis relisent via [DeviceAccessRegistry.reload]. */
+    private var db: Map<String, String> = emptyMap()
+    private fun registry() = DeviceAccessRegistry(SavedPinSource { db })
+
+    @Test fun `provisional pin wins over saved pin`() = runTest {
+        val r = registry()
+        db = mapOf(ip to "A")
+        r.reload()
         r.trustProvisionally(ip, "B")
         assertEquals("B", r.pinFor(ip))
     }
 
-    @Test fun `forgetting a provisional pin falls back to the saved one, or to none`() {
-        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() })
-        r.syncSavedPins(mapOf(ip to "A"))
+    @Test fun `forgetting a provisional pin falls back to the saved one, or to none`() = runTest {
+        val r = registry()
+        db = mapOf(ip to "A")
+        r.reload()
         r.trustProvisionally(ip, "B")
         r.forgetProvisional(ip)
         assertEquals("A", r.pinFor(ip))
-        r.syncSavedPins(emptyMap())
+        db = emptyMap()
+        r.reload()
         r.trustProvisionally(ip, "B")
         r.forgetProvisional(ip)
         assertNull(r.pinFor(ip))
     }
 
-    @Test fun `sync replaces saved pins entirely`() {
-        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() })
+    @Test fun `reload replaces saved pins entirely`() = runTest {
+        val r = registry()
         val a = "10.0.0.1"
         val b = "10.0.0.2"
-        r.syncSavedPins(mapOf(a to "A", b to "B"))
-        r.syncSavedPins(mapOf(a to "A2"))
+        db = mapOf(a to "A", b to "B")
+        r.reload()
+        db = mapOf(a to "A2")
+        r.reload()
         assertEquals("A2", r.pinFor(a))
         assertNull(r.pinFor(b))
     }
@@ -56,13 +67,71 @@ class DeviceAccessRegistryTest {
         assertEquals("P", r.pinFor(ip))
     }
 
-    @Test fun `load happens once`() = runTest {
+    @Test fun `concurrent ensureLoaded callers share one load`() = runTest {
         var loads = 0
-        val r = DeviceAccessRegistry(SavedPinSource { loads++; mapOf(ip to "P") })
-        val results = listOf(async { r.ensureLoaded() }, async { r.ensureLoaded() }).awaitAll()
-        assertTrue(r.ensureLoaded())
-        assertEquals(listOf(true, true), results)
+        val gate = CompletableDeferred<Map<String, String>>()
+        val r = DeviceAccessRegistry(SavedPinSource { loads++; gate.await() })
+        val first = async { r.ensureLoaded() }
+        val second = async { r.ensureLoaded() }
+        advanceUntilIdle()
+        // Les deux appelants attendent la même lecture, encore en cours.
         assertEquals(1, loads)
+        assertFalse(first.isCompleted || second.isCompleted)
+        gate.complete(mapOf(ip to "P"))
+        assertEquals(listOf(true, true), listOf(first, second).awaitAll())
+        assertTrue(r.ensureLoaded())
+        assertEquals(1, loads)
+        assertEquals("P", r.pinFor(ip))
+    }
+
+    @Test fun `a reload started after a write sees the write`() = runTest {
+        var db = mapOf(ip to "OLD")
+        val r = DeviceAccessRegistry(SavedPinSource { db })
+        assertTrue(r.ensureLoaded())
+        assertEquals("OLD", r.pinFor(ip))
+        db = mapOf(ip to "NEW") // écriture validée en base
+        assertTrue(r.reload())
+        assertEquals("NEW", r.pinFor(ip))
+    }
+
+    @Test fun `an older in-flight read cannot overwrite a newer reload`() = runTest {
+        // Lecture n°1 (ancienne, lente) puis n°2 (récente, déjà prête) : si elles se chevauchaient,
+        // la n°2 finirait d'abord et la n°1 écraserait ensuite l'épingle récente par l'ancienne.
+        val gates = listOf(
+            CompletableDeferred<Map<String, String>>(),
+            CompletableDeferred(mapOf(ip to "NEW")),
+        )
+        var reads = 0
+        val r = DeviceAccessRegistry(SavedPinSource { gates[reads++].await() })
+        val older = async { r.reload() }
+        advanceUntilIdle()
+        val newer = async { r.reload() }
+        advanceUntilIdle()
+        // La lecture récente attend que l'ancienne soit terminée.
+        assertEquals(1, reads)
+        gates[0].complete(mapOf(ip to "OLD"))
+        assertEquals(listOf(true, true), listOf(older, newer).awaitAll())
+        assertEquals(2, reads)
+        assertEquals("NEW", r.pinFor(ip))
+    }
+
+    @Test fun `a failed reload keeps the previous pins`() = runTest {
+        var fail = false
+        val r = DeviceAccessRegistry(SavedPinSource { if (fail) throw IllegalStateException("base illisible") else mapOf(ip to "P") })
+        assertTrue(r.reload())
+        fail = true
+        assertFalse(r.reload())
+        assertEquals("P", r.pinFor(ip))
+        assertTrue(r.ensureLoaded())
+    }
+
+    @Test fun `a failed first reload leaves the registry unloaded`() = runTest {
+        var fail = true
+        val r = DeviceAccessRegistry(SavedPinSource { if (fail) throw IllegalStateException("base illisible") else mapOf(ip to "P") })
+        assertFalse(r.reload())
+        fail = false
+        assertTrue(r.ensureLoaded())
+        assertEquals("P", r.pinFor(ip))
     }
 
     @Test fun `failed load is retried and reported`() = runTest {
@@ -80,12 +149,12 @@ class DeviceAccessRegistryTest {
         assertEquals("P", r.pinFor(ip))
     }
 
-    @Test fun `sync counts as loaded`() = runTest {
+    @Test fun `reload counts as loaded`() = runTest {
         var loads = 0
-        val r = DeviceAccessRegistry(SavedPinSource { loads++; emptyMap() })
-        r.syncSavedPins(mapOf(ip to "P"))
+        val r = DeviceAccessRegistry(SavedPinSource { loads++; mapOf(ip to "P") })
+        assertTrue(r.reload())
         assertTrue(r.ensureLoaded())
-        assertEquals(0, loads)
+        assertEquals(1, loads)
         assertEquals("P", r.pinFor(ip))
     }
 }
