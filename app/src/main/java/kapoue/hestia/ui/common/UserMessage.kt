@@ -27,6 +27,10 @@ fun RpcResult<*>.toUserMessageOrNull(): UserMessage? = when (this) {
             RpcFailure.GEN1_UNSUPPORTED -> R.string.error_gen1_unsupported
             RpcFailure.HTTPS_REQUIRED -> R.string.error_https_required
             RpcFailure.CERT_CHANGED -> R.string.error_cert_changed
+            // Chaînes dédiées ajoutées avec l'UI des mots de passe : repli provisoire.
+            RpcFailure.PASSWORD_REQUIRED,
+            RpcFailure.PASSWORD_WRONG,
+            RpcFailure.THROTTLED -> R.string.error_unreachable
         },
     )
 }

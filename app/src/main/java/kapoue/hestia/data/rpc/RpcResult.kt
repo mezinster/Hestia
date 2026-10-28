@@ -27,6 +27,15 @@ enum class RpcFailure {
 
     /** Le certificat présenté ne correspond pas à l'épingle enregistrée : appel refusé. */
     CERT_CHANGED,
+
+    /** L'appareil exige un mot de passe et aucun n'est enregistré. */
+    PASSWORD_REQUIRED,
+
+    /** Le mot de passe a été refusé : plus aucune requête tant qu'il n'est pas ressaisi. */
+    PASSWORD_WRONG,
+
+    /** L'appareil a répondu « trop d'essais » (HTTP 429) : pause temporaire. */
+    THROTTLED,
 }
 
 /** Exécute [block] uniquement si le résultat est un succès. */

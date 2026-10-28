@@ -18,13 +18,19 @@ fun pinsByAddress(devices: List<Device>): Map<String, String> {
     return result
 }
 
-/** Problème d'accès d'un appareil : adresse 1, sinon adresse 2 ; [AccessIssue.CERT_CHANGED] l'emporte. */
+/** Ordre de gravité des problèmes d'accès : le premier de la liste l'emporte, sur les deux adresses. */
+private val ISSUE_PRIORITY = listOf(
+    AccessIssue.CERT_CHANGED,
+    AccessIssue.HTTPS_REQUIRED,
+    AccessIssue.PASSWORD_WRONG,
+    AccessIssue.PASSWORD_REQUIRED,
+    AccessIssue.THROTTLED,
+    AccessIssue.PASSWORD_UNVERIFIED,
+)
+
+/** Problème d'accès d'un appareil : adresses 1 et 2 confondues, le plus grave l'emporte ([ISSUE_PRIORITY]). */
 fun accessIssueFor(device: Device, issues: Map<String, AccessIssue>): AccessIssue? {
     val first = issues[device.ipAddress]
     val second = device.ip2Address?.takeIf { it.isNotBlank() }?.let { issues[it] }
-    return if (first == AccessIssue.CERT_CHANGED || second == AccessIssue.CERT_CHANGED) {
-        AccessIssue.CERT_CHANGED
-    } else {
-        first ?: second
-    }
+    return ISSUE_PRIORITY.firstOrNull { it == first || it == second }
 }

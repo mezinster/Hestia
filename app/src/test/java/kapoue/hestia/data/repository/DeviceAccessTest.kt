@@ -46,4 +46,16 @@ class DeviceAccessTest {
         assertEquals(AccessIssue.CERT_CHANGED, accessIssueFor(device("a", "b"), issues))
         assertNull(accessIssueFor(device("a", "b"), emptyMap()))
     }
+
+    @Test
+    fun `certificate change on ip2 wins over a wrong password on ip1`() {
+        val issues = mapOf("a" to AccessIssue.PASSWORD_WRONG, "b" to AccessIssue.CERT_CHANGED)
+        assertEquals(AccessIssue.CERT_CHANGED, accessIssueFor(device("a", "b"), issues))
+    }
+
+    @Test
+    fun `wrong password wins over unverified`() {
+        val issues = mapOf("a" to AccessIssue.PASSWORD_UNVERIFIED, "b" to AccessIssue.PASSWORD_WRONG)
+        assertEquals(AccessIssue.PASSWORD_WRONG, accessIssueFor(device("a", "b"), issues))
+    }
 }

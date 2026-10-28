@@ -157,4 +157,105 @@ class DeviceAccessRegistryTest {
         assertEquals(1, loads)
         assertEquals("P", r.pinFor(ip))
     }
+
+    // --- Mots de passe (C2) ---
+
+    private class FakePasswords(var data: Map<String, StoredPassword> = emptyMap()) : SavedPasswordSource {
+        val accepted = mutableListOf<String>()
+        val rejected = mutableListOf<String>()
+        var fail = false
+        override suspend fun load(): Map<String, StoredPassword> {
+            if (fail) error("boom")
+            return data
+        }
+        override suspend fun markAccepted(address: String) { accepted += address }
+        override suspend fun markRejected(address: String) { rejected += address }
+    }
+
+    private fun pw(state: PasswordState) = StoredPassword("secret", state)
+
+    @Test fun `a rejected saved password is never handed out`() = runTest {
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, FakePasswords(mapOf(ip to pw(PasswordState.REJECTED))))
+        r.ensureLoaded()
+        assertNull(r.passwordFor(ip))
+        assertEquals(RpcFailure.PASSWORD_WRONG, r.blockedFor(ip))
+        assertEquals(AccessIssue.PASSWORD_WRONG, r.issues.value[ip])
+    }
+
+    @Test fun `an unverified password is flagged until accepted`() = runTest {
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.ensureLoaded()
+        assertEquals("secret", r.passwordFor(ip))
+        assertEquals(AccessIssue.PASSWORD_UNVERIFIED, r.issues.value[ip])
+        r.onAuthAccepted(ip)
+        assertEquals(listOf(ip), src.accepted)
+        assertNull(r.issues.value[ip])
+    }
+
+    @Test fun `a provisional password wins and a new entry clears its rejection`() = runTest {
+        val r = registry()
+        r.trustPasswordProvisionally("x", "a")
+        assertEquals("a", r.passwordFor("x"))
+        r.onAuthRejected("x")
+        assertEquals(RpcFailure.PASSWORD_WRONG, r.blockedFor("x"))
+        assertNull(r.passwordFor("x"))
+        r.trustPasswordProvisionally("x", "b")
+        assertNull(r.blockedFor("x"))
+        assertEquals("b", r.passwordFor("x"))
+    }
+
+    @Test fun `throttle lasts sixty seconds`() {
+        val r = registry()
+        r.now = { 0 }
+        r.onThrottled("x")
+        assertEquals(RpcFailure.THROTTLED, r.blockedFor("x"))
+        r.now = { 60_000 }
+        assertNull(r.blockedFor("x"))
+    }
+
+    @Test fun `saving a new password clears a saved rejection on reload`() = runTest {
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.REJECTED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        src.data = mapOf(ip to pw(PasswordState.UNVERIFIED))
+        r.reload()
+        assertNull(r.blockedFor(ip))
+        assertEquals(AccessIssue.PASSWORD_UNVERIFIED, r.issues.value[ip])
+    }
+
+    @Test fun `a removed password clears its issues`() = runTest {
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        src.data = emptyMap()
+        r.reload()
+        assertNull(r.issues.value[ip])
+    }
+
+    @Test fun `password load failure fails closed`() = runTest {
+        val src = FakePasswords().apply { fail = true }
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        assertFalse(r.ensureLoaded())
+    }
+
+    @Test fun `a saved rejection is persisted and applied in memory`() = runTest {
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.ensureLoaded()
+        r.onAuthRejected(ip)
+        assertEquals(listOf(ip), src.rejected)
+        assertEquals(RpcFailure.PASSWORD_WRONG, r.blockedFor(ip))
+    }
+
+    @Test fun `sessions are kept per target and removable`() {
+        val r = registry()
+        val s = DigestSession("realm", "nonce")
+        r.setSession("https://1.2.3.4", s)
+        assertEquals(s, r.sessionFor("https://1.2.3.4"))
+        assertNull(r.sessionFor("http://1.2.3.4"))
+        r.setSession("https://1.2.3.4", null)
+        assertNull(r.sessionFor("https://1.2.3.4"))
+        assertTrue(r.lockFor("a") === r.lockFor("a"))
+    }
 }
