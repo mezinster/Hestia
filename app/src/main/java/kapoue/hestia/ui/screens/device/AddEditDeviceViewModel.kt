@@ -536,9 +536,13 @@ class AddEditDeviceViewModel @Inject constructor(
             probeJob?.cancel()
             capabilities = null
             probedIp = null
+            // Le champ mot de passe n'a plus de sens après un changement de type (D4).
+            repository.forgetProvisionalPassword(current.ipAddress.trim())
         }
         _uiState.update {
             val next = it.copy(
+                passwordPrompt = if (switching) false else it.passwordPrompt,
+                passwordInput = if (switching) "" else it.passwordInput,
                 type = value,
                 typeChosen = true,
                 foundDeviceName = if (switching) null else it.foundDeviceName,
@@ -847,4 +851,4 @@ class AddEditDeviceViewModel @Inject constructor(
 }
 
 /** Prise / relais et Variateur partagent la même sonde : ce sont les composants qui décident. */
-private fun DeviceType.usesProbe(): Boolean = this == DeviceType.PLUG || this == DeviceType.LAMP || this == DeviceType.SHUTTER
+internal fun DeviceType.usesProbe(): Boolean = this == DeviceType.PLUG || this == DeviceType.LAMP || this == DeviceType.SHUTTER

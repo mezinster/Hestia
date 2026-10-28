@@ -43,6 +43,17 @@ class DevicePasswordsTest {
     }
 
     @Test
+    fun `removeId erases that channel only`() = runTest {
+        val list = listOf(device(1, ".96", 0), device(2, ".96", 1))
+        val vault = InMemoryPasswordVault()
+        val passwords = DevicePasswords({ list }, vault)
+        passwords.save(".96", "pw")
+        passwords.removeId(1)
+        assertNull(vault.read(1))
+        assertEquals(PasswordState.UNVERIFIED, vault.read(2)?.state)
+    }
+
+    @Test
     fun `load maps both addresses`() = runTest {
         val list = listOf(device(1, ".96", ip2 = "10.0.0.5"))
         val vault = InMemoryPasswordVault()

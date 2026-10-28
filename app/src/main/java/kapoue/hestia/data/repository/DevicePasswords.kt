@@ -30,6 +30,9 @@ class DevicePasswords(
         return channels.size
     }
 
+    /** Efface le mot de passe d'un seul canal par son id (utile après suppression de la ligne). */
+    fun removeId(deviceId: Long) = vault.write(deviceId, null)
+
     fun stateOf(device: Device): PasswordState? = vault.read(device.id)?.state
 
     fun hasPassword(device: Device): Boolean = vault.read(device.id) != null

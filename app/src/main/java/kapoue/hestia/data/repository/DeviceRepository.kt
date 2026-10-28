@@ -282,11 +282,9 @@ class DeviceRepository @Inject constructor(
      */
     suspend fun commitProvisionalAccess(ip: String) {
         commitProvisionalCertificate(ip)
-        val password = accessRegistry.passwordFor(ip) ?: return
+        val password = accessRegistry.provisionalPasswordFor(ip) ?: return
         val n = devicePasswords.save(ip, password)
-        if (!accessRegistry.reload()) {
-            logger.warn(DiagnosticLogger.DB, "Mots de passe illisibles (ajout), état précédent conservé")
-        }
+        reloadSavedPins("mot de passe ajouté")
         accessRegistry.forgetProvisionalPassword(ip)
         logger.info(DiagnosticLogger.RPC, "Mot de passe provisoire enregistré $ip ($n canal/canaux)")
     }
@@ -294,7 +292,7 @@ class DeviceRepository @Inject constructor(
     /** Enregistre un mot de passe pour tous les canaux de l'adresse puis le vérifie par un appel. */
     suspend fun savePassword(device: Device, password: String) {
         val n = devicePasswords.save(device.ipAddress, password)
-        accessRegistry.reload()
+        reloadSavedPins("mot de passe enregistré")
         clearPasswordIssues(device)
         logger.info(DiagnosticLogger.RPC, "Mot de passe enregistré ${device.ipAddress} ($n canal/canaux)")
         val (ip, result) = withIp(device) { rpcClient.getDeviceInfo(it) }
@@ -303,7 +301,7 @@ class DeviceRepository @Inject constructor(
 
     suspend fun removePassword(device: Device) {
         val n = devicePasswords.remove(device.ipAddress)
-        accessRegistry.reload()
+        reloadSavedPins("mot de passe retiré")
         clearPasswordIssues(device)
         logger.info(DiagnosticLogger.RPC, "Mot de passe retiré ${device.ipAddress} ($n canal/canaux)")
     }
@@ -2480,10 +2478,9 @@ class DeviceRepository @Inject constructor(
     suspend fun deleteDevice(device: Device) {
         deviceDao.delete(device)
         logger.info(DiagnosticLogger.DB, "Suppression appareil ${device.ipAddress} canal ${device.switchId}")
-        if (deviceDao.getAllOnce().none { it.ipAddress == device.ipAddress }) {
-            devicePasswords.remove(device.ipAddress)
-            reloadSavedPins("mot de passe retiré")
-        }
+        // Chaque canal a sa propre entrée de coffre : on l'efface par id (la ligne n'existe plus en base).
+        devicePasswords.removeId(device.id)
+        reloadSavedPins("mot de passe retiré")
         // Un détecteur supprimé ne doit plus apparaître dans les futurs déploiements du relais
         // (trouvé en revue de code avant publication, 2026-09-03) — un relais déjà en cours
         // d'exécution garde malgré tout son entrée MAC→nom en mémoire (limite connue et

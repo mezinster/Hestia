@@ -340,7 +340,7 @@ fun AddEditDeviceScreen(
                     }
 
                     // Mot de passe de l'appareil (lot C2) : jamais tant qu'un dialogue de certificat est ouvert.
-                    if (state.passwordPrompt && state.certificatePrompt == null) {
+                    if (state.passwordPrompt && state.certificatePrompt == null && state.type.usesProbe()) {
                         var showPassword by remember { mutableStateOf(false) }
                         OutlinedTextField(
                             value = state.passwordInput,

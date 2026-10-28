@@ -222,6 +222,15 @@ class DeviceAccessRegistryTest {
         assertEquals("b", r.passwordFor("x"))
     }
 
+    @Test fun `provisionalPasswordFor ignores saved passwords`() = runTest {
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.ACCEPTED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        assertNull(r.provisionalPasswordFor(ip))
+        r.trustPasswordProvisionally(ip, "new")
+        assertEquals("new", r.provisionalPasswordFor(ip))
+    }
+
     @Test fun `throttle lasts sixty seconds`() {
         val r = registry()
         r.now = { 0 }

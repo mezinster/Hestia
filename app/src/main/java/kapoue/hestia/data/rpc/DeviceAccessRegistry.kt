@@ -204,6 +204,9 @@ class DeviceAccessRegistry @Inject constructor(
         return provisionalPw[address] ?: savedPw[address]?.password
     }
 
+    /** Mot de passe provisoire seul (jamais l'enregistré) ; `null` si aucun. */
+    fun provisionalPasswordFor(address: String): String? = provisionalPw[address]
+
     /** Fait confiance à [password] pour [address] le temps d'un essai ; efface un refus provisoire. */
     fun trustPasswordProvisionally(address: String, password: String) {
         provisionalRejected.remove(address)
