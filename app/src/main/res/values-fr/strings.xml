@@ -129,7 +129,7 @@
     <!-- Préfixe seul : la durée de charge (« 1h32 », « 45min ») est calculée et ajoutée par le
          script généré lui-même, à l'exécution — jamais connue à la génération. Voir
          ChargeScriptGenerator/ButtonTimerScriptGenerator. -->
-    <string name="notif_cutoff_triggered_with_duration">Coupure sur seuil de consommation après</string>
+    <string name="notif_cutoff_triggered_with_duration">%1$s de charge — coupure sur seuil de consommation</string>
     <!-- Variantes ntfy de la présence : plusieurs plages possibles par appareil, la prise ne sait
          pas laquelle a déclenché au moment de la bascule — pas d'horaire, contrairement au planning. -->
     <string name="notif_ntfy_presence_started">Simulation de présence démarrée</string>
@@ -213,6 +213,15 @@
     <string name="error_timeout">L\'appareil n\'a pas répondu à temps. Vérifie le réseau et réessaie.</string>
     <string name="error_not_shelly">Cette adresse ne répond pas comme un appareil Shelly Gen2 ou ultérieur.</string>
     <string name="error_gen1_unsupported">Cet appareil est un Shelly Gen1, non pris en charge. Seuls les Gen2 et ultérieurs le sont.</string>
+    <string name="error_https_required">Cet appareil exige une connexion chiffrée (HTTPS). Ouvre Modifier l\'appareil pour vérifier son certificat et lui faire confiance.</string>
+    <string name="error_cert_changed">Le certificat de sécurité de cet appareil a changé. Si tu as réinitialisé l\'appareil, ouvre Modifier l\'appareil pour confirmer le nouveau ; sinon, vérifie ton réseau.</string>
+    <string name="tls_peek_failed">Impossible de lire le certificat de l\'appareil. Vérifie qu\'il est allumé et sur le même réseau Wi-Fi.</string>
+    <string name="tls_dialog_title">Connexion chiffrée</string>
+    <string name="tls_dialog_message">Cet appareil n\'accepte que les connexions chiffrées (HTTPS), avec un certificat émis par Shelly que ton téléphone ne peut pas vérifier seul. Vérifie que l\'empreinte correspond à celle affichée dans l\'interface web de l\'appareil, puis fais-lui confiance : Hestia n\'acceptera plus que ce certificat.</string>
+    <string name="tls_dialog_message_changed">Le certificat présenté par cet appareil n\'est pas celui que tu avais accepté. C\'est normal après une réinitialisation d\'usine ; sinon, quelqu\'un se fait peut-être passer pour l\'appareil. N\'accepte le nouveau que si tu l\'as réinitialisé.</string>
+    <string name="tls_dialog_fingerprint">Empreinte (SHA-256) :</string>
+    <string name="tls_dialog_trust">Faire confiance</string>
+    <string name="tls_dialog_cancel">Annuler</string>
     <string name="error_unsupported_cover">Cet appareil est configuré en contrôleur de volet, pas encore pris en charge par Hestia. Si c\'est un 2PM, tu peux le passer en mode relais depuis son interface web.</string>
     <string name="error_unsupported_color_light">Ce contrôleur d\'éclairage est réglé en mode couleur, pas encore pris en charge par Hestia. Les variateurs (lumière blanche) le sont.</string>
     <string name="error_unsupported_energy_meter">Cet appareil est un compteur d\'énergie sans relais, pas encore pris en charge par Hestia.</string>
@@ -375,6 +384,8 @@
     <string name="firmware_beta_only">%1$s : à jour (version %2$s). Une version bêta (%3$s) est disponible — Hestia ne propose que les mises à jour stables.</string>
     <string name="firmware_check_error">Vérification impossible. Vérifie que l\'appareil est joignable.</string>
     <string name="tile_firmware_update_banner">Maj dispo</string>
+    <string name="tile_tls_banner_required">Connexion chiffrée à confirmer</string>
+    <string name="tile_tls_banner_changed">Certificat changé</string>
     <string name="firmware_install_button">Installer la mise à jour</string>
     <string name="firmware_install_confirm_title">Installer la mise à jour ?</string>
     <string name="firmware_install_confirm_message">L\'appareil va redémarrer pour appliquer la mise à jour : tout ce qu\'il alimente sera coupé quelques secondes. Ne le débranche pas pendant l\'opération.</string>
@@ -609,4 +620,11 @@
     <string name="cover_event_action">Action</string>
     <string name="cover_event_forget_title">Oublier cet événement en pause ?</string>
     <string name="cover_event_forget_message">Il sera définitivement oublié, sans possibilité de le reprendre.</string>
+    <string name="tls_section_title">Connexion chiffrée (HTTPS)</string>
+    <string name="tls_section_trusted">Cet appareil utilise HTTPS. Son certificat a été accepté au premier contact ; tout autre certificat est refusé.</string>
+    <string name="tls_section_required">Cet appareil exige HTTPS. Fais confiance à son certificat pour que Hestia puisse l\'atteindre.</string>
+    <string name="tls_section_changed">Le certificat a changé depuis que tu l\'as accepté. Hestia ne se connectera pas tant que tu n\'auras pas vérifié et confirmé le nouveau.</string>
+    <string name="tls_section_check">Vérifier le certificat</string>
+    <string name="tls_section_forget">Oublier le certificat</string>
+    <string name="tls_forget_confirm">Hestia contactera de nouveau cet appareil en HTTP simple. Ne le fais que si tu as désactivé HTTPS sur l\'appareil.</string>
 </resources>

@@ -229,3 +229,10 @@ val MIGRATION_19_20 = object : Migration(19, 20) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_paused_cover_events_deviceId` ON `paused_cover_events` (`deviceId`)")
     }
 }
+
+/** v20 → v21 : épingle HTTPS (lot C1, fork) — clé publique acceptée par appareil. Absence = HTTP. */
+val MIGRATION_20_21 = object : Migration(20, 21) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN certPin TEXT")
+    }
+}

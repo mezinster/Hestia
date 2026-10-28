@@ -109,6 +109,9 @@ dependencies {
     implementation(libs.zxing.core)
 
     testImplementation(libs.junit)
+    // Test uniquement (faux serveur HTTPS et certificats autosignés), jamais dans l'APK.
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.okhttp.tls)
     testImplementation(libs.kotlinx.coroutines.test)
 }
 

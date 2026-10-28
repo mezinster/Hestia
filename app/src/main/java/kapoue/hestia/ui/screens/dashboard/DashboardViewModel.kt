@@ -15,6 +15,7 @@ import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.data.repository.CoverRepository
+import kapoue.hestia.data.rpc.AccessIssue
 import kapoue.hestia.data.repository.CoverScheduleRepository
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.shouldReloadCoverEvents
@@ -57,7 +58,13 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch { repository.fixLegacyChannelNames() }
         // Vérification automatique du firmware — une fois par jour maximum, voir
         // DeviceRepository.checkFirmwareUpdatesIfDue (no-op silencieux si déjà faite aujourd'hui).
-        viewModelScope.launch { repository.checkFirmwareUpdatesIfDue() }
+        // Puis, dans la foulée (pas en parallèle, pour ne pas doubler la charge réseau au
+        // lancement) : mise à niveau des scripts de coupure déjà posés, voir
+        // DeviceRepository.upgradeCutoffScriptsIfDue.
+        viewModelScope.launch {
+            repository.checkFirmwareUpdatesIfDue()
+            repository.upgradeCutoffScriptsIfDue()
+        }
     }
 
     /**
@@ -118,6 +125,9 @@ class DashboardViewModel @Inject constructor(
 
     /** Lu par l'écran pour afficher (ou non) le bandeau de permission manquante. */
     val permissionUsable: StateFlow<Boolean> = _permissionUsable.asStateFlow()
+
+    /** Problèmes d'accès HTTPS par adresse (fork, lot C1) : bandeaux des tuiles. */
+    val accessIssues: StateFlow<Map<String, AccessIssue>> get() = repository.accessIssues
 
     // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils + on_since +
     // capteurs en un seul.

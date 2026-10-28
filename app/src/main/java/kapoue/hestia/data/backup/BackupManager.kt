@@ -3,8 +3,10 @@ package kapoue.hestia.data.backup
 import android.content.Context
 import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.rpc.DeviceAccessRegistry
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +33,8 @@ class BackupManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val deviceDao: DeviceDao,
     private val json: Json,
+    private val deviceAccessRegistry: DeviceAccessRegistry,
+    private val logger: DiagnosticLogger,
 ) {
     suspend fun export(uri: Uri): Boolean = withContext(Dispatchers.IO) {
         runCatching {
@@ -66,6 +70,11 @@ class BackupManager @Inject constructor(
             deviceDao.deleteAll()
             for (deviceBackup in backup.devices) {
                 deviceDao.insert(deviceBackup.toEntity())
+            }
+            // Les épingles restaurées (ou disparues) remplacent aussitôt celles du registre.
+            // Le registre relit lui-même la base, après l'écriture.
+            if (!deviceAccessRegistry.reload()) {
+                logger.warn(DiagnosticLogger.DB, "Import : épingles HTTPS illisibles, épingles précédentes conservées")
             }
         }.fold(
             onSuccess = { ImportResult.Success },
@@ -108,6 +117,7 @@ private fun Device.toBackup() = DeviceBackup(
     ip2Name = ip2Name,
     isLight = isLight,
     isCover = isCover,
+    certPin = certPin,
 )
 
 private fun DeviceBackup.toEntity() = Device(
@@ -134,4 +144,5 @@ private fun DeviceBackup.toEntity() = Device(
     ip2Name = ip2Name,
     isLight = isLight,
     isCover = isCover,
+    certPin = certPin,
 )

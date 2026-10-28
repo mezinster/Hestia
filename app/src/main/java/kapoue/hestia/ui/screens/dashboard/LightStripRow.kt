@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.core.util.formatPower
+import kapoue.hestia.data.rpc.AccessIssue
 import kapoue.hestia.ui.theme.stateColors
 
 /**
@@ -43,6 +44,7 @@ fun LightStripRow(
     elapsedNow: Long,
     onOpenChannel: (TileUiState) -> Unit,
     onOpenFirmware: (Long) -> Unit,
+    accessIssue: AccessIssue? = null,
 ) {
     val colors = MaterialTheme.stateColors
     Surface(
@@ -73,6 +75,9 @@ fun LightStripRow(
                         )
                     }
                 }
+            }
+            if (accessIssue != null) {
+                AccessIssueBanner(issue = accessIssue, onClick = { onOpenFirmware(members.first().device.id) })
             }
             // Firmware partagé par tous les canaux d'un même appareil : un seul bandeau.
             if (members.any { it.device.firmwareUpdateAvailable }) {

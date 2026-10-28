@@ -121,4 +121,9 @@ data class Device(
      */
     @ColumnInfo(defaultValue = "0")
     val isCover: Boolean = false,
+    /**
+     * Clé publique épinglée (`sha256/…`) d'un appareil qui n'accepte que HTTPS (lot C1, fork).
+     * Identique sur tous les canaux d'un même appareil physique. Null = HTTP en clair.
+     */
+    val certPin: String? = null,
 )

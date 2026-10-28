@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Update
 import kapoue.hestia.data.local.entity.Device
 import kotlinx.coroutines.flow.Flow
@@ -40,6 +41,22 @@ interface DeviceDao {
     /** Mémorise l'emplacement IP (1 ou 2) qui a répondu, sans repasser par un [update] complet. */
     @Query("UPDATE devices SET lastWorkingIpSlot = :slot WHERE id = :deviceId")
     suspend fun updateLastWorkingIpSlot(deviceId: Long, slot: Int)
+
+    /**
+     * Écrit l'épingle HTTPS de tous les canaux de [ip] sans réécrire leurs lignes (une copie
+     * périmée ne doit jamais écraser une autre colonne, ni être écrasée). Renvoie le nombre de canaux.
+     */
+    @Query("UPDATE devices SET certPin = :pin WHERE ipAddress = :ip")
+    suspend fun updateCertPin(ip: String, pin: String?): Int
+
+    /**
+     * Relit chaque ligne [ids] et y applique [transform], le tout dans une même transaction :
+     * aucune écriture concurrente (l'épingle HTTPS notamment) ne peut se glisser entre la lecture et
+     * l'écriture. Voir [updateFreshRows].
+     */
+    @Transaction
+    suspend fun updateFresh(ids: List<Long>, transform: (Device) -> Device): Int =
+        updateFreshRows(ids, read = { getById(it) }, write = { update(it) }, transform = transform)
 
     @Delete
     suspend fun delete(device: Device)

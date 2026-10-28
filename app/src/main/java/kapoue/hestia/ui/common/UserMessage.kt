@@ -25,6 +25,8 @@ fun RpcResult<*>.toUserMessageOrNull(): UserMessage? = when (this) {
             RpcFailure.MALFORMED_RESPONSE -> R.string.error_not_shelly
             RpcFailure.NOT_SHELLY_GEN2 -> R.string.error_not_shelly
             RpcFailure.GEN1_UNSUPPORTED -> R.string.error_gen1_unsupported
+            RpcFailure.HTTPS_REQUIRED -> R.string.error_https_required
+            RpcFailure.CERT_CHANGED -> R.string.error_cert_changed
         },
     )
 }

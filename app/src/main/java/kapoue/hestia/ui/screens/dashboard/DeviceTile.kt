@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.SettingsInputAntenna
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -58,6 +59,7 @@ import kapoue.hestia.R
 import kapoue.hestia.core.util.formatCountdown
 import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.core.util.formatTimeRange
+import kapoue.hestia.data.rpc.AccessIssue
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.isActiveNow
 import kapoue.hestia.ui.icons.SmokeDetectorIcon
@@ -89,6 +91,7 @@ fun DeviceTile(
     onOpenDetail: () -> Unit,
     onPlanningWindowEnded: () -> Unit,
     onOpenFirmware: () -> Unit,
+    accessIssue: AccessIssue? = null,
 ) {
     val colors = MaterialTheme.stateColors
     // elapsedNow (rafraîchi à la seconde par le parent) force le recalcul du planning en cours
@@ -185,6 +188,9 @@ fun DeviceTile(
                     )
                 }
             }
+            if (accessIssue != null) {
+                AccessIssueBanner(issue = accessIssue, onClick = onOpenFirmware)
+            }
             if (tile.device.firmwareUpdateAvailable) {
                 FirmwareUpdateBanner(onClick = onOpenFirmware)
             }
@@ -228,6 +234,42 @@ internal fun FirmwareUpdateBanner(onClick: () -> Unit) {
 }
 
 /**
+ * Bandeau d'accès HTTPS (fork, lot C1) : l'appareil exige une connexion chiffrée à confirmer, ou
+ * son certificat a changé depuis l'épinglage. Même forme que [FirmwareUpdateBanner], en couleurs
+ * d'avertissement ; le texte accompagne toujours l'icône. Le tap ouvre Modifier l'appareil, où
+ * se règle la confiance du certificat.
+ */
+@Composable
+internal fun AccessIssueBanner(issue: AccessIssue, onClick: () -> Unit) {
+    val colors = MaterialTheme.stateColors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(colors.offlineBg)
+            .padding(vertical = 6.dp),
+    ) {
+        Icon(
+            Icons.Filled.Warning,
+            contentDescription = null,
+            tint = colors.warningText,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = stringResource(
+                if (issue == AccessIssue.CERT_CHANGED) R.string.tile_tls_banner_changed else R.string.tile_tls_banner_required,
+            ),
+            color = colors.warningText,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+/**
  * Tuile d'un détecteur de fumée — voir SMOKE-DETECTOR.md. Volontairement distincte de
  * [DeviceTile] : pas de fait physique marche/arrêt, pas de minuteur, pas d'interrupteur (pas de
  * relais sur ce type d'appareil).
@@ -237,6 +279,7 @@ fun SmokeDetectorTile(
     tile: TileUiState,
     onOpenDetail: () -> Unit,
     onOpenFirmware: () -> Unit,
+    accessIssue: AccessIssue? = null,
 ) {
     val colors = MaterialTheme.stateColors
     val sensor = tile.sensorStatus ?: SensorStatus.Loading
@@ -367,6 +410,9 @@ fun SmokeDetectorTile(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.fillMaxWidth(),
             )
+            }
+            if (accessIssue != null) {
+                AccessIssueBanner(issue = accessIssue, onClick = onOpenFirmware)
             }
             if (tile.device.firmwareUpdateAvailable) {
                 FirmwareUpdateBanner(onClick = onOpenFirmware)
@@ -720,6 +766,7 @@ fun DeviceStripRow(
     elapsedNow: Long,
     onTapChannel: (TileUiState) -> Unit,
     onOpenFirmware: (Long) -> Unit,
+    accessIssue: AccessIssue? = null,
 ) {
     val colors = MaterialTheme.stateColors
     Surface(
@@ -760,6 +807,9 @@ fun DeviceStripRow(
             // seul bandeau pour le bloc entier, jamais répété par mini-cercle (retour David,
             // 2026-09-23) — vrai si n'importe quel membre porte le drapeau, ils sont tous
             // identiques en pratique (écrits ensemble par checkFirmwareUpdatesIfDue).
+            if (accessIssue != null) {
+                AccessIssueBanner(issue = accessIssue, onClick = { onOpenFirmware(members.first().device.id) })
+            }
             if (members.any { it.device.firmwareUpdateAvailable }) {
                 FirmwareUpdateBanner(onClick = { onOpenFirmware(members.first().device.id) })
             }

@@ -313,3 +313,37 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Tuile : « Fermé · ouvre à 07:30 », « ouvre lun 07:30 » quand ce n'est pas aujourd'hui, « ouvre 24/12/2026 13:00 » (date courte) pour un unique à plus de 6 jours.
 - [ ] **Langues** : hors mode démo, EN / FR / RU / système : section, dialogue, tuile et notifications dans la bonne langue.
 - [ ] Non-régression : plannings du Plug M (relais) et d'un variateur inchangés.
+
+## Scripts de coupure — mise à niveau automatique (fork, 2026-10-29)
+
+Idées d'upstream 2.16.2 et 2.18.0, réimplémentées. Sans matériel côté fork : à valider par un
+testeur sur une vraie prise avec ntfy activé.
+
+- [ ] Notif de coupure sur seuil (planning, « Active pour », bouton physique) : la durée vient **en tête** — « 1h14 of charging — … » / « 1h14 de charge — … » / « 1h14 зарядки — … ».
+- [ ] Planning avec seuil posé par une version antérieure (texte « …après 1h14 ») : au lancement suivant, script réécrit **en place** (même id dans l'interface web, programmes inchangés), journal « texte de coupure mis à jour ».
+- [ ] Planning avec seuil sans `planEnd()` (antérieur à upstream 2.16.0) : réenregistré à l'identique au lancement, plus de double notif « planning terminé » après une coupure.
+- [ ] Planning **en cours** au lancement : jamais touché, journal « reporté », mis à niveau au lancement suivant.
+- [ ] Minuteur bouton armé avec texte périmé : réaligné au lancement, minuteur en cours conservé.
+- [ ] Second lancement le même jour : aucun appel de mise à niveau (journal muet).
+
+## Connexion chiffrée HTTPS (fork, lot C1)
+
+Épinglage du certificat des appareils qui imposent le HTTPS (firmware 2.x). Les premiers points
+demandent un vrai appareil ; le dernier utilise `tools/fake_shelly_https.py` (usage local seulement).
+
+- [ ] Ajout d'un appareil HTTPS : un dialogue montre l'empreinte du certificat ; elle est **identique** à celle de l'interface web de l'appareil.
+- [ ] Annuler dans ce dialogue : l'appareil n'est pas ajouté, rien n'est enregistré.
+- [ ] Confirmer : l'appareil est ajouté, sa tuile n'affiche **aucun bandeau** et répond (état, marche/arrêt).
+- [ ] Multiprise HTTPS : **un seul** dialogue pour tous les canaux, puis tous les canaux ajoutés.
+- [ ] Appareil avec une seconde adresse (IP 2) : l'épingle couvre aussi l'adresse 2, bascule sur l'IP 2 sans nouveau dialogue.
+- [ ] Certificat changé (réinitialisation de l'appareil ou remplacement) : la tuile affiche le bandeau « Certificat changé » (texte, pas seulement une couleur) ; le tap ouvre Modifier l'appareil, qui propose un dialogue « changé » avec la nouvelle empreinte.
+- [ ] Accepter le nouveau certificat : le bandeau disparaît, l'appareil répond de nouveau.
+- [ ] Oublier le certificat (Modifier l'appareil) : l'épingle est supprimée ; la tuile affiche « Connexion chiffrée à confirmer » jusqu'à une nouvelle confirmation.
+- [ ] Port 443 coupé (ou appareil injoignable en HTTPS) : la tuile passe en injoignable, **jamais** de repli en HTTP clair (journal de diagnostic : aucun appel `http://` vers cet appareil).
+- [ ] Sauvegarde puis restauration : l'épingle est conservée, aucun nouveau dialogue après restauration.
+- [ ] Démarrage à froid (appli tuée) directement sur le détail d'un appareil épinglé : les appels partent bien en HTTPS, jamais en HTTP.
+- [ ] Multiprise épinglée, dans un même passage par Modifier l'appareil : « Vérifier le certificat » → Faire confiance, puis renommer et Enregistrer (ou basculer le Cloud) : l'épingle est conservée sur tous les canaux (journal : appels en `https://`). Même chose dans l'autre sens : Oublier puis Enregistrer → l'épingle ne revient pas.
+- [ ] Mise à jour depuis une installation en base v20 (version précédant le lot C1) : appareils et réglages conservés, `certPin` vide (aucun bandeau HTTPS sur les appareils HTTP). Vérification manuelle uniquement : le projet n'a pas de banc de test de migration Room automatisé (spec § 5.2).
+- [ ] **Appareil Android réel** : un certificat changé est bien signalé « Certificat changé » (et non « injoignable ») — Conscrypt garde la `PinMismatchException` dans la chaîne des causes.
+- [ ] **Vrai Shelly firmware 2.x avec HTTPS imposé** : `POST /rpc` sur le port 80 répond par un 30x vers `https://` ; l'appareil est détecté et la tuile indique « connexion chiffrée à confirmer ».
+- [ ] Essai avec `tools/fake_shelly_https.py` (émulateur : `adb reverse tcp:80 tcp:8080` et `adb reverse tcp:443 tcp:8443`, ajout avec 127.0.0.1) : redirection 301 détectée, dialogue avec l'empreinte affichée par le script, marche/arrêt fonctionnel ; relancer le script sans option garde le même certificat (l'épingle reste valable) ; relancer avec `--rotate-cert` → bandeau « Certificat changé ».

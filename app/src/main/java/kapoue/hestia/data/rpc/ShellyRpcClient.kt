@@ -1,6 +1,7 @@
 package kapoue.hestia.data.rpc
 
 import kapoue.hestia.core.log.DiagnosticLogger
+import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.rpc.model.CheckForUpdateResult
 import kapoue.hestia.data.rpc.model.CloudConfigResult
 import kapoue.hestia.data.rpc.model.CloudStatusResult
@@ -42,9 +43,17 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.net.ConnectException
+import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
+import java.security.SecureRandom
+import java.security.cert.CertificateException
+import java.security.cert.X509Certificate
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLSocket
+import javax.net.ssl.X509TrustManager
 
 /**
  * Client JSON-RPC 2.0 pour les appareils Shelly Gen2+ (SPEC-V1 § 3).
@@ -60,9 +69,96 @@ class ShellyRpcClient @Inject constructor(
     private val httpClient: OkHttpClient,
     private val json: Json,
     private val logger: DiagnosticLogger,
+    private val access: DeviceAccessRegistry,
 ) {
     private val requestIds = java.util.concurrent.atomic.AtomicInteger(1)
     private val jsonMediaType = "application/json".toMediaType()
+
+    /**
+     * Client local qui ne suit **jamais** une redirection : une redirection vers HTTPS signale un
+     * appareil en HTTPS seul (firmware 2.0+), à faire confirmer par l'utilisateur ; la suivre
+     * reviendrait à accepter un certificat non épinglé, ou à envoyer la requête ailleurs.
+     */
+    private val localClient: OkHttpClient by lazy {
+        httpClient.newBuilder().followRedirects(false).followSslRedirects(false).build()
+    }
+
+    /** Clients HTTPS épinglés, un par couple adresse + épingle (`"$ip#$pin"`). */
+    private val pinnedClients = ConcurrentHashMap<String, OkHttpClient>()
+
+    /**
+     * Client HTTPS qui n'accepte que la clé publique [pin] pour [ip]. Le nom d'hôte attendu est
+     * l'adresse IP saisie : le certificat autosigné de l'appareil ne porte de toute façon aucun
+     * nom vérifiable, c'est l'épingle qui fait foi.
+     */
+    private fun pinnedClient(ip: String, pin: String): OkHttpClient =
+        pinnedClients.getOrPut("$ip#$pin") {
+            val trustManager = PinnedTrustManager(pin)
+            val sslContext = SSLContext.getInstance("TLS").apply {
+                init(null, arrayOf(trustManager), SecureRandom())
+            }
+            val expectedHost = hostOf(ip)
+            localClient.newBuilder()
+                .sslSocketFactory(sslContext.socketFactory, trustManager)
+                .hostnameVerifier { host, _ -> host == expectedHost }
+                .build()
+        }
+
+    /**
+     * Lit le certificat présenté par l'appareil **sans lui faire confiance** : la poignée de main
+     * TLS est interrompue dès le certificat capturé, aucune requête HTTP n'est envoyée. Sert à
+     * montrer l'empreinte à l'utilisateur avant qu'il décide de l'épingler (TOFU explicite).
+     */
+    suspend fun peekCertificate(ip: String): RpcResult<PeekedCertificate> = withContext(Dispatchers.IO) {
+        if (ip.startsWith(DeviceRepository.DEMO_IP_PREFIX)) {
+            logger.info(DiagnosticLogger.RPC, "TLS @ $ip → appareil démo, aucun appel réseau")
+            return@withContext RpcResult.Failure(RpcFailure.UNREACHABLE)
+        }
+        var captured: X509Certificate? = null
+        // Mémorise le certificat de tête puis refuse toujours : la session n'aboutit jamais.
+        val capturing = object : X509TrustManager {
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+                captured = chain?.firstOrNull()
+                throw CertificateException("Certificate captured, never trusted")
+            }
+
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {
+                throw CertificateException("Client certificates are not supported")
+            }
+
+            override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+        }
+        val startedAt = System.currentTimeMillis()
+        var failure: String? = null
+        try {
+            val sslContext = SSLContext.getInstance("TLS").apply { init(null, arrayOf(capturing), SecureRandom()) }
+            (sslContext.socketFactory.createSocket() as SSLSocket).use { socket ->
+                socket.soTimeout = PEEK_TIMEOUT_MS
+                socket.connect(InetSocketAddress(hostOf(ip), portOf(ip, HTTPS_PORT)), PEEK_TIMEOUT_MS)
+                socket.startHandshake()
+            }
+        } catch (e: IOException) {
+            // Attendu une fois le certificat capturé : le trust manager interrompt toujours la
+            // poignée de main. Sans capture, c'est un vrai échec (port fermé, pas de TLS…).
+            failure = e.javaClass.simpleName
+        } catch (e: SecurityException) {
+            // Accès au réseau local refusé (Android 17, ACCESS_LOCAL_NETWORK) : peut remonter ainsi
+            // plutôt qu'en IOException. Échec propre, jamais de plantage dans viewModelScope.
+            failure = "accès réseau local refusé"
+        }
+        val elapsed = System.currentTimeMillis() - startedAt
+        val cert = captured
+        if (cert == null) {
+            logger.warn(DiagnosticLogger.RPC, "TLS @ $ip → certificat illisible : ${failure ?: "aucun"} (${elapsed}ms)")
+            return@withContext RpcResult.Failure(RpcFailure.UNREACHABLE)
+        }
+        val peeked = PeekedCertificate(pin = CertPins.pinOf(cert), fingerprint = CertPins.fingerprintOf(cert))
+        logger.info(
+            DiagnosticLogger.RPC,
+            "TLS @ $ip → certificat lu, empreinte ${peeked.fingerprint.take(LOGGED_FINGERPRINT_CHARS)}… (${elapsed}ms)",
+        )
+        RpcResult.Success(peeked)
+    }
 
     /** État complet d'un canal switch. */
     suspend fun getSwitchStatus(ip: String, switchId: Int): RpcResult<SwitchStatusResult> =
@@ -522,26 +618,57 @@ class ShellyRpcClient @Inject constructor(
         params: JsonElement?,
         serializer: kotlinx.serialization.KSerializer<T>,
     ): RpcResult<T> = withContext(Dispatchers.IO) {
+        // Filet de sécurité du mode démo (2026-10-29) : aucune requête ne part jamais vers les
+        // adresses fictives, quel que soit l'appelant — upstream 2.17.0 a dû colmater isSmokeRelay
+        // et resyncSmokeRelay un par un (3 s d'attente chacun). Les chemins démo connus répondent
+        // en amont avec des données factices ; arriver ici trahit un oubli, d'où la trace.
+        if (ip.startsWith(DeviceRepository.DEMO_IP_PREFIX)) {
+            logger.info(DiagnosticLogger.RPC, "$method @ $ip → appareil démo, aucun appel réseau")
+            return@withContext RpcResult.Failure(RpcFailure.UNREACHABLE)
+        }
+        // Échec fermé : sans les épingles enregistrées, un appareil épinglé partirait en HTTP clair.
+        if (!access.ensureLoaded()) {
+            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → épingles HTTPS illisibles, appel refusé")
+            return@withContext RpcResult.Failure(RpcFailure.UNREACHABLE)
+        }
         val id = requestIds.getAndIncrement()
         val payload = json.encodeToString(RpcRequest.serializer(), RpcRequest(id, method, params))
+        // Adresse épinglée : HTTPS uniquement, avec ce seul certificat. Jamais de repli en HTTP.
+        val pin = access.pinFor(ip)
+        val (client, url) = if (pin != null) pinnedClient(ip, pin) to "https://$ip/rpc" else localClient to "http://$ip/rpc"
+        // Protocole tracé sur chaque ligne (http/https) : TESTS.md vérifie « aucun appel http:// »
+        // vers un appareil épinglé à partir du seul journal de diagnostic.
+        val target = if (pin != null) "https://$ip" else "http://$ip"
         val request = Request.Builder()
-            .url("http://$ip/rpc")
+            .url(url)
             .post(payload.toRequestBody(jsonMediaType))
             .build()
 
         val startedAt = System.currentTimeMillis()
         try {
-            httpClient.newCall(request).execute().use { response ->
+            client.newCall(request).execute().use { response ->
                 val elapsed = System.currentTimeMillis() - startedAt
+                if (response.isRedirect) {
+                    val location = response.header("Location").orEmpty()
+                    if (location.startsWith("https://", ignoreCase = true)) {
+                        logger.warn(DiagnosticLogger.RPC, "$method @ $target → redirigé vers HTTPS, certificat à confirmer (${elapsed}ms)")
+                        access.report(ip, AccessIssue.HTTPS_REQUIRED)
+                        return@withContext RpcResult.Failure(RpcFailure.HTTPS_REQUIRED)
+                    }
+                    logger.warn(DiagnosticLogger.RPC, "$method @ $target → redirection inattendue ${response.code} (${elapsed}ms)")
+                    return@withContext RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE)
+                }
+                // L'appareil a répondu sans redirection : tout problème d'accès signalé est levé.
+                access.report(ip, null)
                 val body = response.body?.string().orEmpty()
                 val envelope = runCatching { json.decodeFromString(RpcEnvelope.serializer(), body) }
                     .getOrElse {
-                        logger.warn(DiagnosticLogger.RPC, "$method @ $ip → réponse illisible (${elapsed}ms)")
+                        logger.warn(DiagnosticLogger.RPC, "$method @ $target → réponse illisible (${elapsed}ms)")
                         return@withContext RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE)
                     }
 
                 envelope.error?.let { err ->
-                    logger.warn(DiagnosticLogger.RPC, "$method @ $ip → erreur ${err.code} (${elapsed}ms)")
+                    logger.warn(DiagnosticLogger.RPC, "$method @ $target → erreur ${err.code} (${elapsed}ms)")
                     return@withContext RpcResult.RpcError(err.code, err.message)
                 }
 
@@ -556,7 +683,7 @@ class ShellyRpcClient @Inject constructor(
 
                 val decoded = runCatching { json.decodeFromJsonElement(serializer, result) }
                     .getOrElse {
-                        logger.warn(DiagnosticLogger.RPC, "$method @ $ip → résultat inattendu (${elapsed}ms)")
+                        logger.warn(DiagnosticLogger.RPC, "$method @ $target → résultat inattendu (${elapsed}ms)")
                         return@withContext RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE)
                     }
 
@@ -565,24 +692,41 @@ class ShellyRpcClient @Inject constructor(
                 // routine, au détriment des entrées vraiment utiles à un diagnostic. Les échecs
                 // (avertissements ci-dessus/ci-dessous) restent journalisés, eux, dans tous les cas.
                 if (method !in QUIET_ON_SUCCESS) {
-                    logger.info(DiagnosticLogger.RPC, "$method @ $ip → ${response.code} (${elapsed}ms)")
+                    logger.info(DiagnosticLogger.RPC, "$method @ $target → ${response.code} (${elapsed}ms)")
                 }
                 RpcResult.Success(decoded)
             }
         } catch (e: SocketTimeoutException) {
-            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → timeout")
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → timeout")
             RpcResult.Failure(RpcFailure.TIMEOUT)
         } catch (e: java.io.InterruptedIOException) {
             // callTimeout global d'OkHttp.
-            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → timeout (callTimeout)")
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → timeout (callTimeout)")
             RpcResult.Failure(RpcFailure.TIMEOUT)
         } catch (e: ConnectException) {
-            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → injoignable")
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → injoignable")
             RpcResult.Failure(RpcFailure.UNREACHABLE)
         } catch (e: IOException) {
-            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → échec réseau : ${e.javaClass.simpleName}")
+            if (pin != null && e.hasPinMismatch()) {
+                // Certificat différent de l'épingle : refus net, aucun nouvel essai (ni HTTP ni autre).
+                logger.warn(DiagnosticLogger.RPC, "$method @ $target → certificat différent de l'épingle, appel refusé")
+                access.report(ip, AccessIssue.CERT_CHANGED)
+                return@withContext RpcResult.Failure(RpcFailure.CERT_CHANGED)
+            }
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → échec réseau : ${e.javaClass.simpleName}")
             RpcResult.Failure(RpcFailure.UNREACHABLE)
         }
+    }
+
+    /** Cherche une [PinMismatchException] dans la chaîne de causes (bornée, contre les cycles). */
+    private fun Throwable.hasPinMismatch(): Boolean {
+        var current: Throwable? = this
+        repeat(MAX_CAUSE_DEPTH) {
+            val t = current ?: return false
+            if (t is PinMismatchException) return true
+            current = t.cause
+        }
+        return false
     }
 
     private companion object {
@@ -597,5 +741,11 @@ class ShellyRpcClient @Inject constructor(
             "Switch.GetStatus", "Light.GetStatus", "Cover.GetStatus", "Schedule.List", "Script.List", "Script.GetCode", "Shelly.GetStatus",
         )
         const val MAX_COMPONENT_PAGES = 32
+        const val HTTPS_PORT = 443
+        const val PEEK_TIMEOUT_MS = 5_000
+        const val MAX_CAUSE_DEPTH = 8
+
+        /** Empreintes tronquées dans le journal (≤ 11 caractères, « AB:CD:EF:01 »). */
+        const val LOGGED_FINGERPRINT_CHARS = 11
     }
 }

@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatPower
+import kapoue.hestia.data.rpc.AccessIssue
 import kapoue.hestia.ui.theme.stateColors
 
 /**
@@ -41,6 +42,7 @@ fun LightTile(
     onToggle: (Boolean) -> Unit,
     onOpenDetail: () -> Unit,
     onOpenFirmware: () -> Unit,
+    accessIssue: AccessIssue? = null,
 ) {
     val colors = MaterialTheme.stateColors
     val status = tile.lightStatus ?: LightStatus.Loading
@@ -80,6 +82,9 @@ fun LightTile(
                 )
                 Spacer(Modifier.weight(1f))
                 RoundToggleButton(enabled = online != null, checked = online?.on == true, onClick = { onToggle(online?.on != true) })
+            }
+            if (accessIssue != null) {
+                AccessIssueBanner(issue = accessIssue, onClick = onOpenFirmware)
             }
             if (tile.device.firmwareUpdateAvailable) {
                 FirmwareUpdateBanner(onClick = onOpenFirmware)

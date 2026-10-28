@@ -220,7 +220,8 @@ class SettingsViewModel @Inject constructor(
      */
     fun renameChannel(device: Device, newName: String) {
         viewModelScope.launch {
-            val updated = device.copy(name = newName)
+            // Ligne relue en base : [device] vient de l'écran et peut dater d'avant une épingle HTTPS.
+            val updated = (repository.getDevice(device.id) ?: return@launch).copy(name = newName)
             repository.updateDevice(updated)
             repository.resyncDeviceName(updated)
         }

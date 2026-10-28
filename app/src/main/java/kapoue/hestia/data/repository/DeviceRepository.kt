@@ -10,6 +10,7 @@ import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.dao.PausedPlanningDao
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
+import kapoue.hestia.data.notifications.NtfyScriptSupport
 import kapoue.hestia.data.notifications.PendingTimer
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.presence.ButtonTimerScriptGenerator
@@ -18,7 +19,10 @@ import kapoue.hestia.data.presence.DeviceClock
 import kapoue.hestia.data.presence.PresenceScriptGenerator
 import kapoue.hestia.data.presence.SmokeRelayScriptGenerator
 import kapoue.hestia.data.presence.TimerNotifyScriptGenerator
+import kapoue.hestia.data.rpc.AccessIssue
 import kapoue.hestia.data.rpc.ChannelControl
+import kapoue.hestia.data.rpc.DeviceAccessRegistry
+import kapoue.hestia.data.rpc.PeekedCertificate
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcFailure
 import kapoue.hestia.data.rpc.RpcResult
@@ -54,7 +58,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -101,9 +107,13 @@ class DeviceRepository @Inject constructor(
     private val cloudClient: ShellyCloudClient,
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
+    private val accessRegistry: DeviceAccessRegistry,
     @ApplicationContext private val context: Context,
     @ApplicationScope private val appScope: CoroutineScope,
 ) {
+    /** Un Unique expiré n'est supprimé qu'une fois, même vu par plusieurs relevés à la fois. */
+    private val expiredOnceGuard = ExpiredOnceGuard()
+
     // --- Bascule automatique entre les 1 ou 2 adresses IP d'un appareil ---
 
     /** Cache mémoire de l'emplacement (1 ou 2) qui a répondu en dernier, pour ne pas relire la base à chaque appel. */
@@ -163,7 +173,10 @@ class DeviceRepository @Inject constructor(
      * valable pour tous les écrans qui listent les appareils (Tableau, Réglages…) puisqu'ils
      * passent tous par [observeDevices] ou [getDevicesOnce].
      */
-    fun observeDevices(): Flow<List<Device>> = deviceDao.observeAll().map { filterForDemo(it) }
+    fun observeDevices(): Flow<List<Device>> = deviceDao.observeAll()
+        // Le registre relit lui-même la base (jamais cette émission, peut-être déjà périmée).
+        .onEach { reloadSavedPins("liste des appareils") }
+        .map { filterForDemo(it) }
 
     private fun filterForDemo(devices: List<Device>): List<Device> {
         val demo = devices.filter { it.ipAddress.startsWith(DEMO_IP_PREFIX) }
@@ -181,7 +194,63 @@ class DeviceRepository @Inject constructor(
     fun observeDevice(id: Long): Flow<Device?> = deviceDao.observeById(id)
 
     /** Même filtrage démo que [observeDevices] — voir sa doc. */
-    suspend fun getDevicesOnce(): List<Device> = filterForDemo(deviceDao.getAllOnce())
+    suspend fun getDevicesOnce(): List<Device> {
+        val all = deviceDao.getAllOnce()
+        reloadSavedPins("liste des appareils")
+        return filterForDemo(all)
+    }
+
+    // --- Épingle HTTPS (lot C1, fork) ---
+
+    /** Problèmes d'accès par adresse (HTTPS requis, certificat changé). */
+    val accessIssues: StateFlow<Map<String, AccessIssue>> get() = accessRegistry.issues
+
+    suspend fun peekCertificate(ip: String): RpcResult<PeekedCertificate> = rpcClient.peekCertificate(ip)
+
+    fun trustCertificateProvisionally(ip: String, pin: String) = accessRegistry.trustProvisionally(ip, pin)
+
+    fun forgetProvisionalCertificate(ip: String) = accessRegistry.forgetProvisional(ip)
+
+    /**
+     * Fait relire au registre les épingles en base (lecture sérialisée par le registre : une
+     * lecture lancée après une écriture validée la voit toujours). En cas d'échec, le registre
+     * garde ses épingles précédentes ; on le trace sans plus.
+     */
+    private suspend fun reloadSavedPins(reason: String) {
+        if (!accessRegistry.reload()) {
+            logger.warn(DiagnosticLogger.DB, "Épingles HTTPS illisibles ($reason), épingles précédentes conservées")
+        }
+    }
+
+    /**
+     * Écrit [pin] (ou null) sur tous les canaux de [ip] par une requête ciblée (jamais de réécriture
+     * de ligne entière), fait relire le registre, efface les problèmes.
+     */
+    private suspend fun writePin(device: Device, pin: String?): Int {
+        val n = deviceDao.updateCertPin(device.ipAddress, pin)
+        reloadSavedPins("épingle modifiée")
+        accessRegistry.report(device.ipAddress, null)
+        device.ip2Address?.takeIf { it.isNotBlank() }?.let { accessRegistry.report(it, null) }
+        return n
+    }
+
+    suspend fun trustCertificate(device: Device, pin: String) {
+        val n = writePin(device, pin)
+        logger.info(DiagnosticLogger.RPC, "Certificat accepté ${device.ipAddress} ($n canal/canaux)")
+    }
+
+    suspend fun commitProvisionalCertificate(ip: String) {
+        val pin = accessRegistry.pinFor(ip) ?: return
+        val device = deviceDao.getAllOnce().firstOrNull { it.ipAddress == ip } ?: return
+        val n = writePin(device, pin)
+        accessRegistry.forgetProvisional(ip)
+        logger.info(DiagnosticLogger.RPC, "Certificat provisoire enregistré $ip ($n canal/canaux)")
+    }
+
+    suspend fun forgetCertificate(device: Device) {
+        val n = writePin(device, null)
+        logger.info(DiagnosticLogger.RPC, "Certificat oublié ${device.ipAddress} ($n canal/canaux)")
+    }
 
     suspend fun getDevice(id: Long): Device? = deviceDao.getById(id)
 
@@ -632,7 +701,7 @@ class DeviceRepository @Inject constructor(
         val topic = ntfyTopic()
         val code = ChargeScriptGenerator.generateSupervisor(
             otherChannels + config, selfId = scriptId, ntfyTopic = topic,
-            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
+            ntfyCutoffBody = if (topic != null) cutoffBodyTemplate() else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         // enable=false (2026-08-22) : script transitoire — le minuteur natif qu'il surveille ne
@@ -1069,7 +1138,7 @@ class DeviceRepository @Inject constructor(
             configs,
             ntfyTopic = topic,
             ntfyEndBody = if (topic != null) context.getString(R.string.notif_button_timer_ended) else "",
-            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
+            ntfyCutoffBody = if (topic != null) cutoffBodyTemplate() else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         // enable:true (contrairement au script de coupure d'un planning) : doit redémarrer seul
@@ -1211,7 +1280,7 @@ class DeviceRepository @Inject constructor(
             configs,
             ntfyTopic = topic,
             ntfyEndBody = if (topic != null) context.getString(R.string.notif_button_timer_ended) else "",
-            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
+            ntfyCutoffBody = if (topic != null) cutoffBodyTemplate() else "",
             initialStateJson = stateJson,
         )
         rpcClient.scriptStop(ip, scriptId).errorOrNull()?.let {
@@ -1249,9 +1318,10 @@ class DeviceRepository @Inject constructor(
             is RpcResult.Success -> {
                 val all = reconstructPlannings(r.value.jobs, channelControlFor(device), device.switchId)
                 val (expired, active) = all.partition { it.isExpiredOnce() }
-                if (expired.isNotEmpty()) {
-                    logger.info(DiagnosticLogger.RPC, "Nettoyage de ${expired.size} planning(s) Unique expiré(s)")
-                    expired.forEach { p ->
+                val toClean = expiredOnceGuard.claim(ip, expired) { "${it.onJobId}#${it.offJobId}" }
+                if (toClean.isNotEmpty()) {
+                    logger.info(DiagnosticLogger.RPC, "Nettoyage de ${toClean.size} planning(s) Unique expiré(s)")
+                    toClean.forEach { p ->
                         p.onJobId?.let { rpcClient.scheduleDelete(ip, it) }
                         p.offJobId?.let { rpcClient.scheduleDelete(ip, it) }
                         p.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
@@ -1527,6 +1597,29 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
+     * Texte de la notif de coupure sur seuil, durée de charge en tête (2026-10-29, idée d'upstream
+     * 2.18.0) : la durée n'est connue qu'à l'exécution du script, [NtfyScriptSupport.DURATION_MARKER]
+     * lui garde sa place dans la phrase traduite (voir [NtfyScriptSupport.bodyWithDuration]).
+     */
+    private fun cutoffBodyTemplate(): String =
+        context.getString(R.string.notif_cutoff_triggered_with_duration, NtfyScriptSupport.DURATION_MARKER)
+
+    /**
+     * Code du script de coupure d'un planning, partagé entre sa création ([createCutoffScript]) et
+     * sa réécriture en place ([upgradeCutoffScriptsIfDue]) : les deux produisent exactement le
+     * même script pour les mêmes réglages.
+     */
+    private fun cutoffScriptCode(scriptId: Int, switchId: Int, thresholdW: Int, ntfyTitle: String, planEndBody: String): String {
+        val topic = ntfyTopic()
+        return ChargeScriptGenerator.generate(
+            switchId, thresholdW, belowSec = 60, selfId = scriptId,
+            ntfyTopic = topic, ntfyTitle = ntfyTitle,
+            ntfyBody = if (topic != null) cutoffBodyTemplate() else "",
+            planEndBody = planEndBody,
+        )
+    }
+
+    /**
      * Crée un script de coupure sur seuil **dédié** (jamais partagé) avec le seuil donné. Nom
      * unique par appel : le script `hestia_charge` du minuteur peut rester sur l'appareil (il ne
      * se supprime jamais lui-même, seulement s'auto-désactive), un nom identique ferait échouer
@@ -1544,13 +1637,7 @@ class DeviceRepository @Inject constructor(
         // scripts activés — même raison que ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME, voir
         // upsertChargeSupervisorChannel.
         val id = rpcClient.scriptCreate(ip, ChargeScriptGenerator.uniquePlanningScriptName()).getOrNull()?.id ?: return null
-        val topic = ntfyTopic()
-        val code = ChargeScriptGenerator.generate(
-            switchId, thresholdW, belowSec = 60, selfId = id,
-            ntfyTopic = topic, ntfyTitle = ntfyTitle,
-            ntfyBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
-            planEndBody = planEndBody,
-        )
+        val code = cutoffScriptCode(id, switchId, thresholdW, ntfyTitle, planEndBody)
         rpcClient.scriptPutCode(ip, id, code).errorOrNull()?.let {
             rpcClient.scriptDelete(ip, id)
             return null
@@ -1859,6 +1946,81 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
+     * Met à niveau, sans action de l'utilisateur, les scripts de coupure déjà posés sur les prises
+     * (2026-10-29, idées d'upstream 2.16.2 et 2.18.0) — sinon rien ne les rattraperait jamais
+     * (« un utilisateur lambda ne va pas y penser ») :
+     *
+     * - planning avec seuil sans `planEnd()` (antérieur à upstream 2.16.0, double notif après une
+     *   coupure) : **réenregistré à l'identique** via [updatePlanning] ;
+     * - planning au texte de coupure périmé (durée en fin de phrase) : script **réécrit en place**,
+     *   même id, programmes intacts ;
+     * - minuteur bouton au texte périmé : **réaligné** en gardant sa mémoire (minuteur armé compris).
+     *   Le script superviseur « Active pour » se redéploie déjà tout seul au prochain armement.
+     *
+     * Décision par script dans [CutoffScriptUpgrade]. Jamais touché : un planning **en cours**
+     * (reporté au lancement suivant), un planning dont le seuil n'a pas pu être relu (le
+     * réenregistrer sans seuil supprimerait la coupure), les appareils démo. Une fois par jour au
+     * plus, au lancement, après [checkFirmwareUpdatesIfDue] ; le passage n'est marqué fait que si
+     * rien n'a été reporté ou n'a échoué. Un conflit avec un autre planning ne se résoudra pas tout
+     * seul : retenté le lendemain seulement, pour ne pas remplir le journal.
+     */
+    suspend fun upgradeCutoffScriptsIfDue() {
+        val stamp = "${LocalDate.now()}#${ChargeScriptGenerator.NOTIF_VERSION}.${ButtonTimerScriptGenerator.NOTIF_VERSION}"
+        if (appPreferences.lastCutoffUpgradeStamp == stamp) return
+        var complete = true
+        val devices = getDevicesOnce().filter { it.supportsSwitch && !it.ipAddress.startsWith(DEMO_IP_PREFIX) }
+        for (device in devices) {
+            val plannings = (getPlannings(device) as? RpcResult.Success)?.value ?: continue
+            for (p in plannings) {
+                if (p.isPresence) continue
+                val scriptId = p.cutoffScriptId ?: continue
+                val threshold = p.cutoffThresholdW ?: continue
+                val ip = currentIp(device)
+                val code = rpcClient.scriptGetCode(ip, scriptId).getOrNull()?.data ?: continue
+                val label = "%02d:%02d-%02d:%02d".format(p.startHour, p.startMinute, p.endHour, p.endMinute)
+                when (CutoffScriptUpgrade.decide(code, p.isActiveNow())) {
+                    CutoffScriptUpgrade.NONE -> Unit
+                    CutoffScriptUpgrade.POSTPONE -> {
+                        complete = false
+                        logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) à mettre à niveau, en cours : reporté")
+                    }
+                    CutoffScriptUpgrade.REWRITE_TEXT -> {
+                        val endBody = ntfyPlanningTexts(device, p.startHour, p.startMinute, p.endHour, p.endMinute, threshold)?.endBody.orEmpty()
+                        val newCode = cutoffScriptCode(scriptId, device.switchId, threshold, device.name, endBody)
+                        if (rpcClient.scriptPutCode(ip, scriptId, newCode).errorOrNull() == null) {
+                            logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) : texte de coupure mis à jour (durée en tête)")
+                        } else {
+                            complete = false
+                            logger.warn(DiagnosticLogger.RPC, "Planning $label (${device.name}) : texte de coupure non mis à jour, retenté au prochain lancement")
+                        }
+                    }
+                    CutoffScriptUpgrade.RESAVE -> when (val r = updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, threshold)) {
+                        CreatePlanningResult.Success ->
+                            logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) mis à niveau (fin de planning sans double notif)")
+                        is CreatePlanningResult.Conflict ->
+                            logger.warn(DiagnosticLogger.RPC, "Planning $label (${device.name}) : mise à niveau impossible, chevauche un autre planning — retentée demain")
+                        else -> {
+                            complete = false
+                            logger.warn(DiagnosticLogger.RPC, "Planning $label (${device.name}) : mise à niveau refusée ($r), retentée au prochain lancement")
+                        }
+                    }
+                }
+            }
+        }
+        // Minuteur bouton au texte périmé : un passage par appareil physique (script partagé).
+        for ((_, members) in devices.filter { it.hasScripting }.groupBy { it.ipAddress }) {
+            val (ip, list) = withIp(members.first()) { i -> rpcClient.scriptList(i) }
+            val button = list.getOrNull()?.scripts?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME && it.running } ?: continue
+            val code = rpcClient.scriptGetCode(ip, button.id).getOrNull()?.data ?: continue
+            if (ButtonTimerScriptGenerator.parseNotifVersion(code) >= ButtonTimerScriptGenerator.NOTIF_VERSION) continue
+            // Issue journalisée par realignButtonTimerFlash elle-même ; un échec est retenté demain.
+            logger.info(DiagnosticLogger.RPC, "Minuteur bouton @ $ip : texte de coupure périmé, réalignement")
+            realignButtonTimerFlash(ip, button.id)
+        }
+        if (complete) appPreferences.lastCutoffUpgradeStamp = stamp
+    }
+
+    /**
      * Vérification automatique du firmware — une fois par jour maximum, au lancement de l'appli,
      * **uniquement** pour les appareils avec le Cloud Shelly déjà activé (le consentement à un
      * contact du firmware Shelly est déjà donné pour ceux-là — voir CLAUDE.md, nouvelle exception
@@ -1879,11 +2041,8 @@ class DeviceRepository @Inject constructor(
             if (!cloudEnabled) continue
             val result = checkFirmwareUpdate(first)
             val available = result is FirmwareCheckResult.UpdateAvailable
-            for (member in members) {
-                if (member.firmwareUpdateAvailable != available) {
-                    deviceDao.update(member.copy(firmwareUpdateAvailable = available))
-                }
-            }
+            // Lignes relues en base : l'instantané date d'avant les appels réseau ci-dessus.
+            deviceDao.updateFresh(members.map { it.id }) { it.copy(firmwareUpdateAvailable = available) }
         }
         appPreferences.lastFirmwareCheckDate = today
     }
@@ -1910,9 +2069,8 @@ class DeviceRepository @Inject constructor(
     }
 
     private suspend fun clearFirmwareUpdateAvailable(device: Device) {
-        for (member in listOf(device) + siblingsSharingIp(device)) {
-            if (member.firmwareUpdateAvailable) deviceDao.update(member.copy(firmwareUpdateAvailable = false))
-        }
+        val ids = (listOf(device) + siblingsSharingIp(device)).map { it.id }
+        deviceDao.updateFresh(ids) { it.copy(firmwareUpdateAvailable = false) }
     }
 
     /**
@@ -1953,12 +2111,11 @@ class DeviceRepository @Inject constructor(
     /**
      * Met en cache le MAC (« Cloud ID ») sur tous les canaux d'un même appareil physique — lu une
      * fois en local, il reste disponible ensuite même hors réseau, pour le repli cloud (lot 3).
-     * N'écrit que les canaux dont la valeur a effectivement changé.
+     * N'écrit que les canaux dont la valeur a effectivement changé. [members] ne sert qu'à désigner
+     * les lignes : elles sont relues en base avant écriture (une copie périmée effacerait l'épingle).
      */
     suspend fun cacheCloudId(members: List<Device>, macId: String) {
-        for (device in members) {
-            if (device.cloudId != macId) deviceDao.update(device.copy(cloudId = macId))
-        }
+        deviceDao.updateFresh(members.map { it.id }) { it.withCloudId(macId) }
     }
 
     /** Active/désactive le canal Cloud du firmware. Toujours à la demande explicite de l'utilisateur. */
@@ -2081,10 +2238,6 @@ class DeviceRepository @Inject constructor(
         val physicalName = deviceInfoResult.getOrNull()?.name?.takeIf { it.isNotBlank() }
         val monoChannel = members.size == 1
         for (device in relevant) {
-            var updated = device
-            if (physicalName != null && physicalName != updated.deviceName) {
-                updated = updated.copy(deviceName = physicalName)
-            }
             val channelName = when (channelNameRpc(device)) {
                 ChannelNameRpc.SWITCH -> rpcClient.getSwitchConfig(ip, device.switchId).getOrNull()?.name
                 ChannelNameRpc.LIGHT -> lightRpc.getConfig(ip, device.switchId).getOrNull()?.name
@@ -2093,12 +2246,19 @@ class DeviceRepository @Inject constructor(
             }?.takeIf { it.isNotBlank() }
             // Un variateur garde le nom de son canal lu à l'ajout : pas de repli sur le nom physique.
             val resolvedName = channelName ?: physicalName.takeIf { monoChannel && !device.isLight && !device.isCover }
-            if (resolvedName != null && resolvedName != updated.name) {
-                updated = updated.copy(name = resolvedName)
+            // Ligne relue en base : [device] date d'avant les appels réseau (épingle HTTPS comprise).
+            val written = deviceDao.updateFresh(listOf(device.id)) { current ->
+                var updated = current
+                if (physicalName != null && physicalName != updated.deviceName) {
+                    updated = updated.copy(deviceName = physicalName)
+                }
+                if (resolvedName != null && resolvedName != updated.name) {
+                    updated = updated.copy(name = resolvedName)
+                }
+                updated
             }
-            if (updated != device) {
-                deviceDao.update(updated)
-                logger.info(DiagnosticLogger.DB, "Nom resynchronisé depuis l'appareil : ${device.name} → ${updated.name}")
+            if (written > 0) {
+                logger.info(DiagnosticLogger.DB, "Nom resynchronisé depuis l'appareil : ${device.name} → ${resolvedName ?: device.name}")
             }
         }
     }
@@ -2168,7 +2328,9 @@ class DeviceRepository @Inject constructor(
      * Met à jour les champs partagés d'un appareil physique (nom, adresses IP, type) sur **tous**
      * ses canaux d'un coup — jamais leurs noms de canal individuels ([Device.name], laissés tels
      * quels). Évite qu'une IP modifiée sur un seul canal d'un bloc multi-canaux laisse les autres
-     * pointer sur l'ancienne (ils partagent tous la même prise physique).
+     * pointer sur l'ancienne (ils partagent tous la même prise physique). [members] ne sert qu'à
+     * désigner les lignes : elles sont relues en base avant écriture, jamais recopiées depuis un
+     * instantané d'écran (qui effacerait une épingle HTTPS acceptée depuis, ou la ferait revenir).
      */
     suspend fun updateDeviceGroup(
         members: List<Device>,
@@ -2179,17 +2341,8 @@ class DeviceRepository @Inject constructor(
         ip2Name: String?,
         type: DeviceType,
     ) {
-        for (device in members) {
-            deviceDao.update(
-                device.copy(
-                    deviceName = deviceName,
-                    ipAddress = ipAddress,
-                    ip2Address = ip2Address,
-                    ipName = ipName,
-                    ip2Name = ip2Name,
-                    type = type,
-                ),
-            )
+        deviceDao.updateFresh(members.map { it.id }) {
+            it.withSharedFields(deviceName, ipAddress, ip2Address, ipName, ip2Name, type)
         }
     }
 
@@ -2293,8 +2446,9 @@ class DeviceRepository @Inject constructor(
      * façon strictement séquentielle pour refléter ce nouvel ordre.
      */
     suspend fun reorderDevices(orderedDevices: List<Device>) {
+        // Lignes relues en base : la liste vient de l'écran et peut être périmée.
         orderedDevices.forEachIndexed { index, device ->
-            if (device.position != index) deviceDao.update(device.copy(position = index))
+            if (device.position != index) deviceDao.updateFresh(listOf(device.id)) { it.copy(position = index) }
         }
     }
 
@@ -2545,6 +2699,8 @@ class DeviceRepository @Inject constructor(
      * physique (même IP, script partagé).
      */
     suspend fun isSmokeRelay(device: Device): Boolean {
+        // Appareils démo : jamais relais (le transport refuse de toute façon leurs adresses).
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return false
         val (_, result) = withIp(device) { ip -> rpcClient.scriptList(ip) }
         return result.getOrNull()?.scripts?.any { it.name == SmokeRelayScriptGenerator.SCRIPT_NAME } == true
     }
@@ -2566,7 +2722,8 @@ class DeviceRepository @Inject constructor(
 
     /** @return les détecteurs réellement joints (webhooks reposés ou confirmés sans changement) — pas ceux restés injoignables. */
     private suspend fun resyncSmokeRelayInternal(): Set<Long> {
-        val all = getDevicesOnce()
+        // Jamais de relais à déployer sur des appareils démo, ni de détecteur démo à rebrancher.
+        val all = getDevicesOnce().filterNot { it.ipAddress.startsWith(DEMO_IP_PREFIX) }
         val detectors = all.filter { it.type == DeviceType.SMOKE_DETECTOR }
         if (detectors.isEmpty()) return emptySet()
 

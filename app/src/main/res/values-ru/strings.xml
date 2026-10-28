@@ -129,7 +129,7 @@
     <string name="notif_timer_ended">Таймер %1$s завершён</string>
     <string name="notif_cutoff_triggered">Отключено (мощность ниже порога)</string>
     <!-- Préfixe seul : la durée (« 1h32 », « 45min ») est ajoutée après une espace par le script généré. -->
-    <string name="notif_cutoff_triggered_with_duration">Отключено (мощность ниже порога) через</string>
+    <string name="notif_cutoff_triggered_with_duration">%1$s зарядки — отключено (мощность ниже порога)</string>
     <string name="notif_ntfy_presence_started">Имитация присутствия запущена</string>
     <string name="notif_ntfy_presence_ended">Имитация присутствия остановлена</string>
     <string name="notif_button_timer_ended">Таймер кнопки завершён</string>
@@ -211,6 +211,15 @@
     <string name="error_timeout">Устройство не ответило вовремя. Проверь сеть и попробуй ещё раз.</string>
     <string name="error_not_shelly">Устройство по этому адресу не отвечает как Shelly Gen2 или новее.</string>
     <string name="error_gen1_unsupported">Это устройство Shelly Gen1, оно не поддерживается. Поддерживаются только Gen2 и новее.</string>
+    <string name="error_https_required">Это устройство требует зашифрованного подключения (HTTPS). Открой «Изменить устройство», чтобы проверить его сертификат и доверять ему.</string>
+    <string name="error_cert_changed">Сертификат безопасности этого устройства изменился. Если ты сбрасывал устройство, открой «Изменить устройство» и подтверди новый; иначе проверь свою сеть.</string>
+    <string name="tls_peek_failed">Не удалось прочитать сертификат устройства. Проверь, что оно включено и подключено к той же сети Wi-Fi.</string>
+    <string name="tls_dialog_title">Зашифрованное соединение</string>
+    <string name="tls_dialog_message">Это устройство принимает только зашифрованные соединения (HTTPS) с сертификатом, выпущенным Shelly, который твой телефон не может проверить сам. Убедись, что отпечаток совпадает с показанным в веб-интерфейсе устройства, и доверяй ему: Hestia будет принимать только этот сертификат.</string>
+    <string name="tls_dialog_message_changed">Сертификат этого устройства не совпадает с тем, который ты принял. Это нормально после сброса к заводским настройкам; иначе кто-то может выдавать себя за устройство. Доверяй новому, только если ты сбрасывал устройство.</string>
+    <string name="tls_dialog_fingerprint">Отпечаток (SHA-256):</string>
+    <string name="tls_dialog_trust">Доверять</string>
+    <string name="tls_dialog_cancel">Отмена</string>
     <string name="error_unsupported_cover">Это устройство настроено как контроллер штор, Hestia пока его не поддерживает. Если это 2PM, переключите его в режим реле в веб-интерфейсе устройства.</string>
     <string name="error_unsupported_color_light">Этот контроллер освещения работает в цветном режиме, Hestia его пока не поддерживает. Диммеры (белый свет) поддерживаются.</string>
     <string name="error_unsupported_energy_meter">Это счётчик электроэнергии без реле, Hestia пока их не поддерживает.</string>
@@ -365,6 +374,8 @@
     <string name="firmware_beta_only">%1$s: установлена последняя версия (%2$s). Доступна бета-версия (%3$s) — Hestia предлагает только стабильные обновления.</string>
     <string name="firmware_check_error">Не удалось проверить. Убедись, что устройство доступно.</string>
     <string name="tile_firmware_update_banner">Есть обновление</string>
+    <string name="tile_tls_banner_required">Подтверди шифрованное соединение</string>
+    <string name="tile_tls_banner_changed">Сертификат изменился</string>
     <string name="firmware_install_button">Установить обновление</string>
     <string name="firmware_install_confirm_title">Установить обновление?</string>
     <string name="firmware_install_confirm_message">Устройство перезагрузится, чтобы применить обновление: всё, что к нему подключено, обесточится на несколько секунд. Не отключай его от сети во время обновления.</string>
@@ -592,4 +603,11 @@
     <string name="cover_event_action">Действие</string>
     <string name="cover_event_forget_title">Забыть это приостановленное событие?</string>
     <string name="cover_event_forget_message">Оно будет удалено навсегда, возобновить его будет нельзя.</string>
+    <string name="tls_section_title">Зашифрованное соединение (HTTPS)</string>
+    <string name="tls_section_trusted">Это устройство использует HTTPS. Его сертификат был принят при первом контакте; любой другой сертификат отклоняется.</string>
+    <string name="tls_section_required">Это устройство требует HTTPS. Доверься его сертификату, чтобы Hestia могла к нему подключиться.</string>
+    <string name="tls_section_changed">Сертификат изменился с тех пор, как ты его принял. Hestia не будет подключаться, пока ты не проверишь и не подтвердишь новый.</string>
+    <string name="tls_section_check">Проверить сертификат</string>
+    <string name="tls_section_forget">Забыть сертификат</string>
+    <string name="tls_forget_confirm">Hestia снова будет обращаться к этому устройству по обычному HTTP. Делай это, только если ты отключил HTTPS на устройстве.</string>
 </resources>

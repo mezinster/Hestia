@@ -31,8 +31,13 @@ object ChargeScriptGenerator {
      * qu'aucune action dans l'appli ne le rattrape jamais (retour David : « un utilisateur lambda
      * ne va pas redémarrer sa prise pour ça »). [parseNotifVersion] détecte ce cas pour forcer un
      * vrai redéploiement à la place.
+     *
+     * Version 2 (2026-10-29, numérotation propre au fork) : durée de charge **en tête** de la notif
+     * de coupure (« 1h14 de charge — … », idée d'upstream 2.18.0). Marqueur posé aussi, depuis,
+     * sur les scripts de coupure des plannings ([generate]), réécrits en place par
+     * `DeviceRepository.upgradeCutoffScriptsIfDue`.
      */
-    const val NOTIF_VERSION = 1
+    const val NOTIF_VERSION = 2
     private const val NOTIF_VERSION_MARKER = "// hestia_notif_ver:"
 
     /** 0 = marqueur absent, donc forcément une version antérieure à son introduction. */
@@ -40,6 +45,14 @@ object ChargeScriptGenerator {
         val line = code.lineSequence().firstOrNull { it.trimStart().startsWith(NOTIF_VERSION_MARKER) } ?: return 0
         return line.trim().removePrefix(NOTIF_VERSION_MARKER).trim().toIntOrNull() ?: 0
     }
+
+    /**
+     * Vrai pour un script de coupure de planning généré avant `planEnd()` (upstream 2.16.0) : son
+     * programme d'extinction envoie toujours « planning terminé », même après une coupure sur
+     * seuil (double notification). Remplacé automatiquement par
+     * `DeviceRepository.upgradeCutoffScriptsIfDue`.
+     */
+    fun lacksPlanEnd(code: String): Boolean = !code.contains("function planEnd(")
 
     /**
      * Nom **unique** pour un script de coupure dédié à un planning (jamais partagé, ni entre
@@ -52,9 +65,9 @@ object ChargeScriptGenerator {
 
     /**
      * [ntfyTopic] non nul = notifie via ntfy quand la coupure se déclenche ([ntfyTitle] = nom de
-     * la prise, [ntfyBody] = préfixe du texte — la durée de charge écoulée, ex. « 1h32 », est
-     * calculée par le script généré lui-même à l'exécution et ajoutée à la suite, voir `fmtDur`
-     * dans le code généré). Toujours après `Switch.Set`, jamais avant.
+     * la prise, [ntfyBody] = texte avec [NtfyScriptSupport.DURATION_MARKER] à la place de la durée
+     * de charge écoulée, ex. « 1h32 », calculée par le script généré lui-même à l'exécution, voir
+     * `fmtDur` dans le code généré). Toujours après `Switch.Set`, jamais avant.
      *
      * [ntfyEndBody] non vide = notifie **aussi** quand le minuteur natif arrive à échéance sans
      * que la coupure sur seuil ne se soit jamais déclenchée (cas « allé au bout des X minutes,
@@ -90,13 +103,14 @@ object ChargeScriptGenerator {
         // dynamique : la durée de charge n'est calculable qu'à l'exécution, au moment de la
         // coupure (retour David, 2026-09-17) — voir fmtDur ci-dessous.
         val cutoffTitleExpr = "\"${NtfyScriptSupport.jsString(ntfyTitle)}\""
-        val cutoffBodyExpr = "\"${NtfyScriptSupport.jsString(ntfyBody)} \" + fmtDur(now - onSince)"
+        val cutoffBodyExpr = NtfyScriptSupport.bodyWithDuration(ntfyBody, "fmtDur(now - onSince)")
         val cutoffNtfyStatement = NtfyScriptSupport.callDynamicTitleAndBody(ntfyTopic, cutoffTitleExpr, cutoffBodyExpr)
         val endNtfyStatement = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyEndBody)
         val planEndNtfyStatement = if (planEndBody.isBlank()) "" else NtfyScriptSupport.call(ntfyTopic, ntfyTitle, planEndBody)
         return """
         // Généré par Hestia — coupure sur seuil de consommation
         $MARKER$thresholdW
+        $NOTIF_VERSION_MARKER$NOTIF_VERSION
         let CFG = { switchId: $switchId, thresholdW: $thresholdW, belowSec: $belowSec, selfId: $selfId, graceSec: $graceSec };
         let belowSince = null;
         let wasOn = false;
@@ -233,9 +247,9 @@ object ChargeScriptGenerator {
      * désactive lui-même dès qu'**aucun** des canaux suivis n'est plus allumé (fin de mission
      * complète) — jamais quand un seul d'entre eux termine.
      *
-     * [ntfyCutoffBody] : préfixe du texte de la notif de coupure — la durée de charge écoulée
-     * (ex. « 1h32 »), calculée par le script lui-même à l'exécution (`fmtDur`/`notifyCutoff` dans
-     * le code généré), y est ajoutée à la suite (2026-09-17).
+     * [ntfyCutoffBody] : texte de la notif de coupure, avec [NtfyScriptSupport.DURATION_MARKER] à
+     * la place de la durée de charge écoulée (ex. « 1h32 »), calculée par le script lui-même à
+     * l'exécution (`fmtDur`/`notifyCutoff` dans le code généré) — en tête depuis le 2026-10-29.
      */
     fun generateSupervisor(
         configs: List<ChannelConfig>,
@@ -247,7 +261,7 @@ object ChargeScriptGenerator {
         // Corps dynamique : durationSec n'est connu qu'à l'exécution, passé en paramètre par
         // l'appelant plutôt que recalculé ici (retour David, 2026-09-17) — voir fmtDur ci-dessous.
         val notifyCutoffCall = NtfyScriptSupport.callDynamicTitleAndBody(
-            ntfyTopic, "name", "\"${NtfyScriptSupport.jsString(ntfyCutoffBody)} \" + fmtDur(durationSec)",
+            ntfyTopic, "name", NtfyScriptSupport.bodyWithDuration(ntfyCutoffBody, "fmtDur(durationSec)"),
         )
         val notifyEndCall = NtfyScriptSupport.callDynamicTitleAndBody(ntfyTopic, "name", "body")
         return """
