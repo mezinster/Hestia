@@ -33,6 +33,7 @@ import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.delay
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatPower
+import kapoue.hestia.data.rpc.AccessIssue
 import kapoue.hestia.ui.theme.stateColors
 
 /**
@@ -48,6 +49,7 @@ fun CoverTile(
     onClose: () -> Unit,
     onOpenDetail: () -> Unit,
     onOpenFirmware: () -> Unit,
+    accessIssue: AccessIssue? = null,
 ) {
     val colors = MaterialTheme.stateColors
     val status = tile.coverStatus ?: CoverStatus.Loading
@@ -112,6 +114,9 @@ fun CoverTile(
                 IconButton(onClick = onClose, enabled = online != null && online.motion != CoverMotion.CALIBRATING) {
                     Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.cover_close), tint = fg)
                 }
+            }
+            if (accessIssue != null) {
+                AccessIssueBanner(issue = accessIssue, onClick = onOpenFirmware)
             }
             if (tile.device.firmwareUpdateAvailable) {
                 FirmwareUpdateBanner(onClick = onOpenFirmware)

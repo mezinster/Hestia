@@ -62,6 +62,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import kapoue.hestia.R
 import kapoue.hestia.core.util.formatTimeRange
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.repository.accessIssueFor
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.isActiveNow
@@ -84,6 +85,7 @@ fun DashboardScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val permissionUsable by viewModel.permissionUsable.collectAsStateWithLifecycle()
+    val accessIssues by viewModel.accessIssues.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -239,6 +241,7 @@ fun DashboardScreen(
                                             elapsedNow = elapsedNow,
                                             onOpenChannel = { onOpenDetail(it.device.id) },
                                             onOpenFirmware = onOpenFirmware,
+                                            accessIssue = members.firstNotNullOfOrNull { accessIssueFor(it.device, accessIssues) },
                                         )
                                     } else {
                                         DeviceStripRow(
@@ -247,6 +250,7 @@ fun DashboardScreen(
                                             elapsedNow = elapsedNow,
                                             onTapChannel = { quickSheetDeviceId = it.device.id },
                                             onOpenFirmware = onOpenFirmware,
+                                            accessIssue = members.firstNotNullOfOrNull { accessIssueFor(it.device, accessIssues) },
                                         )
                                     }
                                 }
@@ -262,6 +266,7 @@ fun DashboardScreen(
                                             onClose = { viewModel.coverClose(tile.device) },
                                             onOpenDetail = { onOpenDetail(tile.device.id) },
                                             onOpenFirmware = { onOpenFirmware(tile.device.id) },
+                                            accessIssue = accessIssueFor(tile.device, accessIssues),
                                         )
                                     } else if (tile.device.isLight) {
                                         // Variateur (2026-10-07) : le tap ouvre directement le
@@ -272,12 +277,14 @@ fun DashboardScreen(
                                             onToggle = { viewModel.toggleLight(tile.device, it) },
                                             onOpenDetail = { onOpenDetail(tile.device.id) },
                                             onOpenFirmware = { onOpenFirmware(tile.device.id) },
+                                            accessIssue = accessIssueFor(tile.device, accessIssues),
                                         )
                                     } else if (tile.device.type == DeviceType.SMOKE_DETECTOR) {
                                         SmokeDetectorTile(
                                             tile = tile,
                                             onOpenDetail = { onOpenDetail(tile.device.id) },
                                             onOpenFirmware = { onOpenFirmware(tile.device.id) },
+                                            accessIssue = accessIssueFor(tile.device, accessIssues),
                                         )
                                     } else {
                                         DeviceTile(
@@ -302,6 +309,7 @@ fun DashboardScreen(
                                             onOpenDetail = { quickSheetDeviceId = tile.device.id },
                                             onPlanningWindowEnded = { viewModel.refresh(force = true) },
                                             onOpenFirmware = { onOpenFirmware(tile.device.id) },
+                                            accessIssue = accessIssueFor(tile.device, accessIssues),
                                         )
                                     }
                                 }

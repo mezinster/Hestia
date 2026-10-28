@@ -374,6 +374,8 @@
     <string name="firmware_beta_only">%1$s: установлена последняя версия (%2$s). Доступна бета-версия (%3$s) — Hestia предлагает только стабильные обновления.</string>
     <string name="firmware_check_error">Не удалось проверить. Убедись, что устройство доступно.</string>
     <string name="tile_firmware_update_banner">Есть обновление</string>
+    <string name="tile_tls_banner_required">Подтверди шифрованное соединение</string>
+    <string name="tile_tls_banner_changed">Сертификат изменился</string>
     <string name="firmware_install_button">Установить обновление</string>
     <string name="firmware_install_confirm_title">Установить обновление?</string>
     <string name="firmware_install_confirm_message">Устройство перезагрузится, чтобы применить обновление: всё, что к нему подключено, обесточится на несколько секунд. Не отключай его от сети во время обновления.</string>
