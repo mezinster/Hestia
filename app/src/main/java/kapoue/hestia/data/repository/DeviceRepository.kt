@@ -104,6 +104,9 @@ class DeviceRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     @ApplicationScope private val appScope: CoroutineScope,
 ) {
+    /** Un Unique expiré n'est supprimé qu'une fois, même vu par plusieurs relevés à la fois. */
+    private val expiredOnceGuard = ExpiredOnceGuard()
+
     // --- Bascule automatique entre les 1 ou 2 adresses IP d'un appareil ---
 
     /** Cache mémoire de l'emplacement (1 ou 2) qui a répondu en dernier, pour ne pas relire la base à chaque appel. */
@@ -1249,9 +1252,10 @@ class DeviceRepository @Inject constructor(
             is RpcResult.Success -> {
                 val all = reconstructPlannings(r.value.jobs, channelControlFor(device), device.switchId)
                 val (expired, active) = all.partition { it.isExpiredOnce() }
-                if (expired.isNotEmpty()) {
-                    logger.info(DiagnosticLogger.RPC, "Nettoyage de ${expired.size} planning(s) Unique expiré(s)")
-                    expired.forEach { p ->
+                val toClean = expiredOnceGuard.claim(ip, expired) { "${it.onJobId}#${it.offJobId}" }
+                if (toClean.isNotEmpty()) {
+                    logger.info(DiagnosticLogger.RPC, "Nettoyage de ${toClean.size} planning(s) Unique expiré(s)")
+                    toClean.forEach { p ->
                         p.onJobId?.let { rpcClient.scheduleDelete(ip, it) }
                         p.offJobId?.let { rpcClient.scheduleDelete(ip, it) }
                         p.cutoffScriptId?.let { rpcClient.scriptStop(ip, it); rpcClient.scriptDelete(ip, it) }
