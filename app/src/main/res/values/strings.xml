@@ -400,6 +400,10 @@
     <string name="tile_firmware_update_banner">Update available</string>
     <string name="tile_tls_banner_required">Encrypted connection to confirm</string>
     <string name="tile_tls_banner_changed">Certificate changed</string>
+    <string name="tile_password_banner_required">Password required</string>
+    <string name="tile_password_banner_wrong">Password refused</string>
+    <string name="tile_password_banner_unverified">Password to check</string>
+    <string name="tile_throttled_banner">Device busy, retry later</string>
     <string name="firmware_install_button">Install update</string>
     <string name="firmware_install_confirm_title">Install the update?</string>
     <string name="firmware_install_confirm_message">The device will restart to apply the update: whatever it powers will be cut for a few seconds. Don\'t unplug it during the operation.</string>
