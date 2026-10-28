@@ -70,6 +70,15 @@ class DeviceAccessRegistry @Inject constructor(
     private val sessions = ConcurrentHashMap<String, DigestSession>()
     private val locks = ConcurrentHashMap<String, Mutex>()
 
+    /**
+     * Adresses ayant déjà redirigé vers HTTPS pendant ce processus. Collant : une réponse HTTP non
+     * authentifiée qui efface le problème signalé ne doit pas rouvrir l'envoi d'identifiants en
+     * clair. Jamais vidé en cours de processus (une adresse épinglée passe de toute façon en HTTPS).
+     * Résiduel accepté (spec § 6.2) : après redémarrage de l'appli, un appareil non épinglé peut de
+     * nouveau recevoir du digest en HTTP, comme tout appareil protégé non épinglé.
+     */
+    private val httpsSeenAddresses: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
     /** Horloge, remplaçable en test. */
     internal var now: () -> Long = System::currentTimeMillis
     private val _issues = MutableStateFlow<Map<String, AccessIssue>>(emptyMap())
@@ -162,8 +171,17 @@ class DeviceAccessRegistry @Inject constructor(
         provisional.remove(address)
     }
 
+    /** Note que [address] a exigé le HTTPS (voir [httpsSeenAddresses]). */
+    fun markHttpsSeen(address: String) {
+        httpsSeenAddresses.add(address)
+    }
+
+    /** Vrai si [address] a exigé le HTTPS depuis le lancement : plus d'identifiants en HTTP clair. */
+    fun httpsSeen(address: String): Boolean = address in httpsSeenAddresses
+
     /** Signale un problème pour [address] ; `null` l'efface. N'émet rien si inchangé. */
     fun report(address: String, issue: AccessIssue?) {
+        if (issue == AccessIssue.HTTPS_REQUIRED) markHttpsSeen(address)
         _issues.update { current ->
             when {
                 issue == null -> if (address in current) current - address else current

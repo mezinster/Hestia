@@ -28,10 +28,20 @@ object DigestAuth {
         val params = PARAM_REGEX.findAll(trimmed.substring("Digest".length)).associate {
             it.groupValues[1].lowercase() to (it.groupValues[2].ifEmpty { it.groupValues[3] })
         }
-        val realm = params["realm"] ?: return null
-        val nonce = params["nonce"] ?: return null
+        val realm = params["realm"]?.takeIf { isSafe(it, allowSpace = true) } ?: return null
+        val nonce = params["nonce"]?.takeIf { isSafe(it, allowSpace = false) } ?: return null
         return Challenge(realm, nonce)
     }
+
+    /**
+     * Valeur fournie par l'appareil et recopiée telle quelle dans l'en-tête Authorization : ASCII
+     * imprimable non vide uniquement, sans guillemet ni antislash (sinon OkHttp lèverait une
+     * IllegalArgumentException, ou un CR/LF injecterait un en-tête). Espace toléré dans le realm seul.
+     */
+    private fun isSafe(value: String, allowSpace: Boolean): Boolean =
+        value.isNotEmpty() && value.all { c ->
+            (c in '\u0021'..'\u007e' || (allowSpace && c == ' ')) && c != '"' && c != '\\'
+        }
 
     /** Construit la valeur de l'en-tête Authorization pour un appel POST /rpc. */
     fun authorizationHeader(

@@ -252,4 +252,86 @@ class DigestTransportTest {
         assertEquals(1, server.requestCount)
         assertNull(take().authorization())
     }
+    @Test
+    fun `wrong password with parallel calls makes exactly one resend`() = runTest {
+        startHttp()
+        knownPassword()
+        repeat(10) { server.enqueue(challenge("n$it")) }
+        val results = (1..5).map { async(Dispatchers.Default) { client.reboot(address) } }.awaitAll()
+        assertTrue("résultats : $results", results.all { it == RpcResult.Failure(RpcFailure.PASSWORD_WRONG) })
+        assertEquals(2, server.requestCount)
+    }
+
+    @Test
+    fun `429 under the lock blocks queued calls`() = runTest {
+        startHttp()
+        knownPassword()
+        server.enqueue(MockResponse.Builder().code(429).build())
+        repeat(5) { server.enqueue(ok()) }
+        val results = (1..5).map { async(Dispatchers.Default) { client.reboot(address) } }.awaitAll()
+        assertTrue("résultats : $results", results.all { it == RpcResult.Failure(RpcFailure.THROTTLED) })
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun `429 on the resend`() = runTest {
+        startHttp()
+        knownPassword()
+        server.enqueue(challenge())
+        server.enqueue(MockResponse.Builder().code(429).build())
+        server.enqueue(ok())
+        assertEquals(RpcResult.Failure(RpcFailure.THROTTLED), client.reboot(address))
+        assertEquals(2, server.requestCount)
+        assertEquals(RpcResult.Failure(RpcFailure.THROTTLED), client.reboot(address))
+        assertEquals(2, server.requestCount)
+        // Un 429 ne dit rien du mot de passe : ni refusé ni accepté.
+        assertEquals(PasswordState.UNVERIFIED, passwords[address]!!.state)
+    }
+
+    @Test
+    fun `a 401 with an unparseable challenge never crashes`() = runTest {
+        startHttp()
+        // Nonce non-ASCII : OkHttp refuserait de le recopier dans un en-tête (IllegalArgumentException).
+        fun bad() = MockResponse.Builder().code(401)
+            .addHeaderLenient("WWW-Authenticate", "Digest qop=\"auth\", realm=\"r\", nonce=\"n\u00e9\", algorithm=SHA-256")
+            .build()
+        server.enqueue(bad())
+        // Sans mot de passe : « mot de passe requis », comme pour un défi absent.
+        assertEquals(RpcResult.Failure(RpcFailure.PASSWORD_REQUIRED), client.reboot(address))
+        knownPassword()
+        registry.reload()
+        server.enqueue(bad())
+        // Avec un mot de passe : réponse inexploitable, aucun renvoi.
+        assertEquals(RpcResult.Failure(RpcFailure.MALFORMED_RESPONSE), client.reboot(address))
+        assertEquals(2, server.requestCount)
+        assertNull(take().authorization())
+        assertNull(take().authorization())
+    }
+
+    @Test
+    fun `after an https redirect, a later plain 200 does not re-allow clear-text auth`() = runTest {
+        startHttp()
+        knownPassword()
+        server.enqueue(MockResponse.Builder().code(301).addHeader("Location", "https://127.0.0.1/rpc").build())
+        assertEquals(RpcResult.Failure(RpcFailure.HTTPS_REQUIRED), client.reboot(address))
+        server.enqueue(ok())
+        assertTrue(client.reboot(address) is RpcResult.Success)
+        assertNull(registry.issues.value[address])
+        server.enqueue(challenge())
+        server.enqueue(ok())
+        assertEquals(RpcResult.Failure(RpcFailure.HTTPS_REQUIRED), client.reboot(address))
+        assertEquals(3, server.requestCount)
+        repeat(3) { assertNull(take().authorization()) }
+    }
+
+    @Test
+    fun `a redirect to an authenticated request does not accept the password`() = runTest {
+        startHttp()
+        knownPassword()
+        registry.setSession("http://$address", DigestSession("r", "n1"))
+        server.enqueue(MockResponse.Builder().code(301).addHeader("Location", "https://127.0.0.1/rpc").build())
+        assertEquals(RpcResult.Failure(RpcFailure.HTTPS_REQUIRED), client.reboot(address))
+        assertTrue(take().authorization() != null)
+        assertEquals(PasswordState.UNVERIFIED, passwords[address]!!.state)
+    }
 }

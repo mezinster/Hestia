@@ -32,6 +32,28 @@ class DigestAuthTest {
         assertNull(DigestAuth.parseChallenge(null))
     }
 
+    @Test
+    fun `rejects a challenge with control characters`() {
+        // Un realm/nonce fourni par l'appareil finit dans l'en-tête Authorization : CR/LF,
+        // guillemets, antislash ou non-ASCII le rendraient invalide (ou injecteraient un en-tête).
+        assertNull(DigestAuth.parseChallenge("Digest realm=\"r\r\nX-Evil: 1\", nonce=\"n\""))
+        assertNull(DigestAuth.parseChallenge("Digest realm=\"r\", nonce=\"n\tx\""))
+        assertNull(DigestAuth.parseChallenge("Digest realm=\"r\u00e9\", nonce=\"n\""))
+        assertNull(DigestAuth.parseChallenge("Digest realm=\"r\", nonce=\"n\u00e9\""))
+        assertNull(DigestAuth.parseChallenge("Digest realm=\"r\\\", nonce=\"n\""))
+        assertNull(DigestAuth.parseChallenge("Digest realm=r, nonce=n\\x"))
+        // Le nonce n'admet pas d'espace ; le realm, si.
+        assertNull(DigestAuth.parseChallenge("Digest realm=\"r\", nonce=\"n x\""))
+        assertEquals(Challenge("my realm", "n"), DigestAuth.parseChallenge("Digest realm=\"my realm\", nonce=\"n\""))
+    }
+
+    @Test
+    fun `rejects an empty nonce`() {
+        assertNull(DigestAuth.parseChallenge("Digest realm=\"r\", nonce=\"\""))
+        assertNull(DigestAuth.parseChallenge("Digest realm=\"\", nonce=\"n\""))
+        assertNull(DigestAuth.parseChallenge("Digest realm=r, nonce="))
+    }
+
     // Vecteurs calculés indépendamment (Python hashlib, 2026-10-29).
     @Test
     fun `response matches an independent vector`() = assertTrue(
