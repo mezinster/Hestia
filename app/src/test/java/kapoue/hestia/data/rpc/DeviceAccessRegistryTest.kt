@@ -370,4 +370,48 @@ class DeviceAccessRegistryTest {
         assertEquals("A", r.pinFor(ip))
         assertEquals("secret", r.passwordFor(ip))
     }
+
+    @Test fun `a new provisional password drops the existing sessions`() = runTest {
+        val r = registry()
+        r.setSession("http://$ip", DigestSession("r", "n1"))
+        r.setSession("https://$ip", DigestSession("r", "n2"))
+        val kept = DigestSession("r", "n3")
+        r.setSession("http://other", kept)
+        r.trustPasswordProvisionally(ip, "new")
+        assertNull(r.sessionFor("http://$ip"))
+        assertNull(r.sessionFor("https://$ip"))
+        assertTrue(r.sessionFor("http://other") === kept)
+        r.setSession("https://$ip", DigestSession("r", "n4"))
+        r.forgetProvisionalPassword(ip)
+        assertNull(r.sessionFor("https://$ip"))
+        r.setSession("http://$ip", DigestSession("r", "n5"))
+        r.clearSessions(ip)
+        assertNull(r.sessionFor("http://$ip"))
+    }
+
+    @Test fun `an accepted provisional password is remembered as accepted`() = runTest {
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, FakePasswords())
+        r.reload()
+        r.trustPasswordProvisionally(ip, "secret")
+        assertFalse(r.provisionalPasswordAccepted(ip))
+        r.onAuthAccepted(ip, "other")
+        assertFalse(r.provisionalPasswordAccepted(ip))
+        r.onAuthAccepted(ip, "secret")
+        assertTrue(r.provisionalPasswordAccepted(ip))
+        // Nouvelle saisie : l'acceptation précédente ne vaut plus.
+        r.trustPasswordProvisionally(ip, "secret2")
+        assertFalse(r.provisionalPasswordAccepted(ip))
+        r.onAuthAccepted(ip, "secret2")
+        r.forgetProvisionalPassword(ip)
+        assertFalse(r.provisionalPasswordAccepted(ip))
+    }
+
+    @Test fun `https seen can be cleared per address`() {
+        val r = registry()
+        r.markHttpsSeen(ip)
+        r.markHttpsSeen("b")
+        r.clearHttpsSeen(ip)
+        assertFalse(r.httpsSeen(ip))
+        assertTrue(r.httpsSeen("b"))
+    }
 }

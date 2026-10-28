@@ -279,19 +279,24 @@ class DeviceRepository @Inject constructor(
     /**
      * Enregistre l'épingle provisoire (inchangé) puis le mot de passe provisoire. À appeler APRÈS
      * l'insertion des canaux en base : le coffre élague les entrées dont l'id n'est plus dans la liste.
+     * Un mot de passe que la sonde d'ajout vient de faire accepter est enregistré comme accepté
+     * (sinon la nouvelle tuile afficherait « mot de passe à vérifier »).
      */
     suspend fun commitProvisionalAccess(ip: String) {
         commitProvisionalCertificate(ip)
         val password = accessRegistry.provisionalPasswordFor(ip) ?: return
-        val n = devicePasswords.save(ip, password)
+        val state = if (accessRegistry.provisionalPasswordAccepted(ip)) PasswordState.ACCEPTED else PasswordState.UNVERIFIED
+        val n = devicePasswords.save(ip, password, state)
         reloadSavedPins("mot de passe ajouté")
         accessRegistry.forgetProvisionalPassword(ip)
-        logger.info(DiagnosticLogger.RPC, "Mot de passe provisoire enregistré $ip ($n canal/canaux)")
+        val label = if (state == PasswordState.ACCEPTED) "accepté" else "non vérifié"
+        logger.info(DiagnosticLogger.RPC, "Mot de passe provisoire enregistré $ip, $label ($n canal/canaux)")
     }
 
     /** Enregistre un mot de passe pour tous les canaux de l'adresse puis le vérifie par un appel. */
     suspend fun savePassword(device: Device, password: String) {
         val n = devicePasswords.save(device.ipAddress, password)
+        clearDigestSessions(device)
         reloadSavedPins("mot de passe enregistré")
         clearPasswordIssues(device)
         logger.info(DiagnosticLogger.RPC, "Mot de passe enregistré ${device.ipAddress} ($n canal/canaux)")
@@ -301,9 +306,20 @@ class DeviceRepository @Inject constructor(
 
     suspend fun removePassword(device: Device) {
         val n = devicePasswords.remove(device.ipAddress)
+        clearDigestSessions(device)
         reloadSavedPins("mot de passe retiré")
         clearPasswordIssues(device)
         logger.info(DiagnosticLogger.RPC, "Mot de passe retiré ${device.ipAddress} ($n canal/canaux)")
+    }
+
+    /**
+     * Oublie les sessions digest des deux adresses : un nouveau mot de passe ne part pas d'abord sur
+     * l'ancien nonce (un essai raté de plus pour l'anti-brute-force de l'appareil).
+     */
+    private fun clearDigestSessions(device: Device) {
+        listOfNotNull(device.ipAddress, device.ip2Address?.takeIf { it.isNotBlank() }).forEach {
+            accessRegistry.clearSessions(it)
+        }
     }
 
     /** Lève PASSWORD_REQUIRED/PASSWORD_WRONG sans toucher aux problèmes de certificat. */

@@ -66,6 +66,9 @@ class DeviceAccessRegistry @Inject constructor(
 
     /** Adresses dont le mot de passe provisoire a été refusé. */
     private val provisionalRejected: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** Adresses dont le mot de passe provisoire EN COURS a été accepté par l'appareil. */
+    private val provisionalAccepted: MutableSet<String> = ConcurrentHashMap.newKeySet()
     private val throttledUntil = ConcurrentHashMap<String, Long>()
     private val sessions = ConcurrentHashMap<String, DigestSession>()
     private val locks = ConcurrentHashMap<String, Mutex>()
@@ -179,6 +182,14 @@ class DeviceAccessRegistry @Inject constructor(
     /** Vrai si [address] a exigé le HTTPS depuis le lancement : plus d'identifiants en HTTP clair. */
     fun httpsSeen(address: String): Boolean = address in httpsSeenAddresses
 
+    /**
+     * Oublie que [address] a exigé le HTTPS (certificat oublié par l'utilisateur). À n'appeler
+     * qu'une fois le mot de passe retiré : sinon un défi en HTTP clair recevrait un digest.
+     */
+    fun clearHttpsSeen(address: String) {
+        httpsSeenAddresses.remove(address)
+    }
+
     /** Signale un problème pour [address] ; `null` l'efface. N'émet rien si inchangé. */
     fun report(address: String, issue: AccessIssue?) {
         if (issue == AccessIssue.HTTPS_REQUIRED) markHttpsSeen(address)
@@ -207,16 +218,28 @@ class DeviceAccessRegistry @Inject constructor(
     /** Mot de passe provisoire seul (jamais l'enregistré) ; `null` si aucun. */
     fun provisionalPasswordFor(address: String): String? = provisionalPw[address]
 
-    /** Fait confiance à [password] pour [address] le temps d'un essai ; efface un refus provisoire. */
+    /**
+     * Fait confiance à [password] pour [address] le temps d'un essai ; efface un refus provisoire et
+     * les sessions digest de l'adresse (un nouveau mot de passe ne doit pas d'abord partir sur
+     * l'ancien nonce : ce serait un essai raté de plus pour l'anti-brute-force).
+     */
     fun trustPasswordProvisionally(address: String, password: String) {
         provisionalRejected.remove(address)
+        provisionalAccepted.remove(address)
         provisionalPw[address] = password
+        clearSessions(address)
     }
 
     fun forgetProvisionalPassword(address: String) {
         provisionalPw.remove(address)
         provisionalRejected.remove(address)
+        provisionalAccepted.remove(address)
+        clearSessions(address)
     }
+
+    /** Vrai si l'appareil a accepté le mot de passe provisoire en cours pour [address]. */
+    fun provisionalPasswordAccepted(address: String): Boolean =
+        provisionalPw.containsKey(address) && address in provisionalAccepted
 
     /** Raison pour laquelle aucune requête ne doit partir vers [address], ou `null`. */
     fun blockedFor(address: String): RpcFailure? = when {
@@ -231,7 +254,11 @@ class DeviceAccessRegistry @Inject constructor(
      * depuis l'envoi) est ignoré. Tout se déroule sous [loadMutex].
      */
     suspend fun onAuthAccepted(address: String, passwordUsed: String) = loadMutex.withLock {
-        if (provisionalPw.containsKey(address)) return@withLock
+        if (provisionalPw.containsKey(address)) {
+            // Provisoire : rien n'est persisté, l'acceptation est seulement notée pour l'ajout.
+            if (provisionalPw[address] == passwordUsed) provisionalAccepted.add(address)
+            return@withLock
+        }
         val stored = savedPw[address] ?: return@withLock
         if (stored.password != passwordUsed) return@withLock
         if (stored.state != PasswordState.ACCEPTED) {
@@ -296,6 +323,12 @@ class DeviceAccessRegistry @Inject constructor(
 
     fun setSession(target: String, session: DigestSession?) {
         if (session == null) sessions.remove(target) else sessions[target] = session
+    }
+
+    /** Efface les sessions digest des deux cibles de [address] (`http://` et `https://`). */
+    fun clearSessions(address: String) {
+        sessions.remove("http://$address")
+        sessions.remove("https://$address")
     }
 
     /** Verrou propre à [address] : sérialise les appels authentifiés vers un même appareil. */
