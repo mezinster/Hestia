@@ -33,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -120,6 +121,8 @@ data class AddEditUiState(
     val cloudToggling: Boolean = false,
     /** Non nul tant que l'utilisateur doit accepter ou refuser le certificat d'un appareil HTTPS. */
     val certificatePrompt: CertificatePrompt? = null,
+    /** Connexion chiffrée de l'appareil édité ; null = HTTP simple, section masquée. */
+    val tlsState: TlsState? = null,
 )
 
 @HiltViewModel
@@ -174,7 +177,19 @@ class AddEditDeviceViewModel @Inject constructor(
     // avec setLedState() sans re-détecter (nom et casse varient selon le modèle, voir DeviceRepository).
     private var ledComponent: String? = null
 
+    // Appareil édité tel que lu en base (épingle à jour) — sert à la vérification/confirmation/oubli du certificat.
+    private var observedDevice: Device? = null
+
     init {
+        editingDeviceId?.let { id ->
+            viewModelScope.launch {
+                combine(repository.observeDevice(id), repository.accessIssues) { device, issues -> device to issues }
+                    .collect { (device, issues) ->
+                        observedDevice = device
+                        _uiState.update { it.copy(tlsState = device?.let { d -> tlsStateOf(d, issues) }) }
+                    }
+            }
+        }
         editingDeviceId?.let { id ->
             viewModelScope.launch {
                 repository.getDevice(id)?.let { device ->
@@ -403,7 +418,13 @@ class AddEditDeviceViewModel @Inject constructor(
     fun onTrustCertificate() {
         val prompt = _uiState.value.certificatePrompt ?: return
         logger.info(DiagnosticLogger.UI, "Certificat accepté (${prompt.ip})")
-        // Task 6 : en mode modification, appeler repository.trustCertificate(device, pin) ici.
+        val editing = observedDevice
+        if (_uiState.value.isEditMode && editing != null) {
+            // Édition : l'épingle est écrite tout de suite sur tous les canaux de l'appareil.
+            _uiState.update { it.copy(certificatePrompt = null, error = null) }
+            viewModelScope.launch { repository.trustCertificate(editing, prompt.certificate.pin) }
+            return
+        }
         repository.trustCertificateProvisionally(prompt.ip, prompt.certificate.pin)
         _uiState.update { it.copy(certificatePrompt = null, error = null) }
         probeJob?.cancel()
@@ -414,7 +435,44 @@ class AddEditDeviceViewModel @Inject constructor(
     fun onDismissCertificate() {
         val prompt = _uiState.value.certificatePrompt ?: return
         logger.info(DiagnosticLogger.UI, "Certificat refusé (${prompt.ip})")
-        _uiState.update { it.copy(certificatePrompt = null, error = UserMessage(R.string.error_https_required)) }
+        // En édition, refuser ne change rien : pas d'erreur (l'état reste celui affiché par la section).
+        _uiState.update {
+            it.copy(
+                certificatePrompt = null,
+                error = if (it.isEditMode) null else UserMessage(R.string.error_https_required),
+            )
+        }
+    }
+
+    /** Mode édition : relit le certificat de l'appareil et ouvre le dialogue de confirmation. */
+    fun checkCertificate() {
+        val device = observedDevice ?: return
+        logger.info(DiagnosticLogger.UI, "Vérification du certificat demandée (${device.ipAddress})")
+        viewModelScope.launch {
+            when (val peek = repository.peekCertificate(device.ipAddress)) {
+                is RpcResult.Success -> {
+                    val changed = device.certPin != null && peek.value.pin != device.certPin
+                    logger.info(
+                        DiagnosticLogger.UI,
+                        "Certificat lu (${device.ipAddress}, ${peek.value.fingerprint}, modifié=$changed)",
+                    )
+                    _uiState.update {
+                        it.copy(certificatePrompt = CertificatePrompt(device.ipAddress, peek.value, changed))
+                    }
+                }
+                else -> {
+                    logger.warn(DiagnosticLogger.UI, "Lecture du certificat impossible (${device.ipAddress})")
+                    _uiState.update { it.copy(error = UserMessage(R.string.tls_peek_failed)) }
+                }
+            }
+        }
+    }
+
+    /** Mode édition : oublie l'épingle (après confirmation) ; l'appareil repasse en HTTP simple. */
+    fun forgetCertificate() {
+        val device = observedDevice ?: return
+        logger.info(DiagnosticLogger.UI, "Certificat oublié par l'utilisateur (${device.ipAddress})")
+        viewModelScope.launch { repository.forgetCertificate(device) }
     }
 
     override fun onCleared() {

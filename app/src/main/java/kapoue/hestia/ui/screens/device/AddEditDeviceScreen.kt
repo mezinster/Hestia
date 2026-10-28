@@ -60,6 +60,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -101,6 +102,7 @@ fun AddEditDeviceScreen(
     var editingIpSlot by remember { mutableStateOf<Int?>(null) }
     var showFirmwareInstallConfirm by remember { mutableStateOf(false) }
     var showRebootConfirm by remember { mutableStateOf(false) }
+    var showForgetCertConfirm by remember { mutableStateOf(false) }
     // Confirmation avant suppression de la 2ᵉ adresse IP (retour David, 2026-09-17) : le geste
     // reste sans effet tant qu'Enregistrer n'est pas tapé (comme tout ce formulaire), mais une
     // suppression appelle une confirmation par habitude d'usage, contrairement à une simple
@@ -271,6 +273,15 @@ fun AddEditDeviceScreen(
                         onCheck = viewModel::checkFirmwareUpdate,
                         onInstall = { showFirmwareInstallConfirm = true },
                         onReboot = { showRebootConfirm = true },
+                    )
+                }
+
+                state.tlsState?.let { tls ->
+                    HorizontalDivider()
+                    TlsSection(
+                        state = tls,
+                        onCheck = viewModel::checkCertificate,
+                        onForget = { showForgetCertConfirm = true },
                     )
                 }
 
@@ -502,6 +513,23 @@ fun AddEditDeviceScreen(
                 viewModel.installFirmwareUpdate()
             },
             onDismiss = { showFirmwareInstallConfirm = false },
+        )
+    }
+
+    if (showForgetCertConfirm) {
+        AlertDialog(
+            onDismissRequest = { showForgetCertConfirm = false },
+            title = { Text(stringResource(R.string.tls_section_forget)) },
+            text = { Text(stringResource(R.string.tls_forget_confirm)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showForgetCertConfirm = false
+                    viewModel.forgetCertificate()
+                }) { Text(stringResource(R.string.tls_section_forget)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showForgetCertConfirm = false }) { Text(stringResource(R.string.action_cancel)) }
+            },
         )
     }
 
@@ -870,6 +898,36 @@ private fun CloudSection(info: CloudInfo?, toggling: Boolean, onToggle: (Boolean
             onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(cloudUrl))) } },
         ) {
             Text(stringResource(R.string.cloud_portal_link))
+        }
+    }
+}
+
+/**
+ * Connexion chiffrée (HTTPS) : état en toutes lettres, vérification/confirmation du certificat, et
+ * oubli explicite (visible seulement si une épingle existe : TRUSTED ou CHANGED).
+ */
+@Composable
+private fun TlsSection(state: TlsState, onCheck: () -> Unit, onForget: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.tls_section_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(
+                when (state) {
+                    TlsState.TRUSTED -> R.string.tls_section_trusted
+                    TlsState.REQUIRED -> R.string.tls_section_required
+                    TlsState.CHANGED -> R.string.tls_section_changed
+                },
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (state == TlsState.CHANGED) MaterialTheme.colorScheme.error else Color.Unspecified,
+        )
+        OutlinedButton(onClick = onCheck) { Text(stringResource(R.string.tls_section_check)) }
+        if (state != TlsState.REQUIRED) {
+            TextButton(onClick = onForget) { Text(stringResource(R.string.tls_section_forget)) }
         }
     }
 }

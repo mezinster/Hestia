@@ -624,4 +624,11 @@
     <string name="cover_event_action">Action</string>
     <string name="cover_event_forget_title">Forget this paused event?</string>
     <string name="cover_event_forget_message">It will be permanently forgotten, with no way to resume it.</string>
+    <string name="tls_section_title">Encrypted connection (HTTPS)</string>
+    <string name="tls_section_trusted">This device uses HTTPS. Its certificate was accepted on first contact; any other certificate is refused.</string>
+    <string name="tls_section_required">This device requires HTTPS. Trust its certificate so Hestia can reach it.</string>
+    <string name="tls_section_changed">The certificate has changed since you accepted it. Hestia won\'t connect until you check and confirm the new one.</string>
+    <string name="tls_section_check">Check the certificate</string>
+    <string name="tls_section_forget">Forget the certificate</string>
+    <string name="tls_forget_confirm">Hestia will contact this device over plain HTTP again. Only do this if you turned HTTPS off on the device.</string>
 </resources>

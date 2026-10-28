@@ -601,4 +601,11 @@
     <string name="cover_event_action">Действие</string>
     <string name="cover_event_forget_title">Забыть это приостановленное событие?</string>
     <string name="cover_event_forget_message">Оно будет удалено навсегда, возобновить его будет нельзя.</string>
+    <string name="tls_section_title">Зашифрованное соединение (HTTPS)</string>
+    <string name="tls_section_trusted">Это устройство использует HTTPS. Его сертификат был принят при первом контакте; любой другой сертификат отклоняется.</string>
+    <string name="tls_section_required">Это устройство требует HTTPS. Доверься его сертификату, чтобы Hestia могла к нему подключиться.</string>
+    <string name="tls_section_changed">Сертификат изменился с тех пор, как ты его принял. Hestia не будет подключаться, пока ты не проверишь и не подтвердишь новый.</string>
+    <string name="tls_section_check">Проверить сертификат</string>
+    <string name="tls_section_forget">Забыть сертификат</string>
+    <string name="tls_forget_confirm">Hestia снова будет обращаться к этому устройству по обычному HTTP. Делай это, только если ты отключил HTTPS на устройстве.</string>
 </resources>
