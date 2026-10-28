@@ -419,6 +419,10 @@ class AddEditDeviceViewModel @Inject constructor(
                 } else if (result.kind == RpcFailure.PASSWORD_REQUIRED || result.kind == RpcFailure.PASSWORD_WRONG) {
                     val message = promptForPassword(ip, result.kind)
                     _uiState.update { it.copy(autoProbing = false, foundDeviceName = null, error = message) }
+                } else if (result.kind == RpcFailure.THROTTLED) {
+                    // Trop d'essais : silencieux, l'utilisateur ne comprendrait pas pourquoi rien ne se passe.
+                    logger.warn(DiagnosticLogger.UI, "Sonde automatique en pause, trop d'essais ($ip)")
+                    _uiState.update { it.copy(autoProbing = false, foundDeviceName = null, error = result.toUserMessageOrNull()) }
                 } else {
                     _uiState.update { it.copy(autoProbing = false, foundDeviceName = null) }
                 }

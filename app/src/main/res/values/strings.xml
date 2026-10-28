@@ -225,7 +225,7 @@
     <string name="error_password_wrong">The device refused this password. Check it and enter it again.</string>
     <string name="error_throttled">The device is temporarily refusing connections. Try again in a few minutes.</string>
     <string name="password_field_label">Device password</string>
-    <string name="password_field_hint">The one of its web interface. Encrypted on this phone, never exported.</string>
+    <string name="password_field_hint">The password of its web interface. Encrypted on this phone, never exported.</string>
     <string name="password_submit">Continue</string>
     <string name="password_show">Show</string>
     <string name="password_hide">Hide</string>
