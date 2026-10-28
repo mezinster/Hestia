@@ -29,8 +29,10 @@ class HttpsTransportTest {
         override fun error(tag: String, message: String, throwable: Throwable?) = Unit
     }
 
-    private val registry = DeviceAccessRegistry()
-    private val client = ShellyRpcClient(
+    private val registry = DeviceAccessRegistry(SavedPinSource { emptyMap() })
+    private val client = clientWith(registry)
+
+    private fun clientWith(registry: DeviceAccessRegistry) = ShellyRpcClient(
         OkHttpClient.Builder().callTimeout(5, TimeUnit.SECONDS).build(),
         Json { ignoreUnknownKeys = true },
         logger,
@@ -146,5 +148,28 @@ class HttpsTransportTest {
         val r = client.peekCertificate("127.0.0.1:$closedPort")
         assertEquals(RpcResult.Failure(RpcFailure.UNREACHABLE), r)
         assertNotEquals(0, closedPort)
+    }
+
+    @Test
+    fun `a call before any sync still uses the saved pin`() = runTest {
+        startHttps()
+        val pin = CertPins.pinOf(held.certificate)
+        // Démarrage à froid : aucune synchronisation, seule la base connaît l'épingle.
+        val cold = clientWith(DeviceAccessRegistry(SavedPinSource { mapOf(address to pin) }))
+        server.enqueue(ok())
+        val r = cold.reboot(address)
+        assertTrue("attendu Success, obtenu $r", r is RpcResult.Success)
+        val recorded = server.takeRequest(1, TimeUnit.SECONDS)!!
+        assertEquals("https", recorded.url.scheme)
+    }
+
+    @Test
+    fun `unreadable pins refuse the call`() = runTest {
+        startHttp()
+        val blind = clientWith(DeviceAccessRegistry(SavedPinSource { throw IllegalStateException("base illisible") }))
+        server.enqueue(ok())
+        val r = blind.reboot(address)
+        assertEquals(RpcResult.Failure(RpcFailure.UNREACHABLE), r)
+        assertEquals(0, server.requestCount)
     }
 }

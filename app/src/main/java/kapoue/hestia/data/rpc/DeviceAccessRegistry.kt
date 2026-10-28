@@ -1,9 +1,12 @@
 package kapoue.hestia.data.rpc
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -19,25 +22,58 @@ enum class AccessIssue {
 
 /**
  * Registre en mémoire des épingles de certificat par adresse d'appareil et des problèmes d'accès
- * constatés. Rien n'est persisté ici : les épingles enregistrées viennent de la base (via
- * [syncSavedPins]) et les provisoires ne vivent que le temps d'un essai. Aucune donnée sensible
- * (pas de mot de passe) n'est conservée.
+ * constatés. Rien n'est persisté ici : les épingles enregistrées viennent de la base (lues par
+ * [ensureLoaded] avant le premier appel, puis tenues à jour par [syncSavedPins]) et les
+ * provisoires ne vivent que le temps d'un essai. Aucune donnée sensible (pas de mot de passe)
+ * n'est conservée.
  */
 @Singleton
-class DeviceAccessRegistry @Inject constructor() {
+class DeviceAccessRegistry @Inject constructor(private val savedPins: SavedPinSource) {
     @Volatile private var saved: Map<String, String> = emptyMap()
+
+    /** Vrai dès que les épingles enregistrées sont connues (chargement ou synchronisation complète). */
+    @Volatile private var loaded = false
+    private val loadMutex = Mutex()
     private val provisional = ConcurrentHashMap<String, String>()
     private val _issues = MutableStateFlow<Map<String, AccessIssue>>(emptyMap())
 
     /** Problèmes d'accès courants, par adresse. */
     val issues: StateFlow<Map<String, AccessIssue>> = _issues.asStateFlow()
 
+    /**
+     * Garantit que les épingles enregistrées sont connues avant tout appel réseau : au premier appel,
+     * les lit via [SavedPinSource] (une seule fois, les appels concurrents attendent ce même
+     * chargement). Renvoie `false` si la lecture échoue — rien n'est alors marqué comme chargé, un
+     * nouvel essai aura lieu au prochain appel, et l'appelant doit refuser d'appeler (échec fermé :
+     * sans épingles connues, un appareil épinglé partirait en HTTP clair).
+     */
+    suspend fun ensureLoaded(): Boolean {
+        if (loaded) return true
+        return loadMutex.withLock {
+            if (loaded) return@withLock true
+            val pins = try {
+                savedPins.load()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@withLock false
+            }
+            // Une synchronisation complète survenue pendant la lecture est plus récente : on la garde.
+            if (!loaded) syncSavedPins(pins)
+            true
+        }
+    }
+
     /** Épingle à utiliser pour [address] : la provisoire l'emporte sur l'enregistrée. */
     fun pinFor(address: String): String? = provisional[address] ?: saved[address]
 
-    /** Remplace toutes les épingles enregistrées ; une adresse absente est oubliée. */
+    /**
+     * Remplace toutes les épingles enregistrées ; une adresse absente est oubliée. Une
+     * synchronisation complète vaut chargement (voir [ensureLoaded]).
+     */
     fun syncSavedPins(pinsByAddress: Map<String, String>) {
         saved = pinsByAddress.toMap()
+        loaded = true
     }
 
     /** Fait confiance à [pin] pour [address] le temps d'un essai, sans l'enregistrer. */

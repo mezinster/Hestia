@@ -622,6 +622,11 @@ class ShellyRpcClient @Inject constructor(
             logger.info(DiagnosticLogger.RPC, "$method @ $ip → appareil démo, aucun appel réseau")
             return@withContext RpcResult.Failure(RpcFailure.UNREACHABLE)
         }
+        // Échec fermé : sans les épingles enregistrées, un appareil épinglé partirait en HTTP clair.
+        if (!access.ensureLoaded()) {
+            logger.warn(DiagnosticLogger.RPC, "$method @ $ip → épingles HTTPS illisibles, appel refusé")
+            return@withContext RpcResult.Failure(RpcFailure.UNREACHABLE)
+        }
         val id = requestIds.getAndIncrement()
         val payload = json.encodeToString(RpcRequest.serializer(), RpcRequest(id, method, params))
         // Adresse épinglée : HTTPS uniquement, avec ce seul certificat. Jamais de repli en HTTP.

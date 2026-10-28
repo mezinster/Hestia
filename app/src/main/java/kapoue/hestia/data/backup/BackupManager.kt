@@ -5,6 +5,8 @@ import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.repository.pinsByAddress
+import kapoue.hestia.data.rpc.DeviceAccessRegistry
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +33,7 @@ class BackupManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val deviceDao: DeviceDao,
     private val json: Json,
+    private val deviceAccessRegistry: DeviceAccessRegistry,
 ) {
     suspend fun export(uri: Uri): Boolean = withContext(Dispatchers.IO) {
         runCatching {
@@ -67,6 +70,8 @@ class BackupManager @Inject constructor(
             for (deviceBackup in backup.devices) {
                 deviceDao.insert(deviceBackup.toEntity())
             }
+            // Les épingles restaurées (ou disparues) remplacent aussitôt celles du registre.
+            deviceAccessRegistry.syncSavedPins(pinsByAddress(deviceDao.getAllOnce()))
         }.fold(
             onSuccess = { ImportResult.Success },
             onFailure = { ImportResult.ReadError },
