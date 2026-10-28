@@ -49,4 +49,13 @@ class DemoAddressGuardTest {
         client.reboot("192.168.1.96")
         assertEquals(listOf("http://192.168.1.96/rpc"), sent)
     }
+
+    @Test
+    fun `a SecurityException from the network fails cleanly`() = runTest {
+        val denied = OkHttpClient.Builder()
+            .addInterceptor { throw SecurityException("local network denied") }
+            .build()
+        val deniedClient = ShellyRpcClient(denied, Json { ignoreUnknownKeys = true }, logger, DeviceAccessRegistry(SavedPinSource { emptyMap() }))
+        assertEquals(RpcResult.Failure(RpcFailure.UNREACHABLE), deniedClient.reboot("192.168.1.96"))
+    }
 }

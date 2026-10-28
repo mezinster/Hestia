@@ -235,7 +235,15 @@ class DeviceRepository @Inject constructor(
     }
 
     suspend fun trustCertificate(device: Device, pin: String) {
-        val n = writePin(device, pin)
+        // Confiance provisoire sur les deux adresses AVANT l'écriture en base : ferme la fenêtre où un
+        // appel lancé entre l'écriture et la relecture du registre partait en HTTP (point laissé par C1).
+        val ips = listOfNotNull(device.ipAddress, device.ip2Address?.takeIf { it.isNotBlank() })
+        ips.forEach { accessRegistry.trustProvisionally(it, pin) }
+        val n = try {
+            writePin(device, pin)
+        } finally {
+            ips.forEach { accessRegistry.forgetProvisional(it) }
+        }
         logger.info(DiagnosticLogger.RPC, "Certificat accepté ${device.ipAddress} ($n canal/canaux)")
     }
 

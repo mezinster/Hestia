@@ -715,6 +715,10 @@ class ShellyRpcClient @Inject constructor(
             }
             logger.warn(DiagnosticLogger.RPC, "$method @ $target → échec réseau : ${e.javaClass.simpleName}")
             RpcResult.Failure(RpcFailure.UNREACHABLE)
+        } catch (e: SecurityException) {
+            // Accès au réseau local refusé (Android 17) : échec propre, jamais de plantage (cf. peekCertificate).
+            logger.warn(DiagnosticLogger.RPC, "$method @ $target → accès réseau local refusé")
+            RpcResult.Failure(RpcFailure.UNREACHABLE)
         }
     }
 
