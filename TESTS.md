@@ -376,7 +376,7 @@ python3 tools/fake_shelly_https.py --password secret --rotate-cert
 - [ ] `--throttle-after 3` puis trois mauvais essais : bandeau « Appareil saturé, réessaie plus tard » ; **aucune** requête vers l'appareil pendant 60 s (script muet), puis reprise automatique.
 - [ ] Multiprise / Strip (plusieurs canaux sur une même adresse) : un seul mot de passe pour tous les canaux ; un refus ne génère pas une tentative par canal.
 - [ ] Certificat changé (`--rotate-cert`) sur un appareil avec mot de passe enregistré : bandeau « Certificat changé » ; après acceptation du nouveau certificat, le mot de passe est **suspendu** (effacé) : bandeau « Mot de passe requis » jusqu'à ressaisie.
-- [ ] Jamais d'en-tête `Authorization` en HTTP clair vers une adresse signalée « connexion chiffrée à confirmer » ou « certificat changé » (journal du script : aucune requête `[http ]` avec authentification dans ces états).
+- [ ] Jamais d'en-tête `Authorization` en HTTP clair vers une adresse signalée « connexion chiffrée à confirmer » ou « certificat changé » (journal du script : chaque requête se termine par `auth=yes` ou `auth=no`, jamais la valeur ; dans ces états, aucune ligne `[http ]` ne porte `auth=yes`).
 - [ ] Supprimer l'appareil : son mot de passe est effacé (en le rajoutant, le mot de passe est de nouveau demandé).
 - [ ] Sauvegarde **JSON** (Réglages) : le fichier exporté ne contient **aucun** mot de passe ; après restauration, la tuile affiche « Mot de passe requis ».
 - [ ] Sauvegarde **Android** / transfert d'appareil : les mots de passe ne sont pas restaurés (fichier `hestia_device_passwords` exclu de `backup_rules.xml` et `data_extraction_rules.xml`).

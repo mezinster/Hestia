@@ -160,6 +160,12 @@ def handle_rpc(method, params):
     return None, {"code": -103, "message": "Unknown method " + str(method)}
 
 
+def auth_flag(handler):
+    """« auth=yes » si la requête portait un en-tête Authorization, sinon « auth=no » (jamais sa valeur)."""
+    headers = getattr(handler, "headers", None)
+    return "auth=yes" if headers is not None and headers.get("Authorization") else "auth=no"
+
+
 def make_rpc_handler(auth, tag):
     class Handler(BaseHTTPRequestHandler):
         def _send(self, code, payload, www_authenticate=None):
@@ -192,7 +198,7 @@ def make_rpc_handler(auth, tag):
             self._send(200, resp)
 
         def log_message(self, fmt, *args):
-            print(tag, self.address_string(), fmt % args)
+            print(tag, self.address_string(), fmt % args, auth_flag(self))
 
     return Handler
 
@@ -210,7 +216,7 @@ def make_http_handler(https_port):
         do_GET = do_POST = do_PUT = do_HEAD = _redirect
 
         def log_message(self, fmt, *args):
-            print("[http ]", self.address_string(), fmt % args)
+            print("[http ]", self.address_string(), fmt % args, auth_flag(self))
 
     return Handler
 
