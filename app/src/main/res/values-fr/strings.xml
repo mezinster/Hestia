@@ -213,6 +213,9 @@
     <string name="error_timeout">L\'appareil n\'a pas répondu à temps. Vérifie le réseau et réessaie.</string>
     <string name="error_not_shelly">Cette adresse ne répond pas comme un appareil Shelly Gen2 ou ultérieur.</string>
     <string name="error_gen1_unsupported">Cet appareil est un Shelly Gen1, non pris en charge. Seuls les Gen2 et ultérieurs le sont.</string>
+    <string name="error_https_required">Cet appareil exige une connexion chiffrée (HTTPS). Ouvre Modifier l\'appareil pour vérifier son certificat et lui faire confiance.</string>
+    <string name="error_cert_changed">Le certificat de sécurité de cet appareil a changé. Si tu as réinitialisé l\'appareil, ouvre Modifier l\'appareil pour confirmer le nouveau ; sinon, vérifie ton réseau.</string>
+    <string name="tls_peek_failed">Impossible de lire le certificat de l\'appareil. Vérifie qu\'il est allumé et sur le même réseau Wi-Fi.</string>
     <string name="error_unsupported_cover">Cet appareil est configuré en contrôleur de volet, pas encore pris en charge par Hestia. Si c\'est un 2PM, tu peux le passer en mode relais depuis son interface web.</string>
     <string name="error_unsupported_color_light">Ce contrôleur d\'éclairage est réglé en mode couleur, pas encore pris en charge par Hestia. Les variateurs (lumière blanche) le sont.</string>
     <string name="error_unsupported_energy_meter">Cet appareil est un compteur d\'énergie sans relais, pas encore pris en charge par Hestia.</string>

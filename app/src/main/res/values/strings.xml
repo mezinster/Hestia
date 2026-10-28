@@ -219,6 +219,9 @@
     <string name="error_timeout">The device didn\'t respond in time. Check the network and try again.</string>
     <string name="error_not_shelly">This address doesn\'t respond like a Shelly Gen2 or later device.</string>
     <string name="error_gen1_unsupported">This device is a Shelly Gen1, which isn\'t supported. Only Gen2 and later are.</string>
+    <string name="error_https_required">This device requires an encrypted connection (HTTPS). Open Edit device to check and trust its certificate.</string>
+    <string name="error_cert_changed">This device\'s security certificate has changed. If you reset the device, open Edit device to confirm the new one; otherwise check your network.</string>
+    <string name="tls_peek_failed">Couldn\'t read the device\'s certificate. Check that it\'s on and on the same Wi-Fi network.</string>
     <string name="error_unsupported_cover">This device is set up as a shutter controller, which Hestia doesn\'t support yet. If it\'s a 2PM, you can switch it to relay mode in its web interface.</string>
     <string name="error_unsupported_color_light">This light controller is set to a colour mode, which Hestia doesn\'t support yet. Dimmers (white light) are supported.</string>
     <string name="error_unsupported_energy_meter">This device is an energy meter without a relay, which Hestia doesn\'t support yet.</string>

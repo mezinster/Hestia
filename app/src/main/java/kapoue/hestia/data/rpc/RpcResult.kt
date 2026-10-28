@@ -21,6 +21,12 @@ enum class RpcFailure {
     MALFORMED_RESPONSE,
     NOT_SHELLY_GEN2,
     GEN1_UNSUPPORTED,
+
+    /** L'appareil redirige vers HTTPS et aucune épingle de certificat n'est connue pour lui. */
+    HTTPS_REQUIRED,
+
+    /** Le certificat présenté ne correspond pas à l'épingle enregistrée : appel refusé. */
+    CERT_CHANGED,
 }
 
 /** Exécute [block] uniquement si le résultat est un succès. */

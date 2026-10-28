@@ -35,7 +35,7 @@ class DemoAddressGuardTest {
         override fun error(tag: String, message: String, throwable: Throwable?) = Unit
     }
 
-    private val client = ShellyRpcClient(http, Json { ignoreUnknownKeys = true }, logger)
+    private val client = ShellyRpcClient(http, Json { ignoreUnknownKeys = true }, logger, DeviceAccessRegistry())
 
     @Test
     fun `no request leaves for a demo address`() = runTest {
