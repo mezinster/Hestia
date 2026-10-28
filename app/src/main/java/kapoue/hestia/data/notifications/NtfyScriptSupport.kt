@@ -16,6 +16,31 @@ object NtfyScriptSupport {
         .replace("\r", "")
 
     /**
+     * Tient la place de la durée de charge dans le texte traduit de la notif de coupure
+     * (`getString(R.string.notif_cutoff_triggered_with_duration, DURATION_MARKER)`) : la durée
+     * n'est connue qu'à l'exécution du script sur l'appareil, et sa place dans la phrase dépend
+     * de la langue (en tête en anglais/français/russe depuis le 2026-10-29).
+     */
+    const val DURATION_MARKER = "@@DUREE@@"
+
+    /**
+     * Expression JS du corps de la notif : [template] découpé autour de [DURATION_MARKER], chaque
+     * morceau en littéral JS échappé, [durationExpr] (ex. `fmtDur(durationSec)`) à sa place. Sans
+     * marqueur (ancien texte), la durée est ajoutée à la fin après une espace, comme avant.
+     */
+    fun bodyWithDuration(template: String, durationExpr: String): String {
+        val at = template.indexOf(DURATION_MARKER)
+        if (at < 0) return "\"${jsString(template)} \" + $durationExpr"
+        val before = template.substring(0, at)
+        val after = template.substring(at + DURATION_MARKER.length)
+        return listOfNotNull(
+            before.takeIf { it.isNotEmpty() }?.let { "\"${jsString(it)}\"" },
+            durationExpr,
+            after.takeIf { it.isNotEmpty() }?.let { "\"${jsString(it)}\"" },
+        ).joinToString(" + ")
+    }
+
+    /**
      * Instruction JS d'appel ntfy (`HTTP.Request`, seule méthode Shelly à accepter des en-têtes —
      * nécessaire pour le titre), ou chaîne vide si [topic] est nul (ntfy désactivé : rien à
      * générer). Toujours à placer **après** l'action réelle sur le canal dans le script appelant,

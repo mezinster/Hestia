@@ -129,7 +129,7 @@
     <string name="notif_timer_ended">Таймер %1$s завершён</string>
     <string name="notif_cutoff_triggered">Отключено (мощность ниже порога)</string>
     <!-- Préfixe seul : la durée (« 1h32 », « 45min ») est ajoutée après une espace par le script généré. -->
-    <string name="notif_cutoff_triggered_with_duration">Отключено (мощность ниже порога) через</string>
+    <string name="notif_cutoff_triggered_with_duration">%1$s зарядки — отключено (мощность ниже порога)</string>
     <string name="notif_ntfy_presence_started">Имитация присутствия запущена</string>
     <string name="notif_ntfy_presence_ended">Имитация присутствия остановлена</string>
     <string name="notif_button_timer_ended">Таймер кнопки завершён</string>

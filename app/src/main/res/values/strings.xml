@@ -135,7 +135,7 @@
     <!-- Prefix only : the charge duration ("1h32", "45min") is computed and appended by the
          generated script itself, at runtime — never known at generation time. See
          ChargeScriptGenerator/ButtonTimerScriptGenerator. -->
-    <string name="notif_cutoff_triggered_with_duration">Switched off (power below threshold) after</string>
+    <string name="notif_cutoff_triggered_with_duration">%1$s of charging — switched off (power below threshold)</string>
     <!-- Variantes ntfy de la présence : plusieurs plages possibles par appareil, la prise ne sait
          pas laquelle a déclenché au moment de la bascule — pas d'horaire, contrairement au planning. -->
     <string name="notif_ntfy_presence_started">Presence simulation started</string>

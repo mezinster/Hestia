@@ -197,6 +197,15 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         get() = prefs.getString(KEY_FIRMWARE_CHECK_LAST_DATE, "") ?: ""
         set(value) { prefs.edit().putString(KEY_FIRMWARE_CHECK_LAST_DATE, value).apply() }
 
+    /**
+     * Dernier passage **complet** de la mise à niveau des scripts de coupure (voir
+     * `DeviceRepository.upgradeCutoffScriptsIfDue`) : « date ISO#versions de texte ». Une nouvelle
+     * version de texte relance donc le passage dès le lancement suivant. Chaîne vide = jamais lancé.
+     */
+    var lastCutoffUpgradeStamp: String
+        get() = prefs.getString(KEY_CUTOFF_UPGRADE_STAMP, "") ?: ""
+        set(value) { prefs.edit().putString(KEY_CUTOFF_UPGRADE_STAMP, value).apply() }
+
     // --- Minuteurs en attente (mémos pour notifier la fin d'un « Active pour » / coupure seuil) ---
 
     fun pendingTimers(): List<PendingTimer> =
@@ -336,6 +345,7 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_CLOUD_AUTH_KEY = "cloud_auth_key"
         const val KEY_CLOUD_SERVER = "cloud_server"
         const val KEY_FIRMWARE_CHECK_LAST_DATE = "firmware_check_last_date"
+        const val KEY_CUTOFF_UPGRADE_STAMP = "cutoff_upgrade_stamp"
         val json = Json { ignoreUnknownKeys = true }
     }
 }

@@ -10,6 +10,7 @@ import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.dao.PausedPlanningDao
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
+import kapoue.hestia.data.notifications.NtfyScriptSupport
 import kapoue.hestia.data.notifications.PendingTimer
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.presence.ButtonTimerScriptGenerator
@@ -635,7 +636,7 @@ class DeviceRepository @Inject constructor(
         val topic = ntfyTopic()
         val code = ChargeScriptGenerator.generateSupervisor(
             otherChannels + config, selfId = scriptId, ntfyTopic = topic,
-            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
+            ntfyCutoffBody = if (topic != null) cutoffBodyTemplate() else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         // enable=false (2026-08-22) : script transitoire — le minuteur natif qu'il surveille ne
@@ -1072,7 +1073,7 @@ class DeviceRepository @Inject constructor(
             configs,
             ntfyTopic = topic,
             ntfyEndBody = if (topic != null) context.getString(R.string.notif_button_timer_ended) else "",
-            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
+            ntfyCutoffBody = if (topic != null) cutoffBodyTemplate() else "",
         )
         rpcClient.scriptPutCode(ip, scriptId, code).errorOrNull()?.let { return it }
         // enable:true (contrairement au script de coupure d'un planning) : doit redémarrer seul
@@ -1214,7 +1215,7 @@ class DeviceRepository @Inject constructor(
             configs,
             ntfyTopic = topic,
             ntfyEndBody = if (topic != null) context.getString(R.string.notif_button_timer_ended) else "",
-            ntfyCutoffBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
+            ntfyCutoffBody = if (topic != null) cutoffBodyTemplate() else "",
             initialStateJson = stateJson,
         )
         rpcClient.scriptStop(ip, scriptId).errorOrNull()?.let {
@@ -1531,6 +1532,29 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
+     * Texte de la notif de coupure sur seuil, durée de charge en tête (2026-10-29, idée d'upstream
+     * 2.18.0) : la durée n'est connue qu'à l'exécution du script, [NtfyScriptSupport.DURATION_MARKER]
+     * lui garde sa place dans la phrase traduite (voir [NtfyScriptSupport.bodyWithDuration]).
+     */
+    private fun cutoffBodyTemplate(): String =
+        context.getString(R.string.notif_cutoff_triggered_with_duration, NtfyScriptSupport.DURATION_MARKER)
+
+    /**
+     * Code du script de coupure d'un planning, partagé entre sa création ([createCutoffScript]) et
+     * sa réécriture en place ([upgradeCutoffScriptsIfDue]) : les deux produisent exactement le
+     * même script pour les mêmes réglages.
+     */
+    private fun cutoffScriptCode(scriptId: Int, switchId: Int, thresholdW: Int, ntfyTitle: String, planEndBody: String): String {
+        val topic = ntfyTopic()
+        return ChargeScriptGenerator.generate(
+            switchId, thresholdW, belowSec = 60, selfId = scriptId,
+            ntfyTopic = topic, ntfyTitle = ntfyTitle,
+            ntfyBody = if (topic != null) cutoffBodyTemplate() else "",
+            planEndBody = planEndBody,
+        )
+    }
+
+    /**
      * Crée un script de coupure sur seuil **dédié** (jamais partagé) avec le seuil donné. Nom
      * unique par appel : le script `hestia_charge` du minuteur peut rester sur l'appareil (il ne
      * se supprime jamais lui-même, seulement s'auto-désactive), un nom identique ferait échouer
@@ -1548,13 +1572,7 @@ class DeviceRepository @Inject constructor(
         // scripts activés — même raison que ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME, voir
         // upsertChargeSupervisorChannel.
         val id = rpcClient.scriptCreate(ip, ChargeScriptGenerator.uniquePlanningScriptName()).getOrNull()?.id ?: return null
-        val topic = ntfyTopic()
-        val code = ChargeScriptGenerator.generate(
-            switchId, thresholdW, belowSec = 60, selfId = id,
-            ntfyTopic = topic, ntfyTitle = ntfyTitle,
-            ntfyBody = if (topic != null) context.getString(R.string.notif_cutoff_triggered_with_duration) else "",
-            planEndBody = planEndBody,
-        )
+        val code = cutoffScriptCode(id, switchId, thresholdW, ntfyTitle, planEndBody)
         rpcClient.scriptPutCode(ip, id, code).errorOrNull()?.let {
             rpcClient.scriptDelete(ip, id)
             return null
@@ -1860,6 +1878,81 @@ class DeviceRepository @Inject constructor(
         is FirmwareCheckResult.UpdateAvailable -> "maj stable $newVersion disponible"
         is FirmwareCheckResult.BetaOnly -> "seule une bêta ($betaVersion) est disponible"
         FirmwareCheckResult.Error -> "vérification échouée"
+    }
+
+    /**
+     * Met à niveau, sans action de l'utilisateur, les scripts de coupure déjà posés sur les prises
+     * (2026-10-29, idées d'upstream 2.16.2 et 2.18.0) — sinon rien ne les rattraperait jamais
+     * (« un utilisateur lambda ne va pas y penser ») :
+     *
+     * - planning avec seuil sans `planEnd()` (antérieur à upstream 2.16.0, double notif après une
+     *   coupure) : **réenregistré à l'identique** via [updatePlanning] ;
+     * - planning au texte de coupure périmé (durée en fin de phrase) : script **réécrit en place**,
+     *   même id, programmes intacts ;
+     * - minuteur bouton au texte périmé : **réaligné** en gardant sa mémoire (minuteur armé compris).
+     *   Le script superviseur « Active pour » se redéploie déjà tout seul au prochain armement.
+     *
+     * Décision par script dans [CutoffScriptUpgrade]. Jamais touché : un planning **en cours**
+     * (reporté au lancement suivant), un planning dont le seuil n'a pas pu être relu (le
+     * réenregistrer sans seuil supprimerait la coupure), les appareils démo. Une fois par jour au
+     * plus, au lancement, après [checkFirmwareUpdatesIfDue] ; le passage n'est marqué fait que si
+     * rien n'a été reporté ou n'a échoué. Un conflit avec un autre planning ne se résoudra pas tout
+     * seul : retenté le lendemain seulement, pour ne pas remplir le journal.
+     */
+    suspend fun upgradeCutoffScriptsIfDue() {
+        val stamp = "${LocalDate.now()}#${ChargeScriptGenerator.NOTIF_VERSION}.${ButtonTimerScriptGenerator.NOTIF_VERSION}"
+        if (appPreferences.lastCutoffUpgradeStamp == stamp) return
+        var complete = true
+        val devices = getDevicesOnce().filter { it.supportsSwitch && !it.ipAddress.startsWith(DEMO_IP_PREFIX) }
+        for (device in devices) {
+            val plannings = (getPlannings(device) as? RpcResult.Success)?.value ?: continue
+            for (p in plannings) {
+                if (p.isPresence) continue
+                val scriptId = p.cutoffScriptId ?: continue
+                val threshold = p.cutoffThresholdW ?: continue
+                val ip = currentIp(device)
+                val code = rpcClient.scriptGetCode(ip, scriptId).getOrNull()?.data ?: continue
+                val label = "%02d:%02d-%02d:%02d".format(p.startHour, p.startMinute, p.endHour, p.endMinute)
+                when (CutoffScriptUpgrade.decide(code, p.isActiveNow())) {
+                    CutoffScriptUpgrade.NONE -> Unit
+                    CutoffScriptUpgrade.POSTPONE -> {
+                        complete = false
+                        logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) à mettre à niveau, en cours : reporté")
+                    }
+                    CutoffScriptUpgrade.REWRITE_TEXT -> {
+                        val endBody = ntfyPlanningTexts(device, p.startHour, p.startMinute, p.endHour, p.endMinute, threshold)?.endBody.orEmpty()
+                        val newCode = cutoffScriptCode(scriptId, device.switchId, threshold, device.name, endBody)
+                        if (rpcClient.scriptPutCode(ip, scriptId, newCode).errorOrNull() == null) {
+                            logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) : texte de coupure mis à jour (durée en tête)")
+                        } else {
+                            complete = false
+                            logger.warn(DiagnosticLogger.RPC, "Planning $label (${device.name}) : texte de coupure non mis à jour, retenté au prochain lancement")
+                        }
+                    }
+                    CutoffScriptUpgrade.RESAVE -> when (val r = updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, threshold)) {
+                        CreatePlanningResult.Success ->
+                            logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) mis à niveau (fin de planning sans double notif)")
+                        is CreatePlanningResult.Conflict ->
+                            logger.warn(DiagnosticLogger.RPC, "Planning $label (${device.name}) : mise à niveau impossible, chevauche un autre planning — retentée demain")
+                        else -> {
+                            complete = false
+                            logger.warn(DiagnosticLogger.RPC, "Planning $label (${device.name}) : mise à niveau refusée ($r), retentée au prochain lancement")
+                        }
+                    }
+                }
+            }
+        }
+        // Minuteur bouton au texte périmé : un passage par appareil physique (script partagé).
+        for ((_, members) in devices.filter { it.hasScripting }.groupBy { it.ipAddress }) {
+            val (ip, list) = withIp(members.first()) { i -> rpcClient.scriptList(i) }
+            val button = list.getOrNull()?.scripts?.firstOrNull { it.name == ButtonTimerScriptGenerator.SCRIPT_NAME && it.running } ?: continue
+            val code = rpcClient.scriptGetCode(ip, button.id).getOrNull()?.data ?: continue
+            if (ButtonTimerScriptGenerator.parseNotifVersion(code) >= ButtonTimerScriptGenerator.NOTIF_VERSION) continue
+            // Issue journalisée par realignButtonTimerFlash elle-même ; un échec est retenté demain.
+            logger.info(DiagnosticLogger.RPC, "Minuteur bouton @ $ip : texte de coupure périmé, réalignement")
+            realignButtonTimerFlash(ip, button.id)
+        }
+        if (complete) appPreferences.lastCutoffUpgradeStamp = stamp
     }
 
     /**

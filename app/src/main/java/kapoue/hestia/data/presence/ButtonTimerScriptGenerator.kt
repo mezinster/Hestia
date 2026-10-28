@@ -53,8 +53,11 @@ object ButtonTimerScriptGenerator {
      * ancien texte de notif indéfiniment, sans qu'aucune action dans l'appli ne le rattrape jamais
      * (retour David : « un utilisateur lambda ne va pas redémarrer sa prise pour ça »).
      * [parseNotifVersion] détecte ce cas pour forcer un vrai redéploiement à la place.
+     *
+     * Version 2 (2026-10-29, numérotation propre au fork) : durée de charge en tête de la notif de
+     * coupure. Réalignée au lancement par `DeviceRepository.upgradeCutoffScriptsIfDue`.
      */
-    const val NOTIF_VERSION = 1
+    const val NOTIF_VERSION = 2
     private const val NOTIF_VERSION_MARKER = "// hestia_notif_ver:"
 
     /** 0 = marqueur absent, donc forcément une version antérieure à son introduction. */
@@ -124,8 +127,9 @@ object ButtonTimerScriptGenerator {
      * liste, ne sont pas concernés). [ntfyTopic] non nul = notifie via ntfy à la fin
      * ([ntfyEndBody]) et à une coupure sur seuil ([ntfyCutoffBody]) — texte générique, identique
      * pour tous les canaux, seul le titre (nom de la prise) varie, résolu à l'exécution.
-     * [ntfyCutoffBody] n'est qu'un préfixe : la durée de charge écoulée (ex. « 1h32 »), calculée
-     * par le script lui-même à l'exécution (`fmtDur`), y est ajoutée à la suite (2026-09-17). Un
+     * [ntfyCutoffBody] contient [NtfyScriptSupport.DURATION_MARKER] à la place de la durée de
+     * charge écoulée (ex. « 1h32 »), calculée par le script lui-même à l'exécution (`fmtDur`) — en
+     * tête de phrase depuis le 2026-10-29. Un
      * appui bouton qui annule le minuteur en cours (source de nouveau un appui bouton au moment de
      * l'extinction, voir `isButtonSource`) ne notifie jamais — c'est une action manuelle délibérée.
      *
@@ -157,7 +161,7 @@ object ButtonTimerScriptGenerator {
         // passé en paramètre par l'appelant plutôt que recalculé ici (retour David, 2026-09-17) —
         // voir fmtDur ci-dessous.
         val notifyCutoff = NtfyScriptSupport.callDynamicTitleAndBody(
-            ntfyTopic, "name", "\"${NtfyScriptSupport.jsString(ntfyCutoffBody)} \" + fmtDur(durationSec)",
+            ntfyTopic, "name", NtfyScriptSupport.bodyWithDuration(ntfyCutoffBody, "fmtDur(durationSec)"),
         )
         val stateInit = if (initialStateJson != null) {
             "let STATE = $initialStateJson;"

@@ -57,7 +57,13 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch { repository.fixLegacyChannelNames() }
         // Vérification automatique du firmware — une fois par jour maximum, voir
         // DeviceRepository.checkFirmwareUpdatesIfDue (no-op silencieux si déjà faite aujourd'hui).
-        viewModelScope.launch { repository.checkFirmwareUpdatesIfDue() }
+        // Puis, dans la foulée (pas en parallèle, pour ne pas doubler la charge réseau au
+        // lancement) : mise à niveau des scripts de coupure déjà posés, voir
+        // DeviceRepository.upgradeCutoffScriptsIfDue.
+        viewModelScope.launch {
+            repository.checkFirmwareUpdatesIfDue()
+            repository.upgradeCutoffScriptsIfDue()
+        }
     }
 
     /**

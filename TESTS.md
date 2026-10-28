@@ -313,3 +313,15 @@ Marquer chaque ligne OK / KO / N/A, et noter l'appareil concerné en cas d'écar
 - [ ] Tuile : « Fermé · ouvre à 07:30 », « ouvre lun 07:30 » quand ce n'est pas aujourd'hui, « ouvre 24/12/2026 13:00 » (date courte) pour un unique à plus de 6 jours.
 - [ ] **Langues** : hors mode démo, EN / FR / RU / système : section, dialogue, tuile et notifications dans la bonne langue.
 - [ ] Non-régression : plannings du Plug M (relais) et d'un variateur inchangés.
+
+## Scripts de coupure — mise à niveau automatique (fork, 2026-10-29)
+
+Idées d'upstream 2.16.2 et 2.18.0, réimplémentées. Sans matériel côté fork : à valider par un
+testeur sur une vraie prise avec ntfy activé.
+
+- [ ] Notif de coupure sur seuil (planning, « Active pour », bouton physique) : la durée vient **en tête** — « 1h14 of charging — … » / « 1h14 de charge — … » / « 1h14 зарядки — … ».
+- [ ] Planning avec seuil posé par une version antérieure (texte « …après 1h14 ») : au lancement suivant, script réécrit **en place** (même id dans l'interface web, programmes inchangés), journal « texte de coupure mis à jour ».
+- [ ] Planning avec seuil sans `planEnd()` (antérieur à upstream 2.16.0) : réenregistré à l'identique au lancement, plus de double notif « planning terminé » après une coupure.
+- [ ] Planning **en cours** au lancement : jamais touché, journal « reporté », mis à niveau au lancement suivant.
+- [ ] Minuteur bouton armé avec texte périmé : réaligné au lancement, minuteur en cours conservé.
+- [ ] Second lancement le même jour : aucun appel de mise à niveau (journal muet).
