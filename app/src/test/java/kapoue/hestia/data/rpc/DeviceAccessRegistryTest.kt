@@ -164,12 +164,29 @@ class DeviceAccessRegistryTest {
         val accepted = mutableListOf<String>()
         val rejected = mutableListOf<String>()
         var fail = false
+        var failMark = false
+        /** Alias : adresse -> adresse principale, pour simuler ip2 d'un même canal. */
+        var aliases: Map<String, String> = emptyMap()
         override suspend fun load(): Map<String, StoredPassword> {
             if (fail) error("boom")
             return data
         }
-        override suspend fun markAccepted(address: String) { accepted += address }
-        override suspend fun markRejected(address: String) { rejected += address }
+        override suspend fun markAccepted(address: String, expectedPassword: String) {
+            if (failMark) error("boom")
+            accepted += address
+            setState(address, expectedPassword, PasswordState.ACCEPTED)
+        }
+        override suspend fun markRejected(address: String, expectedPassword: String) {
+            if (failMark) error("boom")
+            rejected += address
+            setState(address, expectedPassword, PasswordState.REJECTED)
+        }
+        private fun setState(address: String, expected: String, state: PasswordState) {
+            val main = aliases[address] ?: address
+            val cur = data[main] ?: return
+            if (cur.password != expected) return
+            data = data.mapValues { (k, v) -> if (k == main || aliases[k] == main) v.copy(state = state) else v }
+        }
     }
 
     private fun pw(state: PasswordState) = StoredPassword("secret", state)
@@ -188,7 +205,7 @@ class DeviceAccessRegistryTest {
         r.ensureLoaded()
         assertEquals("secret", r.passwordFor(ip))
         assertEquals(AccessIssue.PASSWORD_UNVERIFIED, r.issues.value[ip])
-        r.onAuthAccepted(ip)
+        r.onAuthAccepted(ip, "secret")
         assertEquals(listOf(ip), src.accepted)
         assertNull(r.issues.value[ip])
     }
@@ -197,7 +214,7 @@ class DeviceAccessRegistryTest {
         val r = registry()
         r.trustPasswordProvisionally("x", "a")
         assertEquals("a", r.passwordFor("x"))
-        r.onAuthRejected("x")
+        r.onAuthRejected("x", "a")
         assertEquals(RpcFailure.PASSWORD_WRONG, r.blockedFor("x"))
         assertNull(r.passwordFor("x"))
         r.trustPasswordProvisionally("x", "b")
@@ -243,7 +260,7 @@ class DeviceAccessRegistryTest {
         val src = FakePasswords(mapOf(ip to pw(PasswordState.UNVERIFIED)))
         val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
         r.ensureLoaded()
-        r.onAuthRejected(ip)
+        r.onAuthRejected(ip, "secret")
         assertEquals(listOf(ip), src.rejected)
         assertEquals(RpcFailure.PASSWORD_WRONG, r.blockedFor(ip))
     }
@@ -257,5 +274,91 @@ class DeviceAccessRegistryTest {
         r.setSession("https://1.2.3.4", null)
         assertNull(r.sessionFor("https://1.2.3.4"))
         assertTrue(r.lockFor("a") === r.lockFor("a"))
+    }
+
+    @Test fun `a stale rejection does not touch a newly saved password`() = runTest {
+        val src = FakePasswords(mapOf(ip to StoredPassword("P1", PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        src.data = mapOf(ip to StoredPassword("P2", PasswordState.UNVERIFIED))
+        r.reload()
+        r.onAuthRejected(ip, "P1")
+        assertTrue(src.rejected.isEmpty())
+        assertEquals("P2", r.passwordFor(ip))
+        assertNull(r.blockedFor(ip))
+        assertEquals(PasswordState.UNVERIFIED, src.data[ip]?.state)
+    }
+
+    @Test fun `a stale acceptance does not touch a newly saved password`() = runTest {
+        val src = FakePasswords(mapOf(ip to StoredPassword("P1", PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        src.data = mapOf(ip to StoredPassword("P2", PasswordState.UNVERIFIED))
+        r.reload()
+        r.onAuthAccepted(ip, "P1")
+        assertTrue(src.accepted.isEmpty())
+        assertEquals(AccessIssue.PASSWORD_UNVERIFIED, r.issues.value[ip])
+    }
+
+    @Test fun `a rejection via one address blocks its alias`() = runTest {
+        val ip2 = "10.0.0.5"
+        val entry = StoredPassword("secret", PasswordState.UNVERIFIED)
+        val src = FakePasswords(mapOf(ip to entry, ip2 to entry)).apply { aliases = mapOf(ip2 to ip) }
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        r.onAuthRejected(ip, "secret")
+        assertEquals(RpcFailure.PASSWORD_WRONG, r.blockedFor(ip2))
+        assertNull(r.passwordFor(ip2))
+    }
+
+    @Test fun `load-time sync never overwrites CERT_CHANGED or HTTPS_REQUIRED`() = runTest {
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.REJECTED), "b" to pw(PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.report(ip, AccessIssue.CERT_CHANGED)
+        r.report("b", AccessIssue.HTTPS_REQUIRED)
+        r.reload()
+        assertEquals(AccessIssue.CERT_CHANGED, r.issues.value[ip])
+        assertEquals(AccessIssue.HTTPS_REQUIRED, r.issues.value["b"])
+    }
+
+    @Test fun `rejection replaces required, throttled and unverified but not a certificate issue`() = runTest {
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.UNVERIFIED), "b" to pw(PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        r.report(ip, AccessIssue.THROTTLED)
+        r.report("b", AccessIssue.CERT_CHANGED)
+        r.onAuthRejected(ip, "secret")
+        r.onAuthRejected("b", "secret")
+        assertEquals(AccessIssue.PASSWORD_WRONG, r.issues.value[ip])
+        assertEquals(AccessIssue.CERT_CHANGED, r.issues.value["b"])
+    }
+
+    @Test fun `a provisional acceptance is not persisted`() = runTest {
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        r.trustPasswordProvisionally(ip, "secret")
+        r.onAuthAccepted(ip, "secret")
+        assertTrue(src.accepted.isEmpty())
+    }
+
+    @Test fun `a failing source mark does not throw and still blocks`() = runTest {
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.UNVERIFIED))).apply { failMark = true }
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        r.onAuthRejected(ip, "secret")
+        assertEquals(RpcFailure.PASSWORD_WRONG, r.blockedFor(ip))
+    }
+
+    @Test fun `a reload where pins succeed but passwords fail keeps the previous state`() = runTest {
+        db = mapOf(ip to "A")
+        val src = FakePasswords(mapOf(ip to pw(PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { db }, src)
+        assertTrue(r.reload())
+        db = mapOf(ip to "B")
+        src.fail = true
+        assertFalse(r.reload())
+        assertEquals("A", r.pinFor(ip))
+        assertEquals("secret", r.passwordFor(ip))
     }
 }

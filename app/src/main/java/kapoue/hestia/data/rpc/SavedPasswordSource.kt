@@ -15,15 +15,16 @@ data class StoredPassword(val password: String, val state: PasswordState) {
  */
 interface SavedPasswordSource {
     suspend fun load(): Map<String, StoredPassword>
-    suspend fun markAccepted(address: String)
-    suspend fun markRejected(address: String)
+    /** Ne modifie que les canaux dont le mot de passe enregistré vaut [expectedPassword] (résultat périmé ignoré). */
+    suspend fun markAccepted(address: String, expectedPassword: String)
+    suspend fun markRejected(address: String, expectedPassword: String)
 
     companion object {
         /** Source vide et sans effet (tests existants). */
         val NONE: SavedPasswordSource = object : SavedPasswordSource {
             override suspend fun load(): Map<String, StoredPassword> = emptyMap()
-            override suspend fun markAccepted(address: String) = Unit
-            override suspend fun markRejected(address: String) = Unit
+            override suspend fun markAccepted(address: String, expectedPassword: String) = Unit
+            override suspend fun markRejected(address: String, expectedPassword: String) = Unit
         }
     }
 }

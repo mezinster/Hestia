@@ -204,40 +204,63 @@ class DeviceAccessRegistry @Inject constructor(
         else -> null
     }
 
-    /** L'appareil a accepté le mot de passe en usage : persiste `ACCEPTED` pour un mot de passe enregistré. */
-    suspend fun onAuthAccepted(address: String) {
-        if (provisionalPw.containsKey(address)) return
-        val stored = savedPw[address] ?: return
+    /**
+     * L'appareil a accepté [passwordUsed] (celui réellement envoyé) pour [address]. Persiste
+     * `ACCEPTED` pour un mot de passe enregistré ; un résultat périmé (mot de passe remplacé
+     * depuis l'envoi) est ignoré. Tout se déroule sous [loadMutex].
+     */
+    suspend fun onAuthAccepted(address: String, passwordUsed: String) = loadMutex.withLock {
+        if (provisionalPw.containsKey(address)) return@withLock
+        val stored = savedPw[address] ?: return@withLock
+        if (stored.password != passwordUsed) return@withLock
         if (stored.state != PasswordState.ACCEPTED) {
-            try {
-                savedPasswords.markAccepted(address)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // Best-effort : l'état en mémoire est tout de même mis à jour.
-            }
-            savedPw = savedPw + (address to stored.copy(state = PasswordState.ACCEPTED))
+            applyMark(address, stored, PasswordState.ACCEPTED) { savedPasswords.markAccepted(address, passwordUsed) }
         }
         if (_issues.value[address] == AccessIssue.PASSWORD_UNVERIFIED) report(address, null)
     }
 
-    /** L'appareil a refusé le mot de passe en usage : refus en mémoire, et persisté s'il est enregistré. */
-    suspend fun onAuthRejected(address: String) {
+    /**
+     * L'appareil a refusé [passwordUsed] pour [address] : refus en mémoire, et persisté s'il est
+     * enregistré. Un résultat périmé est ignoré. Tout se déroule sous [loadMutex].
+     */
+    suspend fun onAuthRejected(address: String, passwordUsed: String) = loadMutex.withLock {
         if (provisionalPw.containsKey(address)) {
-            provisionalRejected.add(address)
-            return
+            if (provisionalPw[address] == passwordUsed) provisionalRejected.add(address)
+            return@withLock
         }
-        val stored = savedPw[address] ?: return
+        val stored = savedPw[address] ?: return@withLock
+        if (stored.password != passwordUsed) return@withLock
+        applyMark(address, stored, PasswordState.REJECTED) { savedPasswords.markRejected(address, passwordUsed) }
+        val current = _issues.value[address]
+        if (current == null || current == AccessIssue.PASSWORD_UNVERIFIED ||
+            current == AccessIssue.PASSWORD_REQUIRED || current == AccessIssue.THROTTLED
+        ) {
+            report(address, AccessIssue.PASSWORD_WRONG)
+        }
+    }
+
+    /**
+     * Persiste via [write] (échec avalé) puis relit tout (couvre les alias d'adresse) ; si l'écriture
+     * ou la relecture échoue, applique l'état à [address] seule en mémoire. À appeler sous [loadMutex].
+     */
+    private suspend fun applyMark(
+        address: String,
+        stored: StoredPassword,
+        state: PasswordState,
+        write: suspend () -> Unit,
+    ) {
+        var written = true
         try {
-            savedPasswords.markRejected(address)
+            write()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // Le refus en mémoire s'applique malgré tout.
+            // Best-effort : l'état en mémoire est tout de même mis à jour ci-dessous.
+            written = false
         }
-        savedPw = savedPw + (address to stored.copy(state = PasswordState.REJECTED))
-        val current = _issues.value[address]
-        if (current == null || current == AccessIssue.PASSWORD_UNVERIFIED) report(address, AccessIssue.PASSWORD_WRONG)
+        if (!written || !readLocked()) {
+            savedPw = savedPw + (address to stored.copy(state = state))
+        }
     }
 
     /** HTTP 429 : aucune requête vers [address] pendant [THROTTLE_BACKOFF_MS]. */

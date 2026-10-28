@@ -66,10 +66,10 @@ class DevicePasswordsTest {
         val vault = InMemoryPasswordVault()
         vault.write(1, StoredPassword("pw", PasswordState.UNVERIFIED))
         val passwords = DevicePasswords({ list }, vault)
-        passwords.markRejected("10.0.0.5")
+        passwords.markRejected("10.0.0.5", "pw")
         assertEquals(PasswordState.REJECTED, passwords.load()[".96"]?.state)
         val writes = vault.writes
-        passwords.markRejected("10.0.0.5")
+        passwords.markRejected("10.0.0.5", "pw")
         assertEquals(writes, vault.writes)
     }
 
@@ -81,5 +81,18 @@ class DevicePasswordsTest {
         passwords.save(".96", "pw")
         assertEquals(2, passwords.remove(".96"))
         assertTrue(vault.knownIds().isEmpty())
+    }
+
+    @Test
+    fun `mark with a non matching expected password writes nothing`() = runTest {
+        val list = listOf(device(1, ".96"))
+        val vault = InMemoryPasswordVault()
+        vault.write(1, StoredPassword("new", PasswordState.UNVERIFIED))
+        val writes = vault.writes
+        val passwords = DevicePasswords({ list }, vault)
+        passwords.markRejected(".96", "old")
+        passwords.markAccepted(".96", "old")
+        assertEquals(writes, vault.writes)
+        assertEquals(PasswordState.UNVERIFIED, vault.read(1)?.state)
     }
 }

@@ -48,14 +48,18 @@ class DevicePasswords(
         return result
     }
 
-    override suspend fun markAccepted(address: String) = mark(address, PasswordState.ACCEPTED)
+    override suspend fun markAccepted(address: String, expectedPassword: String) =
+        mark(address, expectedPassword, PasswordState.ACCEPTED)
 
-    override suspend fun markRejected(address: String) = mark(address, PasswordState.REJECTED)
+    override suspend fun markRejected(address: String, expectedPassword: String) =
+        mark(address, expectedPassword, PasswordState.REJECTED)
 
-    private suspend fun mark(address: String, state: PasswordState) {
+    private suspend fun mark(address: String, expectedPassword: String, state: PasswordState) {
         for (device in devices()) {
             if (device.ipAddress != address && device.ip2Address != address) continue
             val stored = vault.read(device.id) ?: continue
+            // Résultat périmé (mot de passe changé entre-temps) : on n'y touche pas.
+            if (stored.password != expectedPassword) continue
             if (stored.state != state) vault.write(device.id, stored.copy(state = state))
         }
     }
