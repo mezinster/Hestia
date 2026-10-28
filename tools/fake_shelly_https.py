@@ -6,9 +6,12 @@ authentification, aucune protection.
 
 Ce que fait le script :
   - port HTTP  : toute requête reçoit un 301 vers https://<hôte>:<port-https>/rpc
-  - port HTTPS : JSON-RPC sur POST /rpc avec un certificat auto-signé généré au lancement
-    (openssl). Le chemin du certificat et son empreinte SHA-256 (même format que l'appli) sont
-    affichés au démarrage ; --rotate-cert en régénère un nouveau pour tester « certificat changé ».
+  - port HTTPS : JSON-RPC sur POST /rpc avec un certificat auto-signé (openssl), conservé entre
+    les lancements dans --state-dir (défaut ~/.cache/hestia-fake-shelly/, hors dépôt) : relancer
+    le script garde le même certificat, donc l'épingle de l'appli reste valable. Le chemin du
+    certificat, son origine (réutilisé / généré) et son empreinte SHA-256 (même format que
+    l'appli) sont affichés au démarrage ; --rotate-cert en régénère un nouveau pour tester
+    « certificat changé ».
   - méthodes gérées : Shelly.GetDeviceInfo, Shelly.GetComponents, Switch.GetStatus, Switch.Set.
 
 ATTENTION aux ports : l'appli contacte toujours les vrais ports 80 (HTTP) et 443 (HTTPS), jamais
@@ -26,7 +29,6 @@ import json
 import os
 import ssl
 import subprocess
-import tempfile
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -131,17 +133,20 @@ def main():
     ap = argparse.ArgumentParser(description="Faux Shelly Gen2 HTTPS (usage local uniquement).")
     ap.add_argument("--http-port", type=int, default=8080, help="port HTTP, redirige en 301 (défaut 8080 ; l'appli exige 80)")
     ap.add_argument("--https-port", type=int, default=8443, help="port HTTPS (défaut 8443 ; l'appli exige 443)")
-    ap.add_argument("--rotate-cert", action="store_true", help="régénère un nouveau certificat au lancement (test « certificat changé »)")
+    ap.add_argument("--rotate-cert", action="store_true", help="régénère le certificat (test « certificat changé »)")
+    ap.add_argument("--state-dir", default=os.path.expanduser("~/.cache/hestia-fake-shelly"), help="dossier où le certificat est conservé entre les lancements")
     args = ap.parse_args()
 
-    # Un certificat par lancement ; --rotate-cert garantit simplement l'intention d'en changer
-    # par rapport au lancement précédent (le répertoire temporaire est de toute façon neuf).
-    directory = tempfile.mkdtemp(prefix="fake-shelly-")
-    cert, key = generate_cert(directory)
-    print("Certificat :", cert)
-    print("Empreinte SHA-256 :", fingerprint(cert))
-    if args.rotate_cert:
-        print("(certificat régénéré : il diffère de celui des lancements précédents)")
+    # Certificat conservé entre les lancements ; régénéré seulement si absent ou --rotate-cert.
+    os.makedirs(args.state_dir, exist_ok=True)
+    cert = os.path.join(args.state_dir, "cert.pem")
+    key = os.path.join(args.state_dir, "key.pem")
+    if args.rotate_cert or not (os.path.exists(cert) and os.path.exists(key)):
+        cert, key = generate_cert(args.state_dir)
+        print("Certificat généré :", cert)
+    else:
+        print("Certificat réutilisé :", cert)
+    print("Empreinte SHA-256 :", fingerprint(cert), flush=True)
 
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.load_cert_chain(cert, key)
