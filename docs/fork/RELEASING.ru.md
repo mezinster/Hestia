@@ -87,7 +87,7 @@ Workflow `.github/workflows/fork-release.yml` запускается по это
 Следи за ходом через `gh run watch` (или вкладку *Actions*), затем проверь
 <https://github.com/mezinster/Hestia/releases/latest>.
 
-Пробный прогон без публикации: *Actions → Fork release → Run workflow* (или
+Пробный прогон без публикации: *Actions → Release signed fork APK → Run workflow* (или
 `gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) пересобирает
 существующий тег (отклоняется, если его нет в `fork/main`) и создаёт Release **всегда как черновик**;
 затем опубликуй его в веб-интерфейсе или командой `gh release edit <tag> --draft=false`. Потом удали его (`gh release delete <tag> --yes`),
@@ -152,7 +152,7 @@ tags immutable»** запрещает перемещать или удалять
 - GitHub **приостанавливает запланированные workflow после 60 дней без активности** в публичном
   репозитории: push в `fork/main` по-прежнему сразу попадает в зеркало, но остальные ветки, теги и
   `main` (синхронизация с апстримом) перестанут доходить до Codeberg — предупреждением будет только
-  письмо от GitHub. После долгого перерыва проверь *Actions → Codeberg mirror*: при необходимости
+  письмо от GitHub. После долгого перерыва проверь *Actions → Mirror GitHub → Codeberg*: при необходимости
   включи его снова (`gh workflow enable codeberg-mirror.yml`) и запусти один раз
   (`gh workflow run codeberg-mirror.yml --ref fork/main`).
 

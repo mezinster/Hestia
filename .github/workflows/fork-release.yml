@@ -4,7 +4,7 @@
 # fork-release, limité aux tags fork/* et à la branche fork/main (lancements manuels). Un lancement
 # manuel refuse tout tag absent de fork/main. Sur un push de tag, GitHub exécute le workflow du commit
 # tagué : la vraie barrière est alors que seuls les mainteneurs peuvent pousser des tags fork/*.
-name: Fork release
+name: Release signed fork APK
 
 on:
   push:
