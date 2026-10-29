@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -54,6 +55,8 @@ object PresenceScriptGenerator {
         val switchId: Int,
         val name: String,
         val windows: List<PresenceWindow>,
+        /** Faux = pas de notif de début/fin de plage (`np: false`) ; la bascule a lieu quand même. */
+        val notify: Boolean = true,
     )
 
     /** Littéral JS des plages d'un canal : `[[début,fin,marge,[jours]],…]`. */
@@ -64,7 +67,7 @@ object PresenceScriptGenerator {
 
     /** Littéral JS d'un canal, partagé entre [generateSupervisor] et [evalUpsertChannel]. */
     private fun channelLiteral(c: ChannelConfig): String =
-        "{ switchId: ${c.switchId}, name: \"${NtfyScriptSupport.jsString(c.name)}\", windows: ${windowsLiteral(c.windows)} }"
+        "{ switchId: ${c.switchId}, name: \"${NtfyScriptSupport.jsString(c.name)}\", windows: ${windowsLiteral(c.windows)}${if (c.notify) "" else ", np: false"} }"
 
     /**
      * Littéral JS d'un état de suivi vierge, partagé entre [generateSupervisor] et
@@ -160,8 +163,8 @@ object PresenceScriptGenerator {
                 : (appliesToday && now >= onAt && now < offAt);
               if (match) { inWin = true; break; }
             }
-            if (inWin && !st.output) { Shelly.call("Switch.Set", { id: cfg.switchId, on: true }); notifyStart(cfg.name); }
-            if (!inWin && st.output) { Shelly.call("Switch.Set", { id: cfg.switchId, on: false }); notifyEnd(cfg.name); }
+            if (inWin && !st.output) { Shelly.call("Switch.Set", { id: cfg.switchId, on: true }); if (cfg.np !== false) notifyStart(cfg.name); }
+            if (!inWin && st.output) { Shelly.call("Switch.Set", { id: cfg.switchId, on: false }); if (cfg.np !== false) notifyEnd(cfg.name); }
           }
         });
         """.trimIndent()
@@ -260,7 +263,7 @@ object PresenceScriptGenerator {
             val switchId = obj["switchId"]?.jsonPrimitive?.intOrNull ?: return null
             val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: return null
             val windows = (obj["windows"] as? JsonArray)?.mapNotNull { parseWindow(it) } ?: return null
-            ChannelConfig(switchId, name, windows)
+            ChannelConfig(switchId, name, windows, obj["np"]?.jsonPrimitive?.booleanOrNull ?: true)
         }
         configs to stateArr.toString()
     }.getOrNull()
