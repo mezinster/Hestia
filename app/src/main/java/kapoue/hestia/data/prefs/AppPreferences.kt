@@ -162,10 +162,15 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         runCatching { json.decodeFromString<Set<Long>>(prefs.getString(KEY_NOTIFY_RESYNC_PENDING, null) ?: "[]") }
             .getOrDefault(emptySet())
 
+    /** Version observable de [notifyResyncPendingIds] : l'écran Modifier suit la resynchronisation en arrière-plan. */
+    private val _notifyResyncPending = MutableStateFlow(notifyResyncPendingIds())
+    val notifyResyncPending: StateFlow<Set<Long>> = _notifyResyncPending.asStateFlow()
+
     fun setNotifyResyncPending(deviceId: Long, pending: Boolean) {
         val current = notifyResyncPendingIds()
         val updated = if (pending) current + deviceId else current - deviceId
         if (updated != current) prefs.edit().putString(KEY_NOTIFY_RESYNC_PENDING, json.encodeToString(updated)).apply()
+        _notifyResyncPending.value = updated
     }
 
     /**

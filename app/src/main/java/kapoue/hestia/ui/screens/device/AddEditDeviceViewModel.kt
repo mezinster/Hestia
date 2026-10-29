@@ -233,12 +233,19 @@ class AddEditDeviceViewModel @Inject constructor(
                                 passwordSaved = stored != null,
                                 notifyKinds = device?.let { d -> applicableKinds(d) } ?: emptyList(),
                                 notifyMask = device?.notifyMask ?: NotifyKind.ALL,
-                                notifyPending = device != null && repository.notifyResyncPending(device.id),
                                 notificationsGloballyOff =
                                     !appPreferences.ntfyEnabled.value && !appPreferences.notificationsEnabled.value,
                             )
                         }
                     }
+            }
+        }
+        // Le drapeau « en attente » suit la resynchronisation en arrière-plan (flux observable).
+        editingDeviceId?.let { id ->
+            viewModelScope.launch {
+                repository.notifyResyncPendingFlow.collect { ids ->
+                    _uiState.update { it.copy(notifyPending = id in ids) }
+                }
             }
         }
         editingDeviceId?.let { id ->
@@ -597,16 +604,12 @@ class AddEditDeviceViewModel @Inject constructor(
     fun setNotifyKind(kind: NotifyKind, enabled: Boolean) {
         val device = observedDevice ?: return
         if (!_uiState.value.isEditMode) return
-        val mask = device.notifyMask.withKind(kind, enabled)
+        // Masque affiché (pas celui lu en base) : deux bascules rapides ne partent pas d'une base périmée.
+        val mask = _uiState.value.notifyMask.withKind(kind, enabled)
         logger.info(DiagnosticLogger.UI, "Notification $kind ${if (enabled) "activée" else "coupée"} depuis Modifier (${device.ipAddress})")
         viewModelScope.launch {
             repository.setNotifyMask(device, mask)
-            // Relecture : l'appareil en base change, et le drapeau « en attente » peut déjà
-            // avoir été posé par la resynchronisation.
-            _uiState.update {
-                it.copy(notifyMask = mask, notifyPending = repository.notifyResyncPending(device.id))
-            }
-            passwordRefresh.update { it + 1 }
+            _uiState.update { it.copy(notifyMask = mask) }
         }
     }
 

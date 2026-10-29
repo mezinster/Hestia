@@ -1,5 +1,6 @@
 package kapoue.hestia.ui.screens.device
 
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import kapoue.hestia.R
 import kapoue.hestia.domain.model.NotifyKind
@@ -58,13 +60,19 @@ fun NotificationsSection(
             )
         }
         kinds.forEach { kind ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            val checked = mask.allows(kind)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .toggleable(value = checked, role = Role.Switch, onValueChange = { onToggle(kind, it) }),
+            ) {
                 Text(
                     text = stringResource(kind.labelRes()),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.weight(1f),
                 )
-                Switch(checked = mask.allows(kind), onCheckedChange = { onToggle(kind, it) })
+                Switch(checked = checked, onCheckedChange = null)
             }
         }
         if (pending) {

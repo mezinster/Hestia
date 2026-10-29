@@ -2799,6 +2799,9 @@ class DeviceRepository @Inject constructor(
     }
 
     /** Vrai si un changement de masque de ce canal attend encore d'être appliqué sur l'appareil. */
+    /** Ensemble observable des canaux dont un changement de masque attend encore d'être appliqué. */
+    val notifyResyncPendingFlow: StateFlow<Set<Long>> get() = appPreferences.notifyResyncPending
+
     fun notifyResyncPending(deviceId: Long): Boolean = deviceId in appPreferences.notifyResyncPendingIds()
 
     /**
