@@ -10,6 +10,7 @@ import kapoue.hestia.R
 import kapoue.hestia.core.log.DiagnosticLogger
 import kapoue.hestia.core.util.isValidIpv4
 import kapoue.hestia.data.local.entity.Device
+import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.CoverRepository
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.repository.LightRepository
@@ -23,6 +24,9 @@ import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
 import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.LedNightModeState
+import kapoue.hestia.domain.model.NotifyKind
+import kapoue.hestia.domain.model.applicableKinds
+import kapoue.hestia.domain.model.withKind
 import kapoue.hestia.ui.common.UserMessage
 import kapoue.hestia.ui.common.toUserMessage
 import kapoue.hestia.ui.common.toUserMessageOrNull
@@ -135,6 +139,14 @@ data class AddEditUiState(
     val passwordHttpNote: Boolean = false,
     /** Vrai si un mot de passe est enregistré : oublier le certificat le retire aussi (revue finale C2, 1). */
     val passwordSaved: Boolean = false,
+    /** Types de notification réglables (mode édition) ; vide = section masquée. */
+    val notifyKinds: List<NotifyKind> = emptyList(),
+    /** Masque de notifications courant de l'appareil édité. */
+    val notifyMask: Int = NotifyKind.ALL,
+    /** Vrai si un changement de masque attend encore d'être appliqué sur l'appareil. */
+    val notifyPending: Boolean = false,
+    /** Vrai si ni ntfy ni les notifications locales ne sont activés dans les Réglages. */
+    val notificationsGloballyOff: Boolean = false,
 )
 
 @HiltViewModel
@@ -143,6 +155,7 @@ class AddEditDeviceViewModel @Inject constructor(
     private val lightRepository: LightRepository,
     private val coverRepository: CoverRepository,
     private val logger: DiagnosticLogger,
+    private val appPreferences: AppPreferences,
     @ApplicationContext private val context: Context,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
@@ -218,6 +231,11 @@ class AddEditDeviceViewModel @Inject constructor(
                                 passwordSection = passwordSection,
                                 passwordHttpNote = device != null && device.certPin == null,
                                 passwordSaved = stored != null,
+                                notifyKinds = device?.let { d -> applicableKinds(d) } ?: emptyList(),
+                                notifyMask = device?.notifyMask ?: NotifyKind.ALL,
+                                notifyPending = device != null && repository.notifyResyncPending(device.id),
+                                notificationsGloballyOff =
+                                    !appPreferences.ntfyEnabled.value && !appPreferences.notificationsEnabled.value,
                             )
                         }
                     }
@@ -568,6 +586,26 @@ class AddEditDeviceViewModel @Inject constructor(
         logger.info(DiagnosticLogger.UI, "Mot de passe enregistré depuis Modifier (${device.ipAddress})")
         viewModelScope.launch {
             repository.savePassword(device, value)
+            passwordRefresh.update { it + 1 }
+        }
+    }
+
+    /**
+     * Mode édition : active ou coupe un type de notification (enregistrement immédiat). L'appareil
+     * reste la source de vérité : le dépôt réécrit ensuite ce qui porte les appels ntfy.
+     */
+    fun setNotifyKind(kind: NotifyKind, enabled: Boolean) {
+        val device = observedDevice ?: return
+        if (!_uiState.value.isEditMode) return
+        val mask = device.notifyMask.withKind(kind, enabled)
+        logger.info(DiagnosticLogger.UI, "Notification $kind ${if (enabled) "activée" else "coupée"} depuis Modifier (${device.ipAddress})")
+        viewModelScope.launch {
+            repository.setNotifyMask(device, mask)
+            // Relecture : l'appareil en base change, et le drapeau « en attente » peut déjà
+            // avoir été posé par la resynchronisation.
+            _uiState.update {
+                it.copy(notifyMask = mask, notifyPending = repository.notifyResyncPending(device.id))
+            }
             passwordRefresh.update { it + 1 }
         }
     }

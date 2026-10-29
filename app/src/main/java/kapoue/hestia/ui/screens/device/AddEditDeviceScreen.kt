@@ -300,6 +300,17 @@ fun AddEditDeviceScreen(
                     )
                 }
 
+                if (state.notifyKinds.isNotEmpty()) {
+                    HorizontalDivider()
+                    NotificationsSection(
+                        kinds = state.notifyKinds,
+                        mask = state.notifyMask,
+                        pending = state.notifyPending,
+                        globallyOff = state.notificationsGloballyOff,
+                        onToggle = viewModel::setNotifyKind,
+                    )
+                }
+
                 HorizontalDivider()
                 CloudSection(
                     info = state.cloudInfo,

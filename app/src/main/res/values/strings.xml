@@ -657,4 +657,14 @@
     <string name="password_remove_confirm_title">Remove the password?</string>
     <string name="password_remove_confirm">Hestia will forget this password and contact the device without one. If the device is protected, it will ask for the password again.</string>
     <string name="tls_dialog_password_suspended">The saved password will be suspended: enter it again after accepting.</string>
+    <string name="notify_section_title">Notifications</string>
+    <string name="notify_section_desc">Choose which notifications this device sends. Switching one off never changes what the device does.</string>
+    <string name="notify_kind_planning_start">Planning start</string>
+    <string name="notify_kind_planning_end">Planning end</string>
+    <string name="notify_kind_cutoff">Threshold cut-off</string>
+    <string name="notify_kind_timer_end">Timer end</string>
+    <string name="notify_kind_presence">Presence simulation</string>
+    <string name="notify_kind_cover_moves">Scheduled cover movements</string>
+    <string name="notify_pending">Applied at next launch: the device was unreachable or a planning with a threshold is running.</string>
+    <string name="notify_globally_off">Notifications are turned off in Settings.</string>
 </resources>

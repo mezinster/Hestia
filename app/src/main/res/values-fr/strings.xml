@@ -651,4 +651,14 @@
     <string name="password_remove_confirm_title">Retirer le mot de passe ?</string>
     <string name="password_remove_confirm">Hestia oubliera ce mot de passe et contactera l\'appareil sans. Si l\'appareil est protégé, il redemandera le mot de passe.</string>
     <string name="tls_dialog_password_suspended">Le mot de passe enregistré sera suspendu : saisis-le à nouveau après avoir accepté.</string>
+    <string name="notify_section_title">Notifications</string>
+    <string name="notify_section_desc">Choisis les notifications envoyées par cet appareil. En couper une ne change jamais ce que fait l\'appareil.</string>
+    <string name="notify_kind_planning_start">Début de planning</string>
+    <string name="notify_kind_planning_end">Fin de planning</string>
+    <string name="notify_kind_cutoff">Coupure sur seuil</string>
+    <string name="notify_kind_timer_end">Fin de minuteur</string>
+    <string name="notify_kind_presence">Simulation de présence</string>
+    <string name="notify_kind_cover_moves">Mouvements programmés du volet</string>
+    <string name="notify_pending">Appliqué au prochain lancement : l\'appareil était injoignable ou un planning avec seuil est en cours.</string>
+    <string name="notify_globally_off">Les notifications sont désactivées dans les Réglages.</string>
 </resources>

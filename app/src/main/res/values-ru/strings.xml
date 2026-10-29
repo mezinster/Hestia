@@ -634,4 +634,14 @@
     <string name="password_remove_confirm_title">Удалить пароль?</string>
     <string name="password_remove_confirm">Hestia забудет этот пароль и будет обращаться к устройству без него. Если устройство защищено, оно снова запросит пароль.</string>
     <string name="tls_dialog_password_suspended">Сохранённый пароль будет приостановлен: введи его снова после подтверждения.</string>
+    <string name="notify_section_title">Уведомления</string>
+    <string name="notify_section_desc">Выбери, какие уведомления отправляет это устройство. Отключение уведомления не меняет работу устройства.</string>
+    <string name="notify_kind_planning_start">Начало расписания</string>
+    <string name="notify_kind_planning_end">Конец расписания</string>
+    <string name="notify_kind_cutoff">Отключение по порогу</string>
+    <string name="notify_kind_timer_end">Окончание таймера</string>
+    <string name="notify_kind_presence">Имитация присутствия</string>
+    <string name="notify_kind_cover_moves">Запланированные движения шторы</string>
+    <string name="notify_pending">Применится при следующем запуске: устройство было недоступно или идёт расписание с порогом.</string>
+    <string name="notify_globally_off">Уведомления отключены в настройках.</string>
 </resources>
