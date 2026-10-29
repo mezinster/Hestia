@@ -138,4 +138,13 @@ class NotifyRulesTest {
         assertFalse(device.notifies(localNotifyKind("pr-start")!!))
         assertTrue(device.notifies(localNotifyKind("pl-start")!!))
     }
+
+    @Test
+    fun `ntfy catch-up retries only unreachable or running threshold`() {
+        assertTrue(NtfyResyncOutcome.DONE.countsAsSynced())
+        // Échec persistant d'une réécriture : jamais retenté à chaque relevé du Tableau.
+        assertTrue(NtfyResyncOutcome.FAILED.countsAsSynced())
+        assertFalse(NtfyResyncOutcome.UNREACHABLE.countsAsSynced())
+        assertFalse(NtfyResyncOutcome.THRESHOLD_RUNNING.countsAsSynced())
+    }
 }

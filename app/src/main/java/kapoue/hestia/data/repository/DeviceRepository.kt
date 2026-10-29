@@ -2855,18 +2855,16 @@ class DeviceRepository @Inject constructor(
         true
     }
 
-    /** Issue d'un passage de [resyncNtfyOutcome]. Tout sauf [DONE] = à retenter plus tard. */
-    private enum class NtfyResyncOutcome { DONE, UNREACHABLE, THRESHOLD_RUNNING, FAILED }
-
     /**
-     * @return vrai si le canal a été entièrement resynchronisé (faux = à retenter plus tard).
+     * @return faux seulement si l'appareil est injoignable ou un planning avec seuil en cours (à
+     * retenter plus tard) ; un échec de réécriture compte comme fait, voir [countsAsSynced].
      * Sérialisé par canal et relu en base sous le verrou, comme [resyncNotificationsFor] : les
      * appelants ont tous écrit la ligne avant d'appeler, et une ligne relue ne peut pas réécrire
      * les scripts avec un masque ou un nom périmé. Ligne supprimée entre-temps : rien à faire.
      */
     private suspend fun resyncNtfyForDevice(device: Device): Boolean = ntfyResyncLocks.withLock(device.id) {
         val fresh = deviceDao.getById(device.id) ?: return@withLock true
-        resyncNtfyOutcome(fresh) == NtfyResyncOutcome.DONE
+        resyncNtfyOutcome(fresh).countsAsSynced()
     }
 
     /**
@@ -2880,7 +2878,7 @@ class DeviceRepository @Inject constructor(
     private suspend fun resyncNtfyOutcome(device: Device): NtfyResyncOutcome {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return NtfyResyncOutcome.DONE
         var reachable = true
-        var failed = false
+        val failures = mutableListOf<String>()
         if (hasNativePlannings(device)) {
             // getPlannings fusionne plannings précis et simulations de présence : ce seul relevé
             // couvre désormais les deux (plus besoin d'un second passage par getPresenceWindows).
@@ -2889,7 +2887,7 @@ class DeviceRepository @Inject constructor(
                     if (thresholdPlanningInProgress(r.value, LocalDateTime.now())) return NtfyResyncOutcome.THRESHOLD_RUNNING
                     for (p in r.value) {
                         val result = updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, p.cutoffThresholdW, p.marginMinutes)
-                        if (result is CreatePlanningResult.Error) failed = true
+                        if (result is CreatePlanningResult.Error) failures += "planning ${p.onJobId ?: p.cutoffScriptId ?: "présence"}"
                     }
                 }
                 is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
@@ -2903,13 +2901,16 @@ class DeviceRepository @Inject constructor(
                 val buttonConfig = getButtonTimerConfig(device)
                 if (buttonConfig.enabled) {
                     val result = setButtonTimer(device, true, buttonConfig.durationSeconds, buttonConfig.thresholdW)
-                    if (result !is RpcResult.Success) failed = true
+                    if (result !is RpcResult.Success) failures += "minuteur bouton"
                 }
             }
         }
+        if (failures.isNotEmpty()) {
+            logger.warn(DiagnosticLogger.RPC, "Notifications ${device.id} : réécriture échouée (${failures.joinToString()})")
+        }
         return when {
             !reachable -> NtfyResyncOutcome.UNREACHABLE
-            failed -> NtfyResyncOutcome.FAILED
+            failures.isNotEmpty() -> NtfyResyncOutcome.FAILED
             else -> NtfyResyncOutcome.DONE
         }
     }

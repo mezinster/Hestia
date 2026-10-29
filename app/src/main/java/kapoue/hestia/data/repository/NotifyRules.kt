@@ -82,3 +82,15 @@ fun localNotifyKind(tag: String): NotifyKind? = when (tag) {
     "cv-open", "cv-close", "cv-goto" -> NotifyKind.COVER_MOVES
     else -> null
 }
+
+/** Issue d'une resynchronisation ntfy d'un canal (voir DeviceRepository.resyncNtfyOutcome). */
+internal enum class NtfyResyncOutcome { DONE, UNREACHABLE, THRESHOLD_RUNNING, FAILED }
+
+/**
+ * Pour les rattrapages ntfy (Tableau, renommage, bascule ntfy) : seuls l'injoignable et un planning
+ * avec seuil en cours sont retentés. Un échec de réécriture (ex. plus de place pour un script)
+ * ne se résoudra pas tout seul : le retenter à chaque relevé (~5 s) réécrirait tous les autres
+ * plannings indéfiniment. Le chemin du masque, lui, le garde en attente (retenté au lancement).
+ */
+internal fun NtfyResyncOutcome.countsAsSynced(): Boolean =
+    this == NtfyResyncOutcome.DONE || this == NtfyResyncOutcome.FAILED
