@@ -98,6 +98,19 @@ class SmokeTargetsTest {
         assertEquals(listOf(tgt(51, 0)), dropped)
     }
 
+    @Test fun `allowed targets drop malformed manual ips`() {
+        val (kept, dropped) = allowedCutoffTargets(
+            listOf(
+                DeviceRepository.SmokeCutoffTarget("192.168.1.51:80", 0),
+                DeviceRepository.SmokeCutoffTarget("user:pw@192.168.1.50", 0),
+                DeviceRepository.SmokeCutoffTarget("192.168.1.50", 0),
+            ),
+            SmokeTargetGate.OPEN,
+        )
+        assertEquals(listOf(DeviceRepository.SmokeCutoffTarget("192.168.1.50", 0)), kept)
+        assertEquals(2, dropped.size)
+    }
+
     @Test fun `relay candidates skip protected and keep one per address`() {
         fun scriptable(ip: String, ch: Int, pin: String? = null, scripting: Boolean = true) =
             Device(name = "d$ch", ipAddress = ip, switchId = ch, type = DeviceType.PLUG, hasScripting = scripting, certPin = pin)

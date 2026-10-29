@@ -212,6 +212,7 @@ class DeviceRepository @Inject constructor(
     fun observeSmokeTargetGate(): Flow<SmokeTargetGate> =
         combine(observeDevices(), accessIssues, accessRegistry.passwordAddresses, ::SmokeTargetGate)
 
+    // Coffre illisible : voir SmokeTargetGate, la règle échoue ouverte (jamais d'exposition d'identifiants).
     suspend fun currentSmokeTargetGate(): SmokeTargetGate =
         SmokeTargetGate(getDevicesOnce(), accessIssues.value, accessRegistry.passwordAddresses.value)
 
@@ -269,7 +270,7 @@ class DeviceRepository @Inject constructor(
         }
         logger.info(DiagnosticLogger.RPC, "Certificat accepté ${device.ipAddress} ($n canal/canaux)")
         // Premier certificat sur cet appareil : il devient protégé, des cibles de coupure peuvent être périmées.
-        if (hadNoPin) markDetectorsForReview("certificat accepté")
+        if (hadNoPin && device.type != DeviceType.SMOKE_DETECTOR) markDetectorsForReview("certificat accepté")
     }
 
     suspend fun commitProvisionalCertificate(ip: String) {
@@ -309,14 +310,17 @@ class DeviceRepository @Inject constructor(
 
     /** Enregistre un mot de passe pour tous les canaux de l'adresse puis le vérifie par un appel. */
     suspend fun savePassword(device: Device, password: String) {
+        // Capturé AVANT l'enregistrement : un appareil déjà bloqué ou un détecteur ne change rien aux cibles.
+        val alreadyBlocked = currentSmokeTargetGate().blockOf(device) != null
         val n = devicePasswords.save(device.ipAddress, password)
         clearDigestSessions(device)
         reloadSavedPins("mot de passe enregistré")
         clearPasswordIssues(device)
+        // Marquage AVANT la vérification réseau : si l'écran se ferme pendant l'appel, rien n'est perdu.
+        if (!alreadyBlocked && device.type != DeviceType.SMOKE_DETECTOR) markDetectorsForReview("mot de passe enregistré")
         logger.info(DiagnosticLogger.RPC, "Mot de passe enregistré ${device.ipAddress} ($n canal/canaux)")
         val (ip, result) = withIp(device) { rpcClient.getDeviceInfo(it) }
         logger.info(DiagnosticLogger.RPC, "Vérification du mot de passe $ip : ${if (result is RpcResult.Success) "ok" else "non concluante"}")
-        markDetectorsForReview("mot de passe enregistré")
     }
 
     suspend fun removePassword(device: Device) {
@@ -2999,8 +3003,10 @@ class DeviceRepository @Inject constructor(
 
     /** Pose ou lève la marque « à revoir » de [detector] d'après une lecture réelle de sa coupure. */
     private suspend fun updateReviewMark(detector: Device, state: SmokeCutoffState) {
+        // Porte construite d'abord (suspend), puis lecture et écriture de l'ensemble sans suspension.
+        val gate = currentSmokeTargetGate()
         val current = appPreferences.smokeCutoffToReview.value
-        val updated = reviewMarksAfterRead(current, detector.id, state, currentSmokeTargetGate())
+        val updated = reviewMarksAfterRead(current, detector.id, state, gate)
         if (updated == current) return
         appPreferences.setSmokeCutoffToReview(updated)
         logger.info(DiagnosticLogger.RPC, "Coupure à revoir : détecteur ${detector.id} ${if (detector.id in updated) "on" else "off"}")

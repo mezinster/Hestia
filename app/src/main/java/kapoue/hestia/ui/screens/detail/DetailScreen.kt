@@ -72,6 +72,7 @@ import kapoue.hestia.core.util.formatClockTime
 import kapoue.hestia.core.util.formatDate
 import kapoue.hestia.core.util.formatPower
 import kapoue.hestia.core.util.formatTimeRange
+import kapoue.hestia.core.util.isValidIpv4
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.repository.CoverEventResult
@@ -1436,6 +1437,7 @@ private fun SmokeCutoffSection(
         LaunchedEffect(targets) { if (targets.isNotEmpty()) expanded = true }
         var manualIp by remember { mutableStateOf("") }
         var manualBlock by remember { mutableStateOf<SmokeTargetBlock?>(null) }
+        var manualInvalid by remember { mutableStateOf(false) }
 
         fun toggle(target: DeviceRepository.SmokeCutoffTarget, checked: Boolean) {
             onTargetsChange(if (checked) targets + target else targets - target)
@@ -1512,10 +1514,14 @@ private fun SmokeCutoffSection(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = manualIp,
-                    onValueChange = { manualIp = it; manualBlock = null },
+                    onValueChange = { manualIp = it; manualBlock = null; manualInvalid = false },
                     label = { Text(stringResource(R.string.sensor_cutoff_manual_ip)) },
-                    isError = manualBlock != null,
-                    supportingText = manualBlock?.let { { Text(stringResource(smokeTargetBlockText(it))) } },
+                    isError = manualBlock != null || manualInvalid,
+                    supportingText = when {
+                        manualInvalid -> { { Text(stringResource(R.string.error_ip_invalid)) } }
+                        manualBlock != null -> { { Text(stringResource(smokeTargetBlockText(manualBlock!!))) } }
+                        else -> null
+                    },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
@@ -1523,7 +1529,10 @@ private fun SmokeCutoffSection(
                     val ip = manualIp.trim()
                     if (ip.isNotEmpty()) {
                         val block = manualTargetBlock(ip, gate)
-                        if (block != null) {
+                        if (!isValidIpv4(ip)) {
+                            // Pas une IPv4 pure (port, chemin, identifiants) : jamais ajoutée.
+                            manualInvalid = true
+                        } else if (block != null) {
                             // Adresse d'un appareil protégé : refusée, jamais ajoutée.
                             manualBlock = block
                             onManualRefused(ip)

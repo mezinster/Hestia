@@ -1,5 +1,6 @@
 package kapoue.hestia.data.repository
 
+import kapoue.hestia.core.util.isValidIpv4
 import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.rpc.AccessIssue
 
@@ -17,6 +18,10 @@ enum class SmokeTargetBlock {
  * simple, sans identifiants. Un appareil protégé (mot de passe enregistré ou exigé, certificat
  * épinglé ou HTTPS exigé) ne peut donc pas être visé. La règle porte sur l'adresse ET sur l'autre
  * adresse d'un même appareil connu. [AUTH] l'emporte sur [HTTPS] quand les deux s'appliquent.
+ *
+ * Si le coffre des mots de passe est illisible, `passwordAddresses` garde sa valeur précédente
+ * (vide au démarrage à froid) : la règle échoue alors ouverte vers « non protégé ». Pire cas : une
+ * cible de webhook qui ne fonctionne pas, jamais une exposition d'identifiants.
  */
 data class SmokeTargetGate(
     val devices: List<Device>,
@@ -73,7 +78,9 @@ fun allowedCutoffTargets(
     targets: List<DeviceRepository.SmokeCutoffTarget>,
     gate: SmokeTargetGate,
 ): Pair<List<DeviceRepository.SmokeCutoffTarget>, List<DeviceRepository.SmokeCutoffTarget>> =
-    targets.partition { gate.blockOf(it.ip) == null }
+    // Une adresse saisie à la main qui n'est pas une IPv4 pure (port, chemin, identifiants) est écartée :
+    // elle contournerait la règle et finirait dans l'URL du webhook.
+    targets.partition { isValidIpv4(it.ip) && gate.blockOf(it.ip) == null }
 
 /** Appareils pouvant héberger le relais : scriptables, un par adresse physique, jamais protégés. */
 fun relayCandidates(all: List<Device>, gate: SmokeTargetGate): List<Device> =
