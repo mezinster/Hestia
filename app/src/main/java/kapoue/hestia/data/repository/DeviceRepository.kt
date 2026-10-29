@@ -2933,8 +2933,7 @@ class DeviceRepository @Inject constructor(
 
         for (event in SMOKE_WEBHOOK_EVENTS) {
             val urls = relayTargets.map { (relayIp, scriptId) ->
-                val code = java.net.URLEncoder.encode("notifySmoke(\"$event\",\"$mac\")", "UTF-8")
-                "http://$relayIp/rpc/Script.Eval?id=$scriptId&code=$code"
+                relayHookUrl(relayIp, scriptId, event, mac)
             }
             rpcClient.webhookCreate(ip, cid = 0, event = event, name = SMOKE_WEBHOOK_NAME, urls = urls)
         }
@@ -2969,19 +2968,8 @@ class DeviceRepository @Inject constructor(
         val (_, result) = withIp(detector) { ip -> rpcClient.webhookList(ip) }
         val hooks = result.getOrNull()?.hooks ?: return SmokeCutoffState.Unknown
         val targets = hooks.filter { it.name == SMOKE_CUTOFF_WEBHOOK_NAME }
-            .firstOrNull()?.urls.orEmpty().mapNotNull(::parseSwitchSetUrl)
+            .firstOrNull()?.urls.orEmpty().mapNotNull(::parseCutoffTargetUrl)
         return SmokeCutoffState.Configured(targets)
-    }
-
-    /** Décode `http://<ip>/rpc/Switch.Set?id=<n>&on=false` tel qu'écrit par [setSmokeCutoffTargets], ou `null` si autre chose. */
-    private fun parseSwitchSetUrl(url: String): SmokeCutoffTarget? {
-        val uri = runCatching { java.net.URI(url) }.getOrNull() ?: return null
-        if (!uri.path.endsWith("/rpc/Switch.Set")) return null
-        val id = (uri.query ?: return null).split("&")
-            .mapNotNull { it.split("=", limit = 2).takeIf { p -> p.size == 2 } }
-            .firstOrNull { it[0] == "id" }
-            ?.get(1)?.toIntOrNull() ?: return null
-        return SmokeCutoffTarget(uri.host ?: return null, id)
     }
 
     /**
@@ -3004,7 +2992,7 @@ class DeviceRepository @Inject constructor(
         }
         if (targets.isEmpty()) return RpcResult.Success(Unit)
 
-        val urls = targets.map { "http://${it.ip}/rpc/Switch.Set?id=${it.switchId}&on=false" }
+        val urls = targets.map(::cutoffTargetUrl)
         for (event in SMOKE_CUTOFF_EVENTS) {
             rpcClient.webhookCreate(ip, cid = 0, event = event, name = SMOKE_CUTOFF_WEBHOOK_NAME, urls = urls)
                 .errorOrNull()?.let { return it }

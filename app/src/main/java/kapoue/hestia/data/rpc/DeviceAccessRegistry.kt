@@ -89,6 +89,11 @@ class DeviceAccessRegistry @Inject constructor(
     /** Problèmes d'accès courants, par adresse. */
     val issues: StateFlow<Map<String, AccessIssue>> = _issues.asStateFlow()
 
+    private val _passwordAddresses = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Adresses ayant un mot de passe enregistré (les mots de passe provisoires n'y figurent pas). */
+    val passwordAddresses: StateFlow<Set<String>> = _passwordAddresses.asStateFlow()
+
     /**
      * Garantit que les épingles enregistrées sont connues avant tout appel réseau : au premier appel,
      * les lit via [SavedPinSource] (une seule fois, les appels concurrents attendent ce même
@@ -127,6 +132,7 @@ class DeviceAccessRegistry @Inject constructor(
         }
         saved = pins.toMap()
         savedPw = passwords.toMap()
+        _passwordAddresses.value = passwords.keys.toSet()
         loaded = true
         syncPasswordIssues(passwords)
         return true
