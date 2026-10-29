@@ -16,6 +16,7 @@ import kapoue.hestia.data.repository.CoverRepository
 import kapoue.hestia.data.repository.CoverScheduleRepository
 import kapoue.hestia.data.repository.DeviceRepository
 import kapoue.hestia.data.repository.LightRepository
+import kapoue.hestia.data.repository.SmokeTargetGate
 import kapoue.hestia.data.rpc.RpcResult
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.domain.model.CoverEvent
@@ -122,6 +123,15 @@ class DetailViewModel @Inject constructor(
     val cutoffCandidates: StateFlow<List<Device>> = repository.observeDevices()
         .map { devices -> devices.filter { it.supportsSwitch } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** Règle « cible interdite » en direct : un appareil protégé ne peut pas être visé par la coupure. */
+    val smokeTargetGate: StateFlow<SmokeTargetGate> = repository.observeSmokeTargetGate()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SmokeTargetGate.OPEN)
+
+    /** Ce détecteur a une cible de coupure devenue protégée, à revoir (marque posée par le dépôt). */
+    val cutoffToReview: StateFlow<Boolean> = repository.smokeCutoffToReview
+        .map { deviceId in it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** IP effectivement utilisée lors du dernier appel réussi (1ᵉʳ ou 2ᵉ emplacement). */
     private val _activeIp = MutableStateFlow<String?>(null)
@@ -305,9 +315,17 @@ class DetailViewModel @Inject constructor(
             val result = repository.setSmokeCutoffTargets(dev, targets)
             if (result !is RpcResult.Success) {
                 _cutoffMessage.value = UserMessage(R.string.sensor_cutoff_unreachable)
+            } else if (result.value > 0) {
+                // Des cibles devenues protégées ont été retirées par le dépôt : on prévient une fois.
+                _cutoffMessage.value = UserMessage(R.string.sensor_cutoff_targets_dropped)
             }
             _cutoffState.value = repository.getSmokeCutoffState(dev)
         }
+    }
+
+    /** Trace dans le journal de diagnostic une cible saisie refusée car l'appareil est protégé. */
+    fun logManualTargetRefused(ip: String) {
+        logger.info(DiagnosticLogger.UI, "Cible saisie refusée (protégée) : $ip")
     }
 
     private suspend fun fetch() {

@@ -76,6 +76,8 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.local.entity.PausedPlanning
 import kapoue.hestia.data.repository.CoverEventResult
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.repository.SmokeTargetBlock
+import kapoue.hestia.data.repository.SmokeTargetGate
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
@@ -117,6 +119,8 @@ fun DetailScreen(
     val cutoffState by viewModel.cutoffState.collectAsStateWithLifecycle()
     val cutoffCandidates by viewModel.cutoffCandidates.collectAsStateWithLifecycle()
     val cutoffMessage by viewModel.cutoffMessage.collectAsStateWithLifecycle()
+    val smokeTargetGate by viewModel.smokeTargetGate.collectAsStateWithLifecycle()
+    val cutoffToReview by viewModel.cutoffToReview.collectAsStateWithLifecycle()
     val activeIp by viewModel.activeIp.collectAsStateWithLifecycle()
     val plannings by viewModel.plannings.collectAsStateWithLifecycle()
     val addPlanningResult by viewModel.addPlanningResult.collectAsStateWithLifecycle()
@@ -325,7 +329,10 @@ fun DetailScreen(
                 SmokeCutoffSection(
                     state = cutoffState,
                     candidates = cutoffCandidates.filter { it.id != dev.id },
+                    gate = smokeTargetGate,
+                    toReview = cutoffToReview,
                     onTargetsChange = { viewModel.setCutoffTargets(it) },
+                    onManualRefused = { viewModel.logManualTargetRefused(it) },
                 )
                 return@Column
             }
@@ -1380,11 +1387,20 @@ private fun SmokeDetectorSection(sensorStatus: SensorStatus, onMute: () -> Unit)
  * qui vient tout juste d'être fait donnerait l'impression de ne pas avoir pris (retour David,
  * 2026-09-03 : « ça laisse penser que la config n'est pas passée »).
  */
+/** Texte expliquant pourquoi un appareil ne peut pas être visé par la coupure sur alarme. */
+private fun smokeTargetBlockText(block: SmokeTargetBlock): Int = when (block) {
+    SmokeTargetBlock.AUTH -> R.string.smoke_target_auth_blocked
+    SmokeTargetBlock.HTTPS -> R.string.smoke_target_https_blocked
+}
+
 @Composable
 private fun SmokeCutoffSection(
     state: DeviceRepository.SmokeCutoffState,
     candidates: List<Device>,
+    gate: SmokeTargetGate,
+    toReview: Boolean,
     onTargetsChange: (List<DeviceRepository.SmokeCutoffTarget>) -> Unit,
+    onManualRefused: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.sensor_cutoff_title), style = MaterialTheme.typography.titleMedium)
@@ -1402,6 +1418,13 @@ private fun SmokeCutoffSection(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (toReview) {
+                Text(
+                    text = stringResource(R.string.sensor_cutoff_review_pending),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             return
         }
         val targets = state.targets
@@ -1412,6 +1435,7 @@ private fun SmokeCutoffSection(
         var expanded by remember { mutableStateOf(targets.isNotEmpty()) }
         LaunchedEffect(targets) { if (targets.isNotEmpty()) expanded = true }
         var manualIp by remember { mutableStateOf("") }
+        var manualBlock by remember { mutableStateOf<SmokeTargetBlock?>(null) }
 
         fun toggle(target: DeviceRepository.SmokeCutoffTarget, checked: Boolean) {
             onTargetsChange(if (checked) targets + target else targets - target)
@@ -1430,17 +1454,32 @@ private fun SmokeCutoffSection(
         }
 
         if (expanded) {
-            for (device in candidates) {
-                val target = DeviceRepository.SmokeCutoffTarget(device.ipAddress, device.switchId)
-                val checked = target in targets
+            for (row in cutoffRows(candidates, targets, gate)) {
+                val target = row.target
+                val checked = row.checked
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { toggle(target, !checked) },
+                        .clickable(enabled = row.enabled) { toggle(target, !checked) },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Checkbox(checked = checked, onCheckedChange = { toggle(target, it) })
-                    Text("${device.name} — ${device.ipAddress}", style = MaterialTheme.typography.bodyMedium)
+                    Checkbox(checked = checked, enabled = row.enabled, onCheckedChange = { toggle(target, it) })
+                    Column {
+                        Text("${row.device.name} — ${row.device.ipAddress}", style = MaterialTheme.typography.bodyMedium)
+                        if (row.toReview) {
+                            Text(
+                                text = stringResource(R.string.sensor_cutoff_review_target),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } else if (row.block != null) {
+                            Text(
+                                text = stringResource(smokeTargetBlockText(row.block)),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -1454,11 +1493,16 @@ private fun SmokeCutoffSection(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = target.ip,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = target.ip, style = MaterialTheme.typography.bodyMedium)
+                        if (gate.blockOf(target.ip) != null) {
+                            Text(
+                                text = stringResource(R.string.sensor_cutoff_review_target),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
                     IconButton(onClick = { onTargetsChange(targets - target) }) {
                         Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.sensor_cutoff_manual_remove))
                     }
@@ -1468,16 +1512,25 @@ private fun SmokeCutoffSection(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(
                     value = manualIp,
-                    onValueChange = { manualIp = it },
+                    onValueChange = { manualIp = it; manualBlock = null },
                     label = { Text(stringResource(R.string.sensor_cutoff_manual_ip)) },
+                    isError = manualBlock != null,
+                    supportingText = manualBlock?.let { { Text(stringResource(smokeTargetBlockText(it))) } },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = {
                     val ip = manualIp.trim()
                     if (ip.isNotEmpty()) {
-                        onTargetsChange(targets + DeviceRepository.SmokeCutoffTarget(ip, 0))
-                        manualIp = ""
+                        val block = manualTargetBlock(ip, gate)
+                        if (block != null) {
+                            // Adresse d'un appareil protégé : refusée, jamais ajoutée.
+                            manualBlock = block
+                            onManualRefused(ip)
+                        } else {
+                            onTargetsChange(targets + DeviceRepository.SmokeCutoffTarget(ip, 0))
+                            manualIp = ""
+                        }
                     }
                 }) {
                     Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.sensor_cutoff_manual_add))
