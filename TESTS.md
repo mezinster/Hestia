@@ -383,3 +383,31 @@ python3 tools/fake_shelly_https.py --password secret --rotate-cert
 - [ ] Journal de diagnostic sans secret : après un scénario complet (ajout, mot de passe faux, bon mot de passe), enregistrer l'export du journal (Réglages → Journal → Exporter) puis vérifier que la valeur saisie n'y figure pas, ni aucun en-tête `Authorization` :
   `grep -c -e 'secret' -e 'Authorization' hestia-journal.txt` → `0` (remplacer `secret` par le mot de passe réellement tapé et le chemin par celui du fichier exporté). Le journal note seulement « mot de passe enregistré / retiré / accepté / refusé pour <ip> ».
 - [ ] Script `fake_shelly_https.py` : sans en-tête, `curl -si -X POST -d '{"id":1,"method":"Shelly.GetDeviceInfo"}' http://127.0.0.1:8080/rpc` → 401 avec `WWW-Authenticate: Digest qop="auth", realm="shellyplugmg3-fake", ... algorithm=SHA-256`.
+
+## Notifications par appareil (fork, lot D)
+
+Section « Notifications » de l'écran Modifier l'appareil : un interrupteur par type de notification,
+stocké dans `notifyMask` (63 = tout activé, valeur par défaut). Couper un type ne change **jamais** le
+comportement de l'appareil (coupure, minuteur, planning, présence) : seuls les envois ntfy et les
+notifications locales disparaissent. À valider sur une vraie prise avec ntfy activé, ou avec
+`tools/fake_shelly_https.py` (usage local seulement), qui conserve plannings et scripts et permet de les
+relire (`Schedule.List`, interface web, script) sans matériel.
+
+- [ ] La section n'apparaît que dans **Modifier** (jamais au flux d'ajout) et est **absente** pour un détecteur de fumée (qui n'est jamais filtré, son relais ntfy non plus).
+- [ ] Prise (relais) : jusqu'à cinq interrupteurs (Début de planning, Fin de planning, Coupure sur seuil, Fin de minuteur, Simulation de présence) ; « Coupure sur seuil » seulement si l'appareil a scripts **et** mesure de puissance, « Simulation de présence » seulement avec scripts.
+- [ ] Variateur : **deux** interrupteurs seulement (Début / Fin de planning). Volet : **un seul** (Mouvements programmés du volet).
+- [ ] Prise, « Fin de planning » coupé : au prochain déclenchement, le ntfy de **début** arrive, celui de **fin** non, et la prise s'éteint quand même à l'heure de fin (vérifier les appels `HTTP.Request` du planning dans `Schedule.List` ou l'interface web).
+- [ ] Prise, « Début de planning » coupé : même vérification, côté début.
+- [ ] Planning avec seuil **en cours** (créneau actif) : le changement est reporté, la note « Appliqué au prochain lancement… » s'affiche aussitôt (en direct, sans quitter l'écran) ; pendant ce créneau l'appareil entier reste intact (aucun planning ni script réécrit, journal « reporté ») ; au lancement suivant, hors créneau, le changement est appliqué et la note disparaît.
+- [ ] Appareil injoignable au moment du changement (ou réécriture en échec) : même note, changement rattrapé au prochain lancement de l'appli une fois l'appareil revenu ; journal « reporté (raison) » puis « report appliqué ».
+- [ ] Changement appliqué sur l'appareil **tout de suite**, en arrière-plan, sans bouton supplémentaire : relire l'appareil (interface web) après quelques secondes.
+- [ ] « Fin de minuteur » coupé : plus de ntfy à la fin d'un minuteur, mais le minuteur coupe toujours la prise à l'échéance.
+- [ ] « Coupure sur seuil » coupé : plus de ntfy sur coupure, la coupure sur seuil a toujours lieu.
+- [ ] « Simulation de présence » coupé : la présence bascule toujours la prise, sans notification.
+- [ ] Volet, « Mouvements programmés » coupé : une ouverture / fermeture programmée s'exécute **sans** aucun ntfy ni notification locale (les appels `HTTP.Request` ont disparu des tâches du volet dans `Schedule.List`).
+- [ ] **Notifications locales** (Réglages, si activées) filtrées de la même façon : un type coupé ne poste plus de notification sur le téléphone, y compris pour les bornes de planning.
+- [ ] Interrupteur global des notifications coupé dans Réglages : la section affiche « Les notifications sont désactivées dans les Réglages. » et reste cohérente.
+- [ ] Sauvegarde JSON : le `notifyMask` est exporté et restauré ; une **ancienne sauvegarde** (sans ce champ) se restaure avec tout activé (63).
+- [ ] Mise à jour depuis une base v21 : appareils conservés, `notifyMask` à 63 partout (vérification manuelle, pas de banc de migration Room automatisé).
+- [ ] Scripts de coupure en version de notification **2** déjà présents sur un appareil : réécrits en version **3** par la mise à niveau quotidienne (journal « texte de coupure mis à jour »), sans toucher à un planning en cours.
+- [ ] Journal de diagnostic : une ligne par changement de masque (id de l'appareil + masque), par report (raison) et par report appliqué ; aucun secret.
