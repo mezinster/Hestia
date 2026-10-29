@@ -129,6 +129,27 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         prefs.edit().putString(KEY_SMOKE_RELAY_SYNCED, json.encodeToString(updated)).apply()
     }
 
+    /** Oublie toutes les marques « relais à jour » : chaque détecteur sera re-sondé à son prochain réveil. */
+    fun clearSmokeRelaySynced() {
+        prefs.edit().remove(KEY_SMOKE_RELAY_SYNCED).apply()
+    }
+
+    /**
+     * Détecteurs de fumée dont la coupure vise une cible devenue protégée (mot de passe ou HTTPS) :
+     * marque « à revoir ». Levée uniquement par une vraie lecture du détecteur, jamais par un
+     * réveil manqué. Simple cache de confort de l'interface, la config reste sur le détecteur.
+     */
+    private val _smokeCutoffToReview = MutableStateFlow(
+        runCatching { json.decodeFromString<Set<Long>>(prefs.getString(KEY_SMOKE_CUTOFF_TO_REVIEW, null) ?: "[]") }
+            .getOrDefault(emptySet()),
+    )
+    val smokeCutoffToReview: StateFlow<Set<Long>> = _smokeCutoffToReview.asStateFlow()
+
+    fun setSmokeCutoffToReview(ids: Set<Long>) {
+        prefs.edit().putString(KEY_SMOKE_CUTOFF_TO_REVIEW, json.encodeToString(ids)).apply()
+        _smokeCutoffToReview.value = ids
+    }
+
     /**
      * Rattrapage du nom d'un appareil (canal + appareil physique) resté injoignable au moment
      * d'un renommage ou d'un ajout — un ensemble d'appareils « pas encore confirmés », plutôt
@@ -335,6 +356,7 @@ class AppPreferences @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_NTFY_GEN = "ntfy_generation"
         const val KEY_NTFY_SYNCED = "ntfy_synced_devices"
         const val KEY_SMOKE_RELAY_SYNCED = "smoke_relay_synced_devices"
+        const val KEY_SMOKE_CUTOFF_TO_REVIEW = "smoke_cutoff_to_review"
         const val KEY_NAME_UNSYNCED = "name_unsynced_devices"
         const val KEY_SMOKE_RELAY_COVERAGE_OK = "smoke_relay_coverage_ok"
         const val KEY_PENDING_TIMERS = "pending_timers"

@@ -60,6 +60,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
@@ -207,6 +208,16 @@ class DeviceRepository @Inject constructor(
     /** Problèmes d'accès par adresse (HTTPS requis, certificat changé). */
     val accessIssues: StateFlow<Map<String, AccessIssue>> get() = accessRegistry.issues
 
+    /** Règle « cible interdite » des détecteurs de fumée, recalculée à chaque changement d'accès. */
+    fun observeSmokeTargetGate(): Flow<SmokeTargetGate> =
+        combine(observeDevices(), accessIssues, accessRegistry.passwordAddresses, ::SmokeTargetGate)
+
+    suspend fun currentSmokeTargetGate(): SmokeTargetGate =
+        SmokeTargetGate(getDevicesOnce(), accessIssues.value, accessRegistry.passwordAddresses.value)
+
+    /** Détecteurs dont la coupure vise une cible devenue protégée (voir [AppPreferences.smokeCutoffToReview]). */
+    val smokeCutoffToReview: StateFlow<Set<Long>> get() = appPreferences.smokeCutoffToReview
+
     suspend fun peekCertificate(ip: String): RpcResult<PeekedCertificate> = rpcClient.peekCertificate(ip)
 
     fun trustCertificateProvisionally(ip: String, pin: String) = accessRegistry.trustProvisionally(ip, pin)
@@ -241,6 +252,7 @@ class DeviceRepository @Inject constructor(
         // inconnue. On relit la ligne en base (pas l'instantané de l'écran) et on retire le mot de
         // passe AVANT d'accorder la nouvelle confiance (ordre imposé, décision D1).
         val fresh = deviceDao.getAllOnce().firstOrNull { it.id == device.id }
+        val hadNoPin = fresh != null && fresh.certPin == null
         if (fresh != null && passwordMustBeSuspended(fresh.certPin, pin, devicePasswords.hasPassword(fresh))) {
             devicePasswords.remove(device.ipAddress)
             reloadSavedPins("mot de passe suspendu")
@@ -256,6 +268,8 @@ class DeviceRepository @Inject constructor(
             ips.forEach { accessRegistry.forgetProvisional(it) }
         }
         logger.info(DiagnosticLogger.RPC, "Certificat accepté ${device.ipAddress} ($n canal/canaux)")
+        // Premier certificat sur cet appareil : il devient protégé, des cibles de coupure peuvent être périmées.
+        if (hadNoPin) markDetectorsForReview("certificat accepté")
     }
 
     suspend fun commitProvisionalCertificate(ip: String) {
@@ -302,6 +316,7 @@ class DeviceRepository @Inject constructor(
         logger.info(DiagnosticLogger.RPC, "Mot de passe enregistré ${device.ipAddress} ($n canal/canaux)")
         val (ip, result) = withIp(device) { rpcClient.getDeviceInfo(it) }
         logger.info(DiagnosticLogger.RPC, "Vérification du mot de passe $ip : ${if (result is RpcResult.Success) "ok" else "non concluante"}")
+        markDetectorsForReview("mot de passe enregistré")
     }
 
     suspend fun removePassword(device: Device) {
@@ -2516,6 +2531,7 @@ class DeviceRepository @Inject constructor(
         // Chaque canal a sa propre entrée de coffre : on l'efface par id (la ligne n'existe plus en base).
         devicePasswords.removeId(device.id)
         reloadSavedPins("mot de passe retiré")
+        appPreferences.setSmokeCutoffToReview(appPreferences.smokeCutoffToReview.value - device.id)
         // Un détecteur supprimé ne doit plus apparaître dans les futurs déploiements du relais
         // (trouvé en revue de code avant publication, 2026-09-03) — un relais déjà en cours
         // d'exécution garde malgré tout son entrée MAC→nom en mémoire (limite connue et
@@ -2808,6 +2824,8 @@ class DeviceRepository @Inject constructor(
     suspend fun isSmokeRelay(device: Device): Boolean {
         // Appareils démo : jamais relais (le transport refuse de toute façon leurs adresses).
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return false
+        // Appareil devenu protégé : un script orphelin éventuel ne compte plus comme relais (P3).
+        if (currentSmokeTargetGate().blockOf(device) != null) return false
         val (_, result) = withIp(device) { ip -> rpcClient.scriptList(ip) }
         return result.getOrNull()?.scripts?.any { it.name == SmokeRelayScriptGenerator.SCRIPT_NAME } == true
     }
@@ -2846,7 +2864,10 @@ class DeviceRepository @Inject constructor(
 
         // Un candidat par appareil physique (même IP), pas par canal : le moteur de scripts Shelly
         // est partagé par appareil, pas par canal (voir ButtonTimerScriptGenerator).
-        val candidates = all.filter { it.hasScripting }.groupBy { it.ipAddress }.map { (_, members) -> members.first() }
+        val gate = currentSmokeTargetGate()
+        val candidates = relayCandidates(all, gate)
+        val excluded = all.filter { it.hasScripting }.map { it.ipAddress }.distinct().size - candidates.size
+        if (excluded > 0) logger.info(DiagnosticLogger.RPC, "Relais : $excluded candidat(s) protégé(s) exclu(s)")
 
         val relayTargets = mutableListOf<Pair<String, Int>>()
         for (device in candidates) {
@@ -2926,6 +2947,10 @@ class DeviceRepository @Inject constructor(
         val mac = detector.cloudId?.uppercase() ?: return false
         val (ip, listResult) = withIp(detector) { i -> rpcClient.webhookList(i) }
         val existing = listResult.getOrNull()?.hooks ?: return false
+        // Même lecture réutilisée pour les marques « à revoir » : aucun appel réseau de plus.
+        val cutoffTargets = existing.firstOrNull { it.name == SMOKE_CUTOFF_WEBHOOK_NAME }
+            ?.urls.orEmpty().mapNotNull(::parseCutoffTargetUrl)
+        updateReviewMark(detector, SmokeCutoffState.Configured(cutoffTargets))
         for (hook in existing.filter { it.name == SMOKE_WEBHOOK_NAME }) {
             rpcClient.webhookDelete(ip, hook.id)
         }
@@ -2969,7 +2994,33 @@ class DeviceRepository @Inject constructor(
         val hooks = result.getOrNull()?.hooks ?: return SmokeCutoffState.Unknown
         val targets = hooks.filter { it.name == SMOKE_CUTOFF_WEBHOOK_NAME }
             .firstOrNull()?.urls.orEmpty().mapNotNull(::parseCutoffTargetUrl)
-        return SmokeCutoffState.Configured(targets)
+        return SmokeCutoffState.Configured(targets).also { updateReviewMark(detector, it) }
+    }
+
+    /** Pose ou lève la marque « à revoir » de [detector] d'après une lecture réelle de sa coupure. */
+    private suspend fun updateReviewMark(detector: Device, state: SmokeCutoffState) {
+        val current = appPreferences.smokeCutoffToReview.value
+        val updated = reviewMarksAfterRead(current, detector.id, state, currentSmokeTargetGate())
+        if (updated == current) return
+        appPreferences.setSmokeCutoffToReview(updated)
+        logger.info(DiagnosticLogger.RPC, "Coupure à revoir : détecteur ${detector.id} ${if (detector.id in updated) "on" else "off"}")
+    }
+
+    /**
+     * Un appareil vient de devenir protégé (mot de passe, premier certificat) : toutes les coupures
+     * peuvent viser une cible désormais interdite. On marque chaque détecteur « à revoir » (levée à
+     * sa prochaine vraie lecture), on oublie les « relais à jour » pour reposer les webhooks à son
+     * prochain réveil, et on relance la resynchronisation du relais.
+     */
+    private suspend fun markDetectorsForReview(reason: String) {
+        val ids = getDevicesOnce()
+            .filter { it.type == DeviceType.SMOKE_DETECTOR && !it.ipAddress.startsWith(DEMO_IP_PREFIX) }
+            .map { it.id }
+        if (ids.isEmpty()) return
+        appPreferences.setSmokeCutoffToReview(appPreferences.smokeCutoffToReview.value + ids)
+        appPreferences.clearSmokeRelaySynced()
+        resyncSmokeRelay()
+        logger.info(DiagnosticLogger.RPC, "Détecteurs à revoir ($reason)")
     }
 
     /**
@@ -2979,7 +3030,12 @@ class DeviceRepository @Inject constructor(
      * chaque prise visée, en GET (comme l'exemple officiel Shelly) — **autonome, sans app ni
      * script**, contrairement au relais ntfy du Lot 4 qui n'avait pas cette option.
      */
-    suspend fun setSmokeCutoffTargets(detector: Device, targets: List<SmokeCutoffTarget>): RpcResult<Unit> {
+    suspend fun setSmokeCutoffTargets(detector: Device, requested: List<SmokeCutoffTarget>): RpcResult<Int> {
+        // Défense en profondeur : une cible devenue protégée n'est jamais réécrite dans un webhook.
+        val (targets, dropped) = allowedCutoffTargets(requested, currentSmokeTargetGate())
+        if (dropped.isNotEmpty()) {
+            logger.info(DiagnosticLogger.RPC, "Coupure : ${dropped.size} cible(s) protégée(s) retirée(s) pour ${detector.ipAddress}")
+        }
         val (ip, listResult) = withIp(detector) { i -> rpcClient.webhookList(i) }
         listResult.errorOrNull()?.let { return it }
         // Erreur de suppression jamais vérifiée jusqu'ici (trouvé en revue de code avant
@@ -2990,14 +3046,14 @@ class DeviceRepository @Inject constructor(
         for (hook in listResult.getOrNull()?.hooks.orEmpty().filter { it.name == SMOKE_CUTOFF_WEBHOOK_NAME }) {
             rpcClient.webhookDelete(ip, hook.id).errorOrNull()?.let { return it }
         }
-        if (targets.isEmpty()) return RpcResult.Success(Unit)
+        if (targets.isEmpty()) return RpcResult.Success(dropped.size)
 
         val urls = targets.map(::cutoffTargetUrl)
         for (event in SMOKE_CUTOFF_EVENTS) {
             rpcClient.webhookCreate(ip, cid = 0, event = event, name = SMOKE_CUTOFF_WEBHOOK_NAME, urls = urls)
                 .errorOrNull()?.let { return it }
         }
-        return RpcResult.Success(Unit)
+        return RpcResult.Success(dropped.size)
     }
 
     // --- Mode démo (captures d'écran, build debug uniquement) ---

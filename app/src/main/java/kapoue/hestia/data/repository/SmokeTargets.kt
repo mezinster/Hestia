@@ -67,3 +67,31 @@ fun relayHookUrl(relayIp: String, scriptId: Int, event: String, mac: String): St
     val code = java.net.URLEncoder.encode("notifySmoke(\"$event\",\"$mac\")", "UTF-8")
     return "http://$relayIp/rpc/Script.Eval?id=$scriptId&code=$code"
 }
+
+/** Sépare [targets] en (conservées, retirées par la règle [SmokeTargetGate]), ordre préservé. */
+fun allowedCutoffTargets(
+    targets: List<DeviceRepository.SmokeCutoffTarget>,
+    gate: SmokeTargetGate,
+): Pair<List<DeviceRepository.SmokeCutoffTarget>, List<DeviceRepository.SmokeCutoffTarget>> =
+    targets.partition { gate.blockOf(it.ip) == null }
+
+/** Appareils pouvant héberger le relais : scriptables, un par adresse physique, jamais protégés. */
+fun relayCandidates(all: List<Device>, gate: SmokeTargetGate): List<Device> =
+    all.filter { it.hasScripting }.groupBy { it.ipAddress }.map { (_, members) -> members.first() }
+        .filter { gate.blockOf(it) == null }
+
+/**
+ * Nouvel ensemble des détecteurs « à revoir » après une lecture de [detectorId]. Un détecteur
+ * endormi ([DeviceRepository.SmokeCutoffState.Unknown]) ne change jamais la marque : seule une
+ * vraie lecture peut la poser ou la lever.
+ */
+fun reviewMarksAfterRead(
+    current: Set<Long>,
+    detectorId: Long,
+    state: DeviceRepository.SmokeCutoffState,
+    gate: SmokeTargetGate,
+): Set<Long> = when (state) {
+    is DeviceRepository.SmokeCutoffState.Unknown -> current
+    is DeviceRepository.SmokeCutoffState.Configured ->
+        if (state.targets.any { gate.blockOf(it.ip) != null }) current + detectorId else current - detectorId
+}

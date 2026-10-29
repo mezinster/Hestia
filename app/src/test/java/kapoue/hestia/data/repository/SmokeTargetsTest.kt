@@ -86,4 +86,44 @@ class SmokeTargetsTest {
         assertFalse(script.contains("Authorization"))
         assertFalse(script.contains("admin:"))
     }
+
+    // --- Filtrage des cibles, candidats relais et marques « à revoir » (Tâche 2) ---
+
+    private fun tgt(last: Int, id: Int) = DeviceRepository.SmokeCutoffTarget("192.168.1.$last", id)
+
+    @Test fun `allowed targets keep open and drop protected`() {
+        val g = gate(pw = setOf("192.168.1.51"))
+        val (kept, dropped) = allowedCutoffTargets(listOf(tgt(50, 0), tgt(51, 0), tgt(52, 1)), g)
+        assertEquals(listOf(tgt(50, 0), tgt(52, 1)), kept)
+        assertEquals(listOf(tgt(51, 0)), dropped)
+    }
+
+    @Test fun `relay candidates skip protected and keep one per address`() {
+        fun scriptable(ip: String, ch: Int, pin: String? = null, scripting: Boolean = true) =
+            Device(name = "d$ch", ipAddress = ip, switchId = ch, type = DeviceType.PLUG, hasScripting = scripting, certPin = pin)
+        val a0 = scriptable("192.168.1.50", 0)
+        val all = listOf(
+            a0, scriptable("192.168.1.50", 1),
+            scriptable("192.168.1.51", 0, pin = "sha256/x"),
+            scriptable("192.168.1.52", 0, scripting = false),
+        )
+        val g = SmokeTargetGate(all, emptyMap(), emptySet())
+        assertEquals(listOf(a0), relayCandidates(all, g))
+    }
+
+    private val blockedGate get() = gate(pw = setOf("192.168.1.51"))
+    private val blockedState = DeviceRepository.SmokeCutoffState.Configured(listOf(tgt(51, 0)))
+    private val cleanState = DeviceRepository.SmokeCutoffState.Configured(listOf(tgt(50, 0)))
+
+    @Test fun `configured read with a blocked target sets the mark`() =
+        assertEquals(setOf(7L), reviewMarksAfterRead(emptySet(), 7L, blockedState, blockedGate))
+
+    @Test fun `configured read without blocked target clears the mark`() =
+        assertEquals(emptySet<Long>(), reviewMarksAfterRead(setOf(7L), 7L, cleanState, blockedGate))
+
+    @Test fun `unknown read keeps the mark`() {
+        val unknown = DeviceRepository.SmokeCutoffState.Unknown
+        assertEquals(setOf(7L), reviewMarksAfterRead(setOf(7L), 7L, unknown, blockedGate))
+        assertEquals(emptySet<Long>(), reviewMarksAfterRead(emptySet(), 7L, unknown, blockedGate))
+    }
 }
