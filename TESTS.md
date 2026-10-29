@@ -383,3 +383,35 @@ python3 tools/fake_shelly_https.py --password secret --rotate-cert
 - [ ] Journal de diagnostic sans secret : après un scénario complet (ajout, mot de passe faux, bon mot de passe), enregistrer l'export du journal (Réglages → Journal → Exporter) puis vérifier que la valeur saisie n'y figure pas, ni aucun en-tête `Authorization` :
   `grep -c -e 'secret' -e 'Authorization' hestia-journal.txt` → `0` (remplacer `secret` par le mot de passe réellement tapé et le chemin par celui du fichier exporté). Le journal note seulement « mot de passe enregistré / retiré / accepté / refusé pour <ip> ».
 - [ ] Script `fake_shelly_https.py` : sans en-tête, `curl -si -X POST -d '{"id":1,"method":"Shelly.GetDeviceInfo"}' http://127.0.0.1:8080/rpc` → 401 avec `WWW-Authenticate: Digest qop="auth", realm="shellyplugmg3-fake", ... algorithm=SHA-256`.
+
+## Cible protégée des détecteurs de fumée (fork, lot C3)
+
+Une coupure sur alarme ou un relais ntfy ne vise jamais un appareil protégé par mot de passe, ni un
+appareil qui exige HTTPS ou dont le certificat est épinglé : le webhook natif du détecteur appelle
+l'appareil en HTTP clair, sans identifiants (règle `SmokeTargetGate`, voir `SMOKE-DETECTOR.md`).
+Points « vrai appareil » recommandés ; sinon `tools/fake_shelly_https.py` (même émulateur qu'en C2,
+`adb reverse` comme ci-dessus).
+
+- Cible protégée HTTP : `python3 tools/fake_shelly_https.py --http-only --http-port 8080 --password secret`.
+- Cible HTTPS sans mot de passe : `python3 tools/fake_shelly_https.py` (certificat accepté, aucun
+  mot de passe enregistré sur cette adresse : le message HTTPS est attendu, pas le message d'authentification).
+
+- [ ] Détecteur dont la liste de coupure contient la cible protégée HTTP : la ligne est grisée avec le
+  texte « Cet appareil exige une authentification et ne peut pas être commandé directement par une alarme de fumée. » ;
+  la cible HTTPS affiche « Cet appareil n'accepte que les connexions chiffrées (HTTPS) et ne peut pas être commandé directement par une alarme de fumée. ».
+- [ ] Saisir à la main l'adresse IP de la cible protégée dans le champ libre : refus avec le même texte, rien n'est ajouté à la liste.
+- [ ] Configurer une prise ouverte comme cible de coupure, puis enregistrer un mot de passe sur cette prise (Modifier l'appareil) :
+  la tuile du détecteur affiche « Coupure sur alarme à revoir ». Ouvrir le détecteur pendant qu'il dort affiche
+  « Un appareil est devenu protégé depuis la dernière lecture de ce détecteur. Réveille le détecteur pour vérifier ses cibles de coupure. » ;
+  une fois réveillé, la ligne affiche « À revoir : l'alarme ne peut plus couper cet appareil. Décoche-le pour le retirer. ».
+  La décocher fait disparaître le bandeau à la lecture suivante, sans autre action.
+- [ ] Relais ntfy installé sur une prise qui reçoit ensuite un mot de passe : après la resynchronisation déclenchée par
+  l'enregistrement (ou au prochain réveil d'un détecteur), le picto relais de Réglages passe sur un autre appareil ;
+  s'il n'en reste aucun, le bandeau de couverture zéro apparaît. Le script resté sur l'appareil protégé n'est pas supprimé et ne fait plus partie du relais, c'est attendu.
+- [ ] Détecteur de fumée protégé par mot de passe : il remonte toujours son état (alarme, batterie) et coupe toujours
+  les prises ouvertes configurées. Vérifier sur un vrai détecteur : un test qui n'émet pas `smoke.alarm` ne déclenche pas la coupure, ce n'est pas une erreur.
+- [ ] Journal de diagnostic : après le scénario (adresse refusée, cible retirée, marque posée et levée), exporter le journal
+  (Réglages → Journal → Exporter) puis `grep -c -e 'secret' -e 'Authorization' -e 'admin:' hestia-journal.txt` → `0`
+  et `grep -c 'http://[^ ]*@' hestia-journal.txt` → `0` (remplacer `secret` par le mot de passe réellement tapé, et le chemin par celui du fichier exporté).
+  Les lignes attendues : « Cible saisie refusée (protégée) : <ip> », « Coupure : N cible(s) protégée(s) retirée(s) pour <ip> »,
+  « Coupure à revoir : détecteur <id> on/off », « Relais : N candidat(s) protégé(s) exclu(s) » ; jamais de mot de passe ni d'URL avec identifiants.
