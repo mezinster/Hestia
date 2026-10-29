@@ -98,6 +98,26 @@ class NotifyRulesTest {
     }
 
     @Test
+    fun `one-shot threshold planning blocks only on its date`() {
+        val day = java.time.LocalDate.of(2026, 10, 29)
+        val once = Planning(8, 0, 10, 0, emptySet(), date = day, cutoffScriptId = 3, cutoffThresholdW = 5)
+        assertTrue(thresholdPlanningInProgress(listOf(once), day.atTime(9, 0)))
+        assertFalse(thresholdPlanningInProgress(listOf(once), day.plusDays(1).atTime(9, 0)))
+        assertFalse(thresholdPlanningInProgress(listOf(once), day.atTime(10, 0)))
+    }
+
+    @Test
+    fun `threshold slot crossing midnight blocks on both sides`() {
+        // Jeudi seulement (cron 4) : 22:00 → 02:00 le vendredi.
+        val night = Planning(22, 0, 2, 0, setOf(4), cutoffScriptId = 3, cutoffThresholdW = 5)
+        val thursday = LocalDateTime.of(2026, 10, 29, 23, 0)
+        assertTrue(thresholdPlanningInProgress(listOf(night), thursday))
+        assertTrue(thresholdPlanningInProgress(listOf(night), thursday.plusHours(2))) // vendredi 01:00
+        assertFalse(thresholdPlanningInProgress(listOf(night), thursday.plusHours(4))) // vendredi 03:00
+        assertFalse(thresholdPlanningInProgress(listOf(night), thursday.minusHours(2))) // jeudi 21:00
+    }
+
+    @Test
     fun `local tags map to kinds`() {
         assertEquals(NotifyKind.PLANNING_START, localNotifyKind("pl-start"))
         assertEquals(NotifyKind.PLANNING_END, localNotifyKind("pl-end"))
