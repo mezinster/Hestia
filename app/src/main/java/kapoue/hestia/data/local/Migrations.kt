@@ -236,3 +236,10 @@ val MIGRATION_20_21 = object : Migration(20, 21) {
         db.execSQL("ALTER TABLE devices ADD COLUMN certPin TEXT")
     }
 }
+
+/** v21 → v22 : masque des notifications par canal (lot D, fork) — 63 = tout actif. */
+val MIGRATION_21_22 = object : Migration(21, 22) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE devices ADD COLUMN notifyMask INTEGER NOT NULL DEFAULT 63")
+    }
+}
