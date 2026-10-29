@@ -213,6 +213,14 @@
     <string name="error_gen1_unsupported">Это устройство Shelly Gen1, оно не поддерживается. Поддерживаются только Gen2 и новее.</string>
     <string name="error_https_required">Это устройство требует зашифрованного подключения (HTTPS). Открой «Изменить устройство», чтобы проверить его сертификат и доверять ему.</string>
     <string name="error_cert_changed">Сертификат безопасности этого устройства изменился. Если ты сбрасывал устройство, открой «Изменить устройство» и подтверди новый; иначе проверь свою сеть.</string>
+    <string name="error_password_required">Это устройство защищено паролем. Введи пароль его веб-интерфейса.</string>
+    <string name="error_password_wrong">Устройство отклонило этот пароль. Проверь его и введи снова.</string>
+    <string name="error_throttled">Устройство временно отклоняет подключения. Повтори попытку через несколько минут.</string>
+    <string name="password_field_label">Пароль устройства</string>
+    <string name="password_field_hint">Пароль его веб-интерфейса. Хранится зашифрованным на этом телефоне и никогда не экспортируется.</string>
+    <string name="password_submit">Продолжить</string>
+    <string name="password_show">Показать</string>
+    <string name="password_hide">Скрыть</string>
     <string name="tls_peek_failed">Не удалось прочитать сертификат устройства. Проверь, что оно включено и подключено к той же сети Wi-Fi.</string>
     <string name="tls_dialog_title">Зашифрованное соединение</string>
     <string name="tls_dialog_message">Это устройство принимает только зашифрованные соединения (HTTPS) с сертификатом, выпущенным Shelly, который твой телефон не может проверить сам. Убедись, что отпечаток совпадает с показанным в веб-интерфейсе устройства, и доверяй ему: Hestia будет принимать только этот сертификат.</string>
@@ -376,6 +384,10 @@
     <string name="tile_firmware_update_banner">Есть обновление</string>
     <string name="tile_tls_banner_required">Подтверди шифрованное соединение</string>
     <string name="tile_tls_banner_changed">Сертификат изменился</string>
+    <string name="tile_password_banner_required">Требуется пароль</string>
+    <string name="tile_password_banner_wrong">Пароль отклонён</string>
+    <string name="tile_password_banner_unverified">Пароль не проверен</string>
+    <string name="tile_throttled_banner">Устройство занято, повтори позже</string>
     <string name="firmware_install_button">Установить обновление</string>
     <string name="firmware_install_confirm_title">Установить обновление?</string>
     <string name="firmware_install_confirm_message">Устройство перезагрузится, чтобы применить обновление: всё, что к нему подключено, обесточится на несколько секунд. Не отключай его от сети во время обновления.</string>
@@ -610,4 +622,16 @@
     <string name="tls_section_check">Проверить сертификат</string>
     <string name="tls_section_forget">Забыть сертификат</string>
     <string name="tls_forget_confirm">Hestia снова будет обращаться к этому устройству по обычному HTTP. Делай это, только если ты отключил HTTPS на устройстве.</string>
+    <string name="tls_forget_password_suspended">Сохранённый пароль тоже будет удалён: введи его снова потом.</string>
+    <string name="password_section_title">Пароль устройства</string>
+    <string name="password_state_accepted">Сохранён и принят устройством.</string>
+    <string name="password_state_unverified">Сохранён, ещё не проверен: устройство с тех пор не отвечало.</string>
+    <string name="password_state_required">Устройство запрашивает пароль.</string>
+    <string name="password_state_rejected">Устройство отклонило сохранённый пароль. Hestia прекратила попытки, чтобы устройство не заблокировалось.</string>
+    <string name="password_http_note">По обычному HTTP сам пароль никогда не передаётся, только одноразовое подтверждение.</string>
+    <string name="password_save">Сохранить</string>
+    <string name="password_remove">Удалить</string>
+    <string name="password_remove_confirm_title">Удалить пароль?</string>
+    <string name="password_remove_confirm">Hestia забудет этот пароль и будет обращаться к устройству без него. Если устройство защищено, оно снова запросит пароль.</string>
+    <string name="tls_dialog_password_suspended">Сохранённый пароль будет приостановлен: введи его снова после подтверждения.</string>
 </resources>

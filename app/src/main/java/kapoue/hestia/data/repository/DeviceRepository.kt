@@ -22,6 +22,7 @@ import kapoue.hestia.data.presence.TimerNotifyScriptGenerator
 import kapoue.hestia.data.rpc.AccessIssue
 import kapoue.hestia.data.rpc.ChannelControl
 import kapoue.hestia.data.rpc.DeviceAccessRegistry
+import kapoue.hestia.data.rpc.PasswordState
 import kapoue.hestia.data.rpc.PeekedCertificate
 import kapoue.hestia.data.rpc.DeviceCapabilities
 import kapoue.hestia.data.rpc.RpcFailure
@@ -108,6 +109,7 @@ class DeviceRepository @Inject constructor(
     private val appPreferences: AppPreferences,
     private val logger: DiagnosticLogger,
     private val accessRegistry: DeviceAccessRegistry,
+    private val devicePasswords: DevicePasswords,
     @ApplicationContext private val context: Context,
     @ApplicationScope private val appScope: CoroutineScope,
 ) {
@@ -235,7 +237,24 @@ class DeviceRepository @Inject constructor(
     }
 
     suspend fun trustCertificate(device: Device, pin: String) {
-        val n = writePin(device, pin)
+        // Certificat changé : le mot de passe enregistré ne doit jamais partir vers une identité
+        // inconnue. On relit la ligne en base (pas l'instantané de l'écran) et on retire le mot de
+        // passe AVANT d'accorder la nouvelle confiance (ordre imposé, décision D1).
+        val fresh = deviceDao.getAllOnce().firstOrNull { it.id == device.id }
+        if (fresh != null && passwordMustBeSuspended(fresh.certPin, pin, devicePasswords.hasPassword(fresh))) {
+            devicePasswords.remove(device.ipAddress)
+            reloadSavedPins("mot de passe suspendu")
+            logger.info(DiagnosticLogger.RPC, "Mot de passe suspendu (certificat changé) ${device.ipAddress}")
+        }
+        // Confiance provisoire sur les deux adresses AVANT l'écriture en base : ferme la fenêtre où un
+        // appel lancé entre l'écriture et la relecture du registre partait en HTTP (point laissé par C1).
+        val ips = listOfNotNull(device.ipAddress, device.ip2Address?.takeIf { it.isNotBlank() })
+        ips.forEach { accessRegistry.trustProvisionally(it, pin) }
+        val n = try {
+            writePin(device, pin)
+        } finally {
+            ips.forEach { accessRegistry.forgetProvisional(it) }
+        }
         logger.info(DiagnosticLogger.RPC, "Certificat accepté ${device.ipAddress} ($n canal/canaux)")
     }
 
@@ -247,8 +266,93 @@ class DeviceRepository @Inject constructor(
         logger.info(DiagnosticLogger.RPC, "Certificat provisoire enregistré $ip ($n canal/canaux)")
     }
 
+    // --- Mot de passe de l'appareil (lot C2, fork) ---
+
+    /** État du mot de passe stocké (lecture du coffre hors thread principal, sans réseau) ; null = aucun. */
+    suspend fun passwordStateOf(device: Device): PasswordState? = devicePasswords.stateOf(device)
+
+    fun trustPasswordProvisionally(ip: String, password: String) =
+        accessRegistry.trustPasswordProvisionally(ip, password)
+
+    fun forgetProvisionalPassword(ip: String) = accessRegistry.forgetProvisionalPassword(ip)
+
+    /**
+     * Enregistre l'épingle provisoire (inchangé) puis le mot de passe provisoire. À appeler APRÈS
+     * l'insertion des canaux en base : le coffre élague les entrées dont l'id n'est plus dans la liste.
+     * Un mot de passe que la sonde d'ajout vient de faire accepter est enregistré comme accepté
+     * (sinon la nouvelle tuile afficherait « mot de passe à vérifier »).
+     */
+    suspend fun commitProvisionalAccess(ip: String) {
+        commitProvisionalCertificate(ip)
+        val password = accessRegistry.provisionalPasswordFor(ip) ?: return
+        val state = if (accessRegistry.provisionalPasswordAccepted(ip)) PasswordState.ACCEPTED else PasswordState.UNVERIFIED
+        val n = devicePasswords.save(ip, password, state)
+        reloadSavedPins("mot de passe ajouté")
+        accessRegistry.forgetProvisionalPassword(ip)
+        val label = if (state == PasswordState.ACCEPTED) "accepté" else "non vérifié"
+        logger.info(DiagnosticLogger.RPC, "Mot de passe provisoire enregistré $ip, $label ($n canal/canaux)")
+    }
+
+    /** Enregistre un mot de passe pour tous les canaux de l'adresse puis le vérifie par un appel. */
+    suspend fun savePassword(device: Device, password: String) {
+        val n = devicePasswords.save(device.ipAddress, password)
+        clearDigestSessions(device)
+        reloadSavedPins("mot de passe enregistré")
+        clearPasswordIssues(device)
+        logger.info(DiagnosticLogger.RPC, "Mot de passe enregistré ${device.ipAddress} ($n canal/canaux)")
+        val (ip, result) = withIp(device) { rpcClient.getDeviceInfo(it) }
+        logger.info(DiagnosticLogger.RPC, "Vérification du mot de passe $ip : ${if (result is RpcResult.Success) "ok" else "non concluante"}")
+    }
+
+    suspend fun removePassword(device: Device) {
+        val n = devicePasswords.remove(device.ipAddress)
+        clearDigestSessions(device)
+        reloadSavedPins("mot de passe retiré")
+        clearPasswordIssues(device)
+        logger.info(DiagnosticLogger.RPC, "Mot de passe retiré ${device.ipAddress} ($n canal/canaux)")
+    }
+
+    /**
+     * Oublie les sessions digest des deux adresses : un nouveau mot de passe ne part pas d'abord sur
+     * l'ancien nonce (un essai raté de plus pour l'anti-brute-force de l'appareil).
+     */
+    private fun clearDigestSessions(device: Device) {
+        listOfNotNull(device.ipAddress, device.ip2Address?.takeIf { it.isNotBlank() }).forEach {
+            accessRegistry.clearSessions(it)
+        }
+    }
+
+    /** Lève PASSWORD_REQUIRED/PASSWORD_WRONG sans toucher aux problèmes de certificat. */
+    private fun clearPasswordIssues(device: Device) {
+        listOfNotNull(device.ipAddress, device.ip2Address?.takeIf { it.isNotBlank() }).forEach { addr ->
+            val issue = accessRegistry.issues.value[addr]
+            if (issue == AccessIssue.PASSWORD_REQUIRED || issue == AccessIssue.PASSWORD_WRONG) {
+                accessRegistry.report(addr, null)
+            }
+        }
+    }
+
     suspend fun forgetCertificate(device: Device) {
+        // Sans épingle, l'appareil repasse en HTTP : un mot de passe conservé partirait en digest
+        // (craquable hors ligne) dès le premier 401 en clair. On le retire AVANT d'effacer l'épingle
+        // (même règle que [trustCertificate], décision D1 ; ferme aussi « oublier puis faire confiance »).
+        val fresh = deviceDao.getAllOnce().firstOrNull { it.id == device.id } ?: device
+        val hadPassword = devicePasswords.hasPassword(fresh)
+        val suspended = passwordMustBeSuspended(fresh.certPin, null, hadPassword)
+        if (suspended) {
+            devicePasswords.remove(device.ipAddress)
+            clearDigestSessions(device)
+            reloadSavedPins("mot de passe suspendu")
+            logger.info(DiagnosticLogger.RPC, "Mot de passe suspendu (certificat oublié) ${device.ipAddress}")
+        }
         val n = writePin(device, null)
+        // Plus aucun mot de passe : l'appareil peut de nouveau être contacté en HTTP simple sans que
+        // la consigne « HTTPS vu » du processus bloque le signalement d'un futur HTTPS requis.
+        if (!hadPassword || suspended) {
+            listOfNotNull(device.ipAddress, device.ip2Address?.takeIf { it.isNotBlank() }).forEach {
+                accessRegistry.clearHttpsSeen(it)
+            }
+        }
         logger.info(DiagnosticLogger.RPC, "Certificat oublié ${device.ipAddress} ($n canal/canaux)")
     }
 
@@ -2409,6 +2513,9 @@ class DeviceRepository @Inject constructor(
     suspend fun deleteDevice(device: Device) {
         deviceDao.delete(device)
         logger.info(DiagnosticLogger.DB, "Suppression appareil ${device.ipAddress} canal ${device.switchId}")
+        // Chaque canal a sa propre entrée de coffre : on l'efface par id (la ligne n'existe plus en base).
+        devicePasswords.removeId(device.id)
+        reloadSavedPins("mot de passe retiré")
         // Un détecteur supprimé ne doit plus apparaître dans les futurs déploiements du relais
         // (trouvé en revue de code avant publication, 2026-09-03) — un relais déjà en cours
         // d'exécution garde malgré tout son entrée MAC→nom en mémoire (limite connue et

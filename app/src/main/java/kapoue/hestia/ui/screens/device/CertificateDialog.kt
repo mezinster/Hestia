@@ -35,6 +35,10 @@ fun CertificateDialog(
                         if (prompt.changed) R.string.tls_dialog_message_changed else R.string.tls_dialog_message,
                     ),
                 )
+                if (prompt.passwordWillBeSuspended) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.tls_dialog_password_suspended))
+                }
                 Spacer(Modifier.height(12.dp))
                 Text(
                     stringResource(R.string.tls_dialog_fingerprint),

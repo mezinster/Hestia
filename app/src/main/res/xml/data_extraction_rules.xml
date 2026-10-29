@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <data-extraction-rules>
-    <cloud-backup />
-    <device-transfer />
+    <!-- Mots de passe d'appareils : chiffrés par une clé Keystore non sauvegardée, donc illisibles
+         après restauration ; et le spec interdit tout mot de passe dans une sauvegarde. -->
+    <cloud-backup>
+        <exclude domain="sharedpref" path="hestia_device_passwords.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="hestia_device_passwords.xml" />
+    </device-transfer>
 </data-extraction-rules>

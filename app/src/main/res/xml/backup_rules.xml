@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Sauvegarde/restauration système. La sauvegarde métier est gérée par l'export JSON
      dédié (voir SPEC-V1 § 6, lot 5). -->
-<full-backup-content />
+<full-backup-content>
+    <!-- Mots de passe d'appareils : chiffrés par une clé Keystore non sauvegardée, donc illisibles
+         après restauration ; et le spec interdit tout mot de passe dans une sauvegarde. -->
+    <exclude domain="sharedpref" path="hestia_device_passwords.xml" />
+</full-backup-content>

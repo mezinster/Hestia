@@ -53,6 +53,8 @@ data class CertificatePrompt(
     val ip: String,
     val certificate: PeekedCertificate,
     val changed: Boolean,
+    /** Vrai si un mot de passe est enregistré : accepter le nouveau certificat le suspend (D1). */
+    val passwordWillBeSuspended: Boolean = false,
 )
 
 data class AddEditUiState(
@@ -121,8 +123,18 @@ data class AddEditUiState(
     val cloudToggling: Boolean = false,
     /** Non nul tant que l'utilisateur doit accepter ou refuser le certificat d'un appareil HTTPS. */
     val certificatePrompt: CertificatePrompt? = null,
+    /** Vrai quand l'appareil exige un mot de passe : l'écran affiche le champ. */
+    val passwordPrompt: Boolean = false,
+    /** Saisie du mot de passe — jamais journalisée ni imprimée ([SecretText]), vidée dès l'envoi. */
+    val passwordInput: SecretText = SecretText.EMPTY,
     /** Connexion chiffrée de l'appareil édité ; null = HTTP simple, section masquée. */
     val tlsState: TlsState? = null,
+    /** Section « Mot de passe de l'appareil » (mode édition) ; null = masquée (D5). */
+    val passwordSection: PasswordSectionState? = null,
+    /** Vrai si l'appareil n'a pas d'épingle : le mot de passe passe par un défi digest en HTTP clair. */
+    val passwordHttpNote: Boolean = false,
+    /** Vrai si un mot de passe est enregistré : oublier le certificat le retire aussi (revue finale C2, 1). */
+    val passwordSaved: Boolean = false,
 )
 
 @HiltViewModel
@@ -180,13 +192,34 @@ class AddEditDeviceViewModel @Inject constructor(
     // Appareil édité tel que lu en base (épingle à jour) — sert à la vérification/confirmation/oubli du certificat.
     private var observedDevice: Device? = null
 
+    // Déclencheur de relecture du coffre : retirer un mot de passe ACCEPTÉ ne change ni les problèmes
+    // d'accès ni l'appareil en base, donc rien d'autre ne ferait réémettre le combine ci-dessous.
+    private val passwordRefresh = MutableStateFlow(0)
+
     init {
         editingDeviceId?.let { id ->
             viewModelScope.launch {
-                combine(repository.observeDevice(id), repository.accessIssues) { device, issues -> device to issues }
+                combine(repository.observeDevice(id), repository.accessIssues, passwordRefresh) { device, issues, _ -> device to issues }
                     .collect { (device, issues) ->
                         observedDevice = device
-                        _uiState.update { it.copy(tlsState = device?.let { d -> tlsStateOf(d, issues) }) }
+                        // Le coffre est relu (sans réseau) à chaque émission : changement de problème
+                        // d'accès, d'appareil, ou déclencheur [passwordRefresh] après une action locale.
+                        val wasHidden = _uiState.value.passwordSection == null
+                        val stored = device?.let { d -> repository.passwordStateOf(d) }
+                        val passwordSection = device?.let { d ->
+                            passwordSectionStateOf(stored, passwordIssueFor(d, issues))
+                        }
+                        if (wasHidden && passwordSection != null) {
+                            logger.info(DiagnosticLogger.UI, "Section mot de passe affichée ($passwordSection)")
+                        }
+                        _uiState.update {
+                            it.copy(
+                                tlsState = device?.let { d -> tlsStateOf(d, issues) },
+                                passwordSection = passwordSection,
+                                passwordHttpNote = device != null && device.certPin == null,
+                                passwordSaved = stored != null,
+                            )
+                        }
                     }
             }
         }
@@ -329,10 +362,12 @@ class AddEditDeviceViewModel @Inject constructor(
         probeJob?.cancel()
         // Changement d'IP : la confiance provisoire accordée à l'ancienne adresse n'a plus de sens.
         repository.forgetProvisionalCertificate(_uiState.value.ipAddress.trim())
+        repository.forgetProvisionalPassword(_uiState.value.ipAddress.trim())
         _uiState.update {
             val next = it.copy(
                 ipAddress = value, ipError = null, error = null,
                 foundDeviceName = null, autoProbing = false, certificatePrompt = null,
+                passwordPrompt = false, passwordInput = SecretText.EMPTY,
             )
             next.copy(isDirty = isDirty(next))
         }
@@ -373,7 +408,7 @@ class AddEditDeviceViewModel @Inject constructor(
                     // Le nom trouvé alimente aussi `name` (champ alors masqué à l'écran) : le
                     // reste du parcours (addChannels, validateFields…) continue de lire ce champ
                     // sans rien savoir de la sonde automatique.
-                    it.copy(autoProbing = false, foundDeviceName = found, name = found ?: it.name)
+                    it.copy(autoProbing = false, foundDeviceName = found, name = found ?: it.name, passwordPrompt = false)
                 }
             }
             is RpcResult.Failure -> {
@@ -382,6 +417,13 @@ class AddEditDeviceViewModel @Inject constructor(
                 if (result.kind == RpcFailure.HTTPS_REQUIRED) {
                     val peekError = promptForCertificate(ip)
                     _uiState.update { it.copy(autoProbing = false, foundDeviceName = null, error = peekError) }
+                } else if (result.kind == RpcFailure.PASSWORD_REQUIRED || result.kind == RpcFailure.PASSWORD_WRONG) {
+                    val message = promptForPassword(ip, result.kind)
+                    _uiState.update { it.copy(autoProbing = false, foundDeviceName = null, error = message) }
+                } else if (result.kind == RpcFailure.THROTTLED) {
+                    // Trop d'essais : silencieux, l'utilisateur ne comprendrait pas pourquoi rien ne se passe.
+                    logger.warn(DiagnosticLogger.UI, "Sonde automatique en pause, trop d'essais ($ip)")
+                    _uiState.update { it.copy(autoProbing = false, foundDeviceName = null, error = result.toUserMessageOrNull()) }
                 } else {
                     _uiState.update { it.copy(autoProbing = false, foundDeviceName = null) }
                 }
@@ -414,6 +456,38 @@ class AddEditDeviceViewModel @Inject constructor(
             }
         }
 
+    /**
+     * Appareil protégé par mot de passe : affiche le champ (jamais tant qu'un dialogue de certificat
+     * est ouvert, le certificat passe d'abord) et renvoie l'erreur à montrer. En cas de refus, le
+     * champ est conservé tel quel pour correction.
+     */
+    private fun promptForPassword(ip: String, kind: RpcFailure): UserMessage {
+        if (kind == RpcFailure.PASSWORD_REQUIRED) {
+            logger.info(DiagnosticLogger.UI, "Mot de passe demandé ($ip)")
+        } else {
+            logger.warn(DiagnosticLogger.UI, "Mot de passe refusé par l'appareil ($ip)")
+        }
+        _uiState.update { it.copy(passwordPrompt = it.certificatePrompt == null) }
+        return UserMessage(
+            if (kind == RpcFailure.PASSWORD_REQUIRED) R.string.error_password_required else R.string.error_password_wrong,
+        )
+    }
+
+    fun onPasswordChange(value: String) = _uiState.update { it.copy(passwordInput = SecretText(value), error = null) }
+
+    /** Confie le mot de passe saisi au registre (provisoire), vide le champ et relance la sonde. */
+    fun onSubmitPassword() {
+        val state = _uiState.value
+        val input = state.passwordInput.value
+        if (input.isEmpty()) return
+        val ip = state.ipAddress.trim()
+        logger.info(DiagnosticLogger.UI, "Mot de passe saisi ($ip)")
+        repository.trustPasswordProvisionally(ip, input)
+        _uiState.update { it.copy(passwordInput = SecretText.EMPTY, error = null) }
+        probeJob?.cancel()
+        probeJob = viewModelScope.launch { runAutoProbe(ip) }
+    }
+
     /** Accepte le certificat affiché (confiance provisoire, validée à l'ajout) et relance la sonde. */
     fun onTrustCertificate() {
         val prompt = _uiState.value.certificatePrompt ?: return
@@ -422,7 +496,10 @@ class AddEditDeviceViewModel @Inject constructor(
         if (_uiState.value.isEditMode && editing != null) {
             // Édition : l'épingle est écrite tout de suite sur tous les canaux de l'appareil.
             _uiState.update { it.copy(certificatePrompt = null, error = null) }
-            viewModelScope.launch { repository.trustCertificate(editing, prompt.certificate.pin) }
+            viewModelScope.launch {
+                repository.trustCertificate(editing, prompt.certificate.pin)
+                passwordRefresh.update { it + 1 }
+            }
             return
         }
         repository.trustCertificateProvisionally(prompt.ip, prompt.certificate.pin)
@@ -456,8 +533,17 @@ class AddEditDeviceViewModel @Inject constructor(
                         DiagnosticLogger.UI,
                         "Certificat lu (${device.ipAddress}, ${peek.value.fingerprint}, modifié=$changed)",
                     )
+                    // Lecture du coffre hors de update {} : une fonction suspendue n'a rien à faire dans sa boucle CAS.
+                    val suspendsPassword = changed && repository.passwordStateOf(device) != null
                     _uiState.update {
-                        it.copy(certificatePrompt = CertificatePrompt(device.ipAddress, peek.value, changed))
+                        it.copy(
+                            certificatePrompt = CertificatePrompt(
+                                device.ipAddress,
+                                peek.value,
+                                changed,
+                                passwordWillBeSuspended = suspendsPassword,
+                            ),
+                        )
                     }
                 }
                 else -> {
@@ -475,8 +561,30 @@ class AddEditDeviceViewModel @Inject constructor(
         viewModelScope.launch { repository.forgetCertificate(device) }
     }
 
+    /** Mode édition : enregistre le mot de passe saisi (chiffré, jamais journalisé) puis le vérifie. */
+    fun savePassword(value: String) {
+        val device = observedDevice ?: return
+        if (value.isEmpty()) return
+        logger.info(DiagnosticLogger.UI, "Mot de passe enregistré depuis Modifier (${device.ipAddress})")
+        viewModelScope.launch {
+            repository.savePassword(device, value)
+            passwordRefresh.update { it + 1 }
+        }
+    }
+
+    /** Mode édition : retire le mot de passe enregistré (après confirmation). */
+    fun removePassword() {
+        val device = observedDevice ?: return
+        logger.info(DiagnosticLogger.UI, "Mot de passe retiré depuis Modifier (${device.ipAddress})")
+        viewModelScope.launch {
+            repository.removePassword(device)
+            passwordRefresh.update { it + 1 }
+        }
+    }
+
     override fun onCleared() {
         repository.forgetProvisionalCertificate(_uiState.value.ipAddress.trim())
+        repository.forgetProvisionalPassword(_uiState.value.ipAddress.trim())
         super.onCleared()
     }
 
@@ -494,9 +602,13 @@ class AddEditDeviceViewModel @Inject constructor(
             probeJob?.cancel()
             capabilities = null
             probedIp = null
+            // Le champ mot de passe n'a plus de sens après un changement de type (D4).
+            repository.forgetProvisionalPassword(current.ipAddress.trim())
         }
         _uiState.update {
             val next = it.copy(
+                passwordPrompt = if (switching) false else it.passwordPrompt,
+                passwordInput = if (switching) SecretText.EMPTY else it.passwordInput,
                 type = value,
                 typeChosen = true,
                 foundDeviceName = if (switching) null else it.foundDeviceName,
@@ -581,6 +693,8 @@ class AddEditDeviceViewModel @Inject constructor(
                     is RpcResult.Failure -> {
                         val message = if (result.kind == RpcFailure.HTTPS_REQUIRED) {
                             promptForCertificate(ip)
+                        } else if (result.kind == RpcFailure.PASSWORD_REQUIRED || result.kind == RpcFailure.PASSWORD_WRONG) {
+                            promptForPassword(ip, result.kind)
                         } else {
                             result.toUserMessageOrNull()
                         }
@@ -607,7 +721,7 @@ class AddEditDeviceViewModel @Inject constructor(
                 if (added == 0) {
                     _uiState.update { it.copy(isTesting = false, error = UserMessage(R.string.error_device_exists)) }
                 } else {
-                    repository.commitProvisionalCertificate(ip)
+                    repository.commitProvisionalAccess(ip)
                     repository.resyncSmokeRelay()
                     confirmThenClose(caps.reportedName?.takeIf { it.isNotBlank() } ?: _uiState.value.name.trim())
                 }
@@ -722,7 +836,7 @@ class AddEditDeviceViewModel @Inject constructor(
             // changement de réglage ntfy (retour David, 2026-09-17 : « j'ai ajouté une prise, elle
             // n'a pas le picto relais, comment l'avoir ? »). Best-effort, silencieux si non
             // pertinent (pas de détecteur, ou déjà de la place ailleurs — voir resyncSmokeRelay).
-            repository.commitProvisionalCertificate(state.ipAddress.trim())
+            repository.commitProvisionalAccess(state.ipAddress.trim())
             repository.resyncSmokeRelay()
             val resolvedName = caps.reportedName?.takeIf { it.isNotBlank() } ?: state.name.trim()
             confirmThenClose(resolvedName)
@@ -803,4 +917,4 @@ class AddEditDeviceViewModel @Inject constructor(
 }
 
 /** Prise / relais et Variateur partagent la même sonde : ce sont les composants qui décident. */
-private fun DeviceType.usesProbe(): Boolean = this == DeviceType.PLUG || this == DeviceType.LAMP || this == DeviceType.SHUTTER
+internal fun DeviceType.usesProbe(): Boolean = this == DeviceType.PLUG || this == DeviceType.LAMP || this == DeviceType.SHUTTER

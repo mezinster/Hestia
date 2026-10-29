@@ -347,3 +347,39 @@ demandent un vrai appareil ; le dernier utilise `tools/fake_shelly_https.py` (us
 - [ ] **Appareil Android réel** : un certificat changé est bien signalé « Certificat changé » (et non « injoignable ») — Conscrypt garde la `PinMismatchException` dans la chaîne des causes.
 - [ ] **Vrai Shelly firmware 2.x avec HTTPS imposé** : `POST /rpc` sur le port 80 répond par un 30x vers `https://` ; l'appareil est détecté et la tuile indique « connexion chiffrée à confirmer ».
 - [ ] Essai avec `tools/fake_shelly_https.py` (émulateur : `adb reverse tcp:80 tcp:8080` et `adb reverse tcp:443 tcp:8443`, ajout avec 127.0.0.1) : redirection 301 détectée, dialogue avec l'empreinte affichée par le script, marche/arrêt fonctionnel ; relancer le script sans option garde le même certificat (l'épingle reste valable) ; relancer avec `--rotate-cert` → bandeau « Certificat changé ».
+
+## Mot de passe d'appareil (fork, lot C2)
+
+Authentification digest SHA-256 des appareils protégés par un mot de passe. Les points « vrai
+appareil » demandent un Shelly dont l'authentification est activée ; les autres utilisent
+`tools/fake_shelly_https.py` (usage local seulement, le script n'affiche jamais le mot de passe).
+Lancements utiles (émulateur : `adb reverse tcp:80 tcp:8080`, `tcp:443 tcp:8443`, ajout avec 127.0.0.1) :
+
+```bash
+# Appareil protégé en HTTP simple (pas de redirection, pas de TLS)
+python3 tools/fake_shelly_https.py --http-only --http-port 8080 --password secret
+# Appareil protégé en HTTPS (certificat puis mot de passe)
+python3 tools/fake_shelly_https.py --password secret
+# Idem avec anti-brute-force : 429 pendant 60 s après 3 refus
+python3 tools/fake_shelly_https.py --password secret --throttle-after 3
+# Certificat changé alors qu'un mot de passe est enregistré
+python3 tools/fake_shelly_https.py --password secret --rotate-cert
+```
+
+- [ ] Ajout d'un appareil protégé en **HTTP** (`--http-only --password`) : un champ « mot de passe » est proposé ; avec le bon, l'appareil est ajouté, la tuile répond, **aucun bandeau**.
+- [ ] Ajout d'un appareil protégé en **HTTPS** : d'abord le dialogue du certificat, puis le mot de passe ; la tuile répond ensuite.
+- [ ] Mot de passe **faux** à l'ajout : message clair, et **une seule** tentative dans le journal de diagnostic (pas de rafale de requêtes vers l'appareil).
+- [ ] Mot de passe faux enregistré depuis Modifier l'appareil : bandeau « Mot de passe refusé » (texte, pas seulement une couleur) ; **relancer l'appli** (tuée puis rouverte) : aucune requête vers cette adresse (journal muet, script sans nouvelle ligne) tant qu'aucun mot de passe n'est ressaisi.
+- [ ] Ressaisir le bon mot de passe (ou le même, une fois l'appareil corrigé) : le bandeau disparaît, l'appareil répond.
+- [ ] Appareil protégé ajouté sans mot de passe (ou détecteur de fumée protégé) : bandeau « Mot de passe requis » ; le tap ouvre Modifier l'appareil, où le mot de passe se saisit.
+- [ ] Mot de passe saisi mais pas encore confirmé par l'appareil (injoignable au moment de l'enregistrement) : bandeau « Mot de passe à vérifier », qui disparaît au premier échange réussi.
+- [ ] `--throttle-after 3` puis trois mauvais essais : bandeau « Appareil saturé, réessaie plus tard » ; **aucune** requête vers l'appareil pendant 60 s (script muet), puis reprise automatique.
+- [ ] Multiprise / Strip (plusieurs canaux sur une même adresse) : un seul mot de passe pour tous les canaux ; un refus ne génère pas une tentative par canal.
+- [ ] Certificat changé (`--rotate-cert`) sur un appareil avec mot de passe enregistré : bandeau « Certificat changé » ; après acceptation du nouveau certificat, le mot de passe est **suspendu** (effacé) : bandeau « Mot de passe requis » jusqu'à ressaisie.
+- [ ] Jamais d'en-tête `Authorization` en HTTP clair vers une adresse signalée « connexion chiffrée à confirmer » ou « certificat changé » (journal du script : chaque requête se termine par `auth=yes` ou `auth=no`, jamais la valeur ; dans ces états, aucune ligne `[http ]` ne porte `auth=yes`).
+- [ ] Supprimer l'appareil : son mot de passe est effacé (en le rajoutant, le mot de passe est de nouveau demandé).
+- [ ] Sauvegarde **JSON** (Réglages) : le fichier exporté ne contient **aucun** mot de passe ; après restauration, la tuile affiche « Mot de passe requis ».
+- [ ] Sauvegarde **Android** / transfert d'appareil : les mots de passe ne sont pas restaurés (fichier `hestia_device_passwords` exclu de `backup_rules.xml` et `data_extraction_rules.xml`).
+- [ ] Journal de diagnostic sans secret : après un scénario complet (ajout, mot de passe faux, bon mot de passe), enregistrer l'export du journal (Réglages → Journal → Exporter) puis vérifier que la valeur saisie n'y figure pas, ni aucun en-tête `Authorization` :
+  `grep -c -e 'secret' -e 'Authorization' hestia-journal.txt` → `0` (remplacer `secret` par le mot de passe réellement tapé et le chemin par celui du fichier exporté). Le journal note seulement « mot de passe enregistré / retiré / accepté / refusé pour <ip> ».
+- [ ] Script `fake_shelly_https.py` : sans en-tête, `curl -si -X POST -d '{"id":1,"method":"Shelly.GetDeviceInfo"}' http://127.0.0.1:8080/rpc` → 401 avec `WWW-Authenticate: Digest qop="auth", realm="shellyplugmg3-fake", ... algorithm=SHA-256`.

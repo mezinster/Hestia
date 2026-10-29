@@ -234,10 +234,10 @@ internal fun FirmwareUpdateBanner(onClick: () -> Unit) {
 }
 
 /**
- * Bandeau d'accès HTTPS (fork, lot C1) : l'appareil exige une connexion chiffrée à confirmer, ou
- * son certificat a changé depuis l'épinglage. Même forme que [FirmwareUpdateBanner], en couleurs
+ * Bandeau d'accès (fork, lots C1 et C2) : connexion chiffrée à confirmer, certificat changé, ou
+ * problème de mot de passe (requis, refusé, à vérifier, appareil saturé). Même forme que [FirmwareUpdateBanner], en couleurs
  * d'avertissement ; le texte accompagne toujours l'icône. Le tap ouvre Modifier l'appareil, où
- * se règle la confiance du certificat.
+ * se règle la confiance du certificat ou le mot de passe.
  */
 @Composable
 internal fun AccessIssueBanner(issue: AccessIssue, onClick: () -> Unit) {
@@ -260,7 +260,14 @@ internal fun AccessIssueBanner(issue: AccessIssue, onClick: () -> Unit) {
         Spacer(Modifier.width(6.dp))
         Text(
             text = stringResource(
-                if (issue == AccessIssue.CERT_CHANGED) R.string.tile_tls_banner_changed else R.string.tile_tls_banner_required,
+                when (issue) {
+                    AccessIssue.HTTPS_REQUIRED -> R.string.tile_tls_banner_required
+                    AccessIssue.CERT_CHANGED -> R.string.tile_tls_banner_changed
+                    AccessIssue.PASSWORD_REQUIRED -> R.string.tile_password_banner_required
+                    AccessIssue.PASSWORD_WRONG -> R.string.tile_password_banner_wrong
+                    AccessIssue.PASSWORD_UNVERIFIED -> R.string.tile_password_banner_unverified
+                    AccessIssue.THROTTLED -> R.string.tile_throttled_banner
+                },
             ),
             color = colors.warningText,
             style = MaterialTheme.typography.labelSmall,

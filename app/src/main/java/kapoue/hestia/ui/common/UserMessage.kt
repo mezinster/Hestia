@@ -27,6 +27,9 @@ fun RpcResult<*>.toUserMessageOrNull(): UserMessage? = when (this) {
             RpcFailure.GEN1_UNSUPPORTED -> R.string.error_gen1_unsupported
             RpcFailure.HTTPS_REQUIRED -> R.string.error_https_required
             RpcFailure.CERT_CHANGED -> R.string.error_cert_changed
+            RpcFailure.PASSWORD_REQUIRED -> R.string.error_password_required
+            RpcFailure.PASSWORD_WRONG -> R.string.error_password_wrong
+            RpcFailure.THROTTLED -> R.string.error_throttled
         },
     )
 }
