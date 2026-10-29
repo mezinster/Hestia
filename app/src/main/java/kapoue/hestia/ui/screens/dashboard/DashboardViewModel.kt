@@ -64,6 +64,9 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             repository.checkFirmwareUpdatesIfDue()
             repository.upgradeCutoffScriptsIfDue()
+            // Changements de notifications d'un canal restés en attente (injoignable, ou planning
+            // avec seuil en cours) : retentés ici seulement, voir applyPendingNotifyResyncs.
+            repository.applyPendingNotifyResyncs()
         }
     }
 

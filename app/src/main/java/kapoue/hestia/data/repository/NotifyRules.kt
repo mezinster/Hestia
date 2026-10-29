@@ -5,7 +5,10 @@ import kapoue.hestia.data.presence.ButtonTimerScriptGenerator
 import kapoue.hestia.data.presence.ChargeScriptGenerator
 import kapoue.hestia.data.presence.PresenceScriptGenerator
 import kapoue.hestia.domain.model.NotifyKind
+import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.isActiveAt
 import kapoue.hestia.domain.model.notifies
+import java.time.LocalDateTime
 
 /** Notifications de début / fin à émettre pour un planning de ce canal. */
 data class PlanningNotify(val start: Boolean, val end: Boolean)
@@ -56,4 +59,26 @@ fun applyMaskToChargeConfigs(
         endBody = if (row.notifies(NotifyKind.TIMER_END)) c.endBody else "",
         notifyCutoff = row.notifies(NotifyKind.CUTOFF),
     )
+}
+
+/**
+ * Vrai si un planning avec coupure sur seuil (jamais une présence) est dans son créneau à [now] :
+ * le réécrire maintenant relancerait son script de coupure en plein créneau — la
+ * resynchronisation des notifications est alors reportée au lancement suivant.
+ */
+fun thresholdPlanningInProgress(plannings: List<Planning>, now: LocalDateTime): Boolean =
+    plannings.any { !it.isPresence && it.cutoffThresholdW != null && it.isActiveAt(now) }
+
+/**
+ * Type de notification d'une étiquette de notification locale (voir NotificationWorker). Null =
+ * étiquette sans réglage, jamais filtrée.
+ */
+fun localNotifyKind(tag: String): NotifyKind? = when (tag) {
+    "pl-start" -> NotifyKind.PLANNING_START
+    "pl-end" -> NotifyKind.PLANNING_END
+    "pr-start", "pr-end" -> NotifyKind.PRESENCE
+    "cut" -> NotifyKind.CUTOFF
+    "timer-end" -> NotifyKind.TIMER_END
+    "cv-open", "cv-close", "cv-goto" -> NotifyKind.COVER_MOVES
+    else -> null
 }

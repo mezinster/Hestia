@@ -2575,6 +2575,7 @@ class DeviceRepository @Inject constructor(
         // Chaque canal a sa propre entrée de coffre : on l'efface par id (la ligne n'existe plus en base).
         devicePasswords.removeId(device.id)
         reloadSavedPins("mot de passe retiré")
+        appPreferences.setNotifyResyncPending(device.id, false)
         // Un détecteur supprimé ne doit plus apparaître dans les futurs déploiements du relais
         // (trouvé en revue de code avant publication, 2026-09-03) — un relais déjà en cours
         // d'exécution garde malgré tout son entrée MAC→nom en mémoire (limite connue et
@@ -2779,6 +2780,75 @@ class DeviceRepository @Inject constructor(
     suspend fun ntfyCatchUpIfNeeded(device: Device) {
         if (appPreferences.isNtfySynced(device.id)) return
         if (resyncNtfyForDevice(device)) appPreferences.markNtfySynced(device.id)
+    }
+
+    /**
+     * Change les types de notification d'un canal (écran Modifier), puis réécrit sur [appScope]
+     * ce qui porte les appels ntfy de ce canal — voir [resyncNotificationsFor].
+     */
+    suspend fun setNotifyMask(device: Device, mask: Int) {
+        deviceDao.updateFresh(listOf(device.id)) { it.copy(notifyMask = mask) }
+        logger.info(DiagnosticLogger.DB, "Notifications ${device.id} : masque $mask")
+        val updated = device.copy(notifyMask = mask)
+        appScope.launch { resyncNotificationsFor(updated) }
+    }
+
+    /** Vrai si un changement de masque de ce canal attend encore d'être appliqué sur l'appareil. */
+    fun notifyResyncPending(deviceId: Long): Boolean = deviceId in appPreferences.notifyResyncPendingIds()
+
+    /**
+     * Rattrapage, au lancement de l'appli uniquement (aucune tâche de fond), des changements de
+     * masque restés en attente — appelé par le Tableau après [upgradeCutoffScriptsIfDue].
+     */
+    suspend fun applyPendingNotifyResyncs() {
+        val pending = appPreferences.notifyResyncPendingIds()
+        if (pending.isEmpty()) return
+        var applied = 0
+        for (id in pending) {
+            val device = deviceDao.getById(id)
+            if (device == null) {
+                appPreferences.setNotifyResyncPending(id, false)
+                continue
+            }
+            if (resyncNotificationsFor(device)) applied++
+        }
+        logger.info(DiagnosticLogger.RPC, "Notifications : $applied rattrapage(s) appliqué(s)")
+    }
+
+    /**
+     * Réécrit plannings (présence comprise), événements de volet et minuteur de bouton via
+     * [resyncNtfyForDevice] pour refléter le masque de [device]. Reporté (canal marqué en attente,
+     * retenté au lancement suivant) si l'appareil est injoignable, ou si un planning avec coupure
+     * sur seuil est dans son créneau : le réécrire maintenant relancerait sa coupure en plein
+     * créneau — jamais toléré.
+     *
+     * Les scripts transitoires liés à un minuteur en cours (surveillance de charge,
+     * hestia_timer_notify) ne sont pas réécrits ici : le nouveau masque s'appliquera au prochain
+     * démarrage d'un minuteur, qui les construit déjà d'après le masque du canal.
+     *
+     * @return vrai si la resynchronisation a été faite.
+     */
+    private suspend fun resyncNotificationsFor(device: Device): Boolean {
+        if (hasNativePlannings(device) && !device.ipAddress.startsWith(DEMO_IP_PREFIX)) {
+            val plannings = (getPlannings(device) as? RpcResult.Success)?.value
+            val reason = when {
+                plannings == null -> "injoignable"
+                thresholdPlanningInProgress(plannings, LocalDateTime.now()) -> "planning avec seuil en cours"
+                else -> null
+            }
+            if (reason != null) {
+                appPreferences.setNotifyResyncPending(device.id, true)
+                logger.info(DiagnosticLogger.RPC, "Notifications ${device.id} : resynchronisation reportée ($reason)")
+                return false
+            }
+        }
+        if (!resyncNtfyForDevice(device)) {
+            appPreferences.setNotifyResyncPending(device.id, true)
+            logger.info(DiagnosticLogger.RPC, "Notifications ${device.id} : resynchronisation reportée (injoignable)")
+            return false
+        }
+        appPreferences.setNotifyResyncPending(device.id, false)
+        return true
     }
 
     /** @return vrai si l'appareil était joignable (donc effectivement resynchronisé). */

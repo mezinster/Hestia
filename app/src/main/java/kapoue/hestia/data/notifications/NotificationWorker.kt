@@ -14,10 +14,12 @@ import kapoue.hestia.data.local.entity.Device
 import kapoue.hestia.data.prefs.AppPreferences
 import kapoue.hestia.data.repository.CoverScheduleRepository
 import kapoue.hestia.data.repository.DeviceRepository
+import kapoue.hestia.data.repository.localNotifyKind
 import kapoue.hestia.data.rpc.ScheduleCodec
 import kapoue.hestia.data.rpc.getOrNull
 import kapoue.hestia.domain.model.CoverEventAction
 import kapoue.hestia.domain.model.coverEventInstantsBetween
+import kapoue.hestia.domain.model.notifies
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Objects
@@ -84,13 +86,11 @@ class NotificationWorker(
                         } else {
                             ctx.getString(startText, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes))
                         }
-                        post(ctx, device.id, startKind, t, device.name, startBody)
-                        posted++
+                        if (post(ctx, device, startKind, t, startBody)) posted++
                     }
                     ScheduleCodec.boundaryInstant(p.startMinutes, p.endMinutes, p.days, ScheduleCodec.Boundary.END, from, now, zone)?.let { t ->
-                        post(ctx, device.id, endKind, t, device.name,
-                            ctx.getString(endText, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))
-                        posted++
+                        if (post(ctx, device, endKind, t,
+                            ctx.getString(endText, formatClockTime(p.startMinutes), formatClockTime(p.endMinutes)))) posted++
                     }
                 }
             }
@@ -105,8 +105,7 @@ class NotificationWorker(
                         is CoverEventAction.GoTo -> "cv-goto" to ctx.getString(R.string.cover_notif_moved, a.position)
                     }
                     for (t in coverEventInstantsBetween(e, fromLocal, toLocal)) {
-                        post(ctx, device.id, kind, t.atZone(zone).toInstant().toEpochMilli(), device.name, text)
-                        posted++
+                        if (post(ctx, device, kind, t.atZone(zone).toInstant().toEpochMilli(), text)) posted++
                     }
                 }
             }
@@ -153,17 +152,15 @@ class NotificationWorker(
             when {
                 stale -> Unit
                 timer.thresholdW != null && repository.cutoffScriptFired(device) -> {
-                    post(ctx, device.id, "cut", timer.endMillis, device.name,
-                        ctx.getString(R.string.notif_cutoff_triggered))
-                    posted++
+                    if (post(ctx, device, "cut", timer.endMillis,
+                        ctx.getString(R.string.notif_cutoff_triggered))) posted++
                 }
                 // Coupé avant la fin mais pas par le seuil ⇒ manuel / bouton physique : pas de notif.
                 offEarly -> Unit
                 // Arrivé au terme prévu (minuteur simple, ou coupure seuil allée jusqu'au bout).
                 else -> {
-                    post(ctx, device.id, "timer-end", timer.endMillis, device.name,
-                        ctx.getString(R.string.notif_timer_ended, timer.label))
-                    posted++
+                    if (post(ctx, device, "timer-end", timer.endMillis,
+                        ctx.getString(R.string.notif_timer_ended, timer.label))) posted++
                 }
             }
             prefs.removePendingTimer(timer.deviceId)
@@ -171,11 +168,15 @@ class NotificationWorker(
         return posted
     }
 
-    private fun post(ctx: Context, deviceId: Long, kind: String, instant: Long, title: String, text: String) {
+    /** @return faux si ce type de notification est coupé pour ce canal (rien n'est affiché). */
+    private fun post(ctx: Context, device: Device, kind: String, instant: Long, text: String): Boolean {
+        // Type coupé dans l'écran Modifier : on n'affiche rien (étiquette sans type = jamais filtrée).
+        if (localNotifyKind(kind)?.let { !device.notifies(it) } == true) return false
         // Identifiant déterministe (appareil + type + instant) : un même événement re-couvert par
         // deux passages remplace sa notif au lieu d'en créer une seconde.
-        val id = Objects.hash(deviceId, kind, instant) and 0x7FFFFFFF
-        ProgrammationNotifier.post(ctx, id, title, text)
+        val id = Objects.hash(device.id, kind, instant) and 0x7FFFFFFF
+        ProgrammationNotifier.post(ctx, id, device.name, text)
+        return true
     }
 
     private companion object {

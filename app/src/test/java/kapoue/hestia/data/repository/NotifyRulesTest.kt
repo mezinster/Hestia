@@ -7,11 +7,15 @@ import kapoue.hestia.data.presence.PresenceScriptGenerator
 import kapoue.hestia.domain.model.PresenceWindow
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.NotifyKind
+import kapoue.hestia.domain.model.Planning
+import kapoue.hestia.domain.model.notifies
 import kapoue.hestia.domain.model.withKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDateTime
 
 /** Choix des notifications de planning d'après le masque du canal. */
 class NotifyRulesTest {
@@ -78,5 +82,40 @@ class NotifyRulesTest {
         assertEquals("fin", out[1].endBody)
         assertFalse(out[1].notifyCutoff)
         assertEquals(configs[2], out[2])
+    }
+
+    @Test
+    fun `threshold planning in its slot blocks the resync`() {
+        val everyDay = (0..6).toSet()
+        val threshold = Planning(8, 0, 10, 0, everyDay, cutoffScriptId = 3, cutoffThresholdW = 5)
+        val nine = LocalDateTime.of(2026, 10, 29, 9, 0)
+        val eleven = LocalDateTime.of(2026, 10, 29, 11, 0)
+        assertTrue(thresholdPlanningInProgress(listOf(threshold), nine))
+        assertFalse(thresholdPlanningInProgress(listOf(threshold), eleven))
+        assertFalse(thresholdPlanningInProgress(listOf(threshold.copy(cutoffScriptId = null, cutoffThresholdW = null)), nine))
+        val presence = Planning(8, 0, 10, 0, everyDay, cutoffThresholdW = null, marginMinutes = 15)
+        assertFalse(thresholdPlanningInProgress(listOf(presence), nine))
+    }
+
+    @Test
+    fun `local tags map to kinds`() {
+        assertEquals(NotifyKind.PLANNING_START, localNotifyKind("pl-start"))
+        assertEquals(NotifyKind.PLANNING_END, localNotifyKind("pl-end"))
+        assertEquals(NotifyKind.PRESENCE, localNotifyKind("pr-start"))
+        assertEquals(NotifyKind.PRESENCE, localNotifyKind("pr-end"))
+        assertEquals(NotifyKind.CUTOFF, localNotifyKind("cut"))
+        assertEquals(NotifyKind.TIMER_END, localNotifyKind("timer-end"))
+        assertEquals(NotifyKind.COVER_MOVES, localNotifyKind("cv-open"))
+        assertEquals(NotifyKind.COVER_MOVES, localNotifyKind("cv-close"))
+        assertEquals(NotifyKind.COVER_MOVES, localNotifyKind("cv-goto"))
+        assertNull(localNotifyKind("smoke"))
+    }
+
+    @Test
+    fun `presence boundaries follow PRESENCE`() {
+        val device = plug(NotifyKind.ALL.withKind(NotifyKind.PRESENCE, false))
+        assertEquals(NotifyKind.PRESENCE, localNotifyKind("pr-start"))
+        assertFalse(device.notifies(localNotifyKind("pr-start")!!))
+        assertTrue(device.notifies(localNotifyKind("pl-start")!!))
     }
 }
