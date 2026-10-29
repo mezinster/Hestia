@@ -72,7 +72,6 @@ class NotifyFlagsScriptTest {
                 ntfyTopic = "t", ntfyTitle = "Plug", ntfyBody = "$DURATION_MARKER x", notifyCutoff = flag,
             )
             assertTrue(code.contains("Switch.Set\", { id: CFG.switchId, on: false }"))
-            // L'éventuel appel HTTP de fin de minuteur (corps vide, jamais atteint pour un planning) est sans rapport.
             assertEquals(flag, code.contains("fmtDur(now - onSince) + "))
         }
     }
@@ -89,6 +88,20 @@ class NotifyFlagsScriptTest {
     @Test
     fun `empty end body means no end notification`() {
         assertTrue(supervisor(charge()).contains("if (body === \"\") return;"))
+    }
+
+    @Test
+    fun `blank end body emits no end ntfy call`() {
+        val code = ChargeScriptGenerator.generate(
+            switchId = 0, thresholdW = 5, belowSec = 60, selfId = 7,
+            ntfyTopic = "t", ntfyTitle = "Plug", ntfyBody = "$DURATION_MARKER x", notifyCutoff = false,
+        )
+        assertFalse(code, code.contains("HTTP.Request"))
+        val withEnd = ChargeScriptGenerator.generate(
+            switchId = 0, thresholdW = 5, belowSec = 60, selfId = 7,
+            ntfyTopic = "t", ntfyTitle = "Plug", ntfyEndBody = "fin", notifyCutoff = false,
+        )
+        assertTrue(withEnd.contains("body: \"fin\""))
     }
 
     @Test

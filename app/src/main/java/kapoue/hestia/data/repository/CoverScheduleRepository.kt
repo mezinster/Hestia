@@ -28,6 +28,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kapoue.hestia.domain.model.CoverEvent
 import kapoue.hestia.domain.model.CoverEventAction
+import kapoue.hestia.domain.model.NotifyKind
+import kapoue.hestia.domain.model.notifies
 import kapoue.hestia.domain.model.coverEventDisplayOrder
 import kapoue.hestia.domain.model.splitForRead
 import kotlinx.coroutines.flow.Flow
@@ -122,8 +124,12 @@ class CoverScheduleRepository @Inject constructor(
 
     private fun isDemo(device: Device) = device.ipAddress.startsWith(DeviceRepository.DEMO_IP_PREFIX)
 
-    /** Même condition que `DeviceRepository.ntfyTopic` : ntfy activé ET un sujet existe. */
+    /**
+     * Même condition que `DeviceRepository.ntfyTopic` : ntfy activé ET un sujet existe — et le
+     * volet n'a pas coupé ses notifications de mouvement (le mouvement, lui, a lieu quand même).
+     */
     private fun ntfyTexts(device: Device, action: CoverEventAction): NtfyTexts? {
+        if (!device.notifies(NotifyKind.COVER_MOVES)) return null
         val topic = (if (appPreferences.ntfyEnabled.value) appPreferences.ntfyTopic.value else null) ?: return null
         val body = when (action) {
             CoverEventAction.Open -> context.getString(R.string.cover_notif_opened)

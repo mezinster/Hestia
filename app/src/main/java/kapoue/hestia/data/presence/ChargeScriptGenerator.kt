@@ -115,7 +115,8 @@ object ChargeScriptGenerator {
         } else {
             ""
         }
-        val endNtfyStatement = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyEndBody)
+        // Corps vide = aucune notif de fin (jamais un POST au corps vide), même règle que planEndBody.
+        val endNtfyStatement = if (ntfyEndBody.isBlank()) "" else NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyEndBody)
         val planEndNtfyStatement = if (planEndBody.isBlank()) "" else NtfyScriptSupport.call(ntfyTopic, ntfyTitle, planEndBody)
         return """
         // Généré par Hestia — coupure sur seuil de consommation
