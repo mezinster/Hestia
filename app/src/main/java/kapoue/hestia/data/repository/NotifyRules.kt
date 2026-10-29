@@ -61,13 +61,18 @@ fun applyMaskToChargeConfigs(
     )
 }
 
+/** Plannings d'un canal répartis entre ceux réécrits tout de suite et ceux laissés tels quels. */
+data class PlanningSplit(val rewriteNow: List<Planning>, val inSlot: List<Planning>)
+
 /**
- * Vrai si un planning avec coupure sur seuil (jamais une présence) est dans son créneau à [now] :
- * le réécrire maintenant relancerait son script de coupure en plein créneau — la
- * resynchronisation des notifications est alors reportée au lancement suivant.
+ * Sépare les plannings avec coupure sur seuil (jamais une présence) dans leur créneau à [now] —
+ * les réécrire maintenant relancerait leur script de coupure en plein créneau, ils attendent le
+ * lancement suivant — de tous les autres, réécrits tout de suite.
  */
-fun thresholdPlanningInProgress(plannings: List<Planning>, now: LocalDateTime): Boolean =
-    plannings.any { !it.isPresence && it.cutoffThresholdW != null && it.isActiveAt(now) }
+fun splitThresholdInSlot(plannings: List<Planning>, now: LocalDateTime): PlanningSplit {
+    val (inSlot, rewriteNow) = plannings.partition { !it.isPresence && it.cutoffThresholdW != null && it.isActiveAt(now) }
+    return PlanningSplit(rewriteNow, inSlot)
+}
 
 /**
  * Type de notification d'une étiquette de notification locale (voir NotificationWorker). Null =
@@ -83,14 +88,17 @@ fun localNotifyKind(tag: String): NotifyKind? = when (tag) {
     else -> null
 }
 
-/** Issue d'une resynchronisation ntfy d'un canal (voir DeviceRepository.resyncNtfyOutcome). */
-internal enum class NtfyResyncOutcome { DONE, UNREACHABLE, THRESHOLD_RUNNING, FAILED }
+/**
+ * Issue d'une resynchronisation ntfy d'un canal (voir DeviceRepository.resyncNtfyOutcome).
+ * [PARTIAL_IN_SLOT] : tout a été réécrit sauf un ou des plannings avec seuil dans leur créneau.
+ */
+internal enum class NtfyResyncOutcome { DONE, UNREACHABLE, PARTIAL_IN_SLOT, FAILED }
 
 /**
- * Pour les rattrapages ntfy (Tableau, renommage, bascule ntfy) : seuls l'injoignable et un planning
- * avec seuil en cours sont retentés. Un échec de réécriture (ex. plus de place pour un script)
- * ne se résoudra pas tout seul : le retenter à chaque relevé (~5 s) réécrirait tous les autres
- * plannings indéfiniment. Le chemin du masque, lui, le garde en attente (retenté au lancement).
+ * Pour les rattrapages ntfy (Tableau, renommage, bascule ntfy) : seul l'injoignable est retenté.
+ * Un échec de réécriture (ex. plus de place pour un script) ne se résoudra pas tout seul : le
+ * retenter à chaque relevé (~5 s) réécrirait tous les autres plannings indéfiniment. Un planning
+ * avec seuil en cours, lui, est rattrapé au lancement suivant (canal marqué en attente), pas à
+ * chaque relevé. Le chemin du masque garde l'échec en attente (retenté au lancement).
  */
-internal fun NtfyResyncOutcome.countsAsSynced(): Boolean =
-    this == NtfyResyncOutcome.DONE || this == NtfyResyncOutcome.FAILED
+internal fun NtfyResyncOutcome.countsAsSynced(): Boolean = this != NtfyResyncOutcome.UNREACHABLE

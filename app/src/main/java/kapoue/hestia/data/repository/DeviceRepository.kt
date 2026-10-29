@@ -1046,8 +1046,9 @@ class DeviceRepository @Inject constructor(
      * qu'avant ce correctif, et le prochain passage retente. [NonCancellable] : une fois commencé,
      * va au bout même si l'écran appelant se ferme (jamais un script laissé à l'arrêt parce qu'un
      * ViewModel a été détruit entre le Stop et le Start — leçon du bug de renommage ntfy).
+     *
+     * [rows] : lignes Device des canaux de l'appareil, dont les choix de notif priment sur la mémoire du script.
      */
-    /** [rows] : lignes Device des canaux de l'appareil, dont les choix de notif priment sur la mémoire du script. */
     private suspend fun realignPresenceFlash(ip: String, scriptId: Int, rows: List<Device>) = withContext(NonCancellable) {
         val json = rpcClient.scriptEval(ip, scriptId, PresenceScriptGenerator.evalReadFull()).getOrNull()?.result
         val snapshot = json?.let { PresenceScriptGenerator.parseLiveSnapshot(it) }
@@ -2154,7 +2155,8 @@ class DeviceRepository @Inject constructor(
                             scriptId, device.switchId, threshold, device.name, endBody, notifyCutoff = device.notifies(NotifyKind.CUTOFF),
                         )
                         if (rpcClient.scriptPutCode(ip, scriptId, newCode).errorOrNull() == null) {
-                            logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) : texte de coupure mis à jour (durée en tête)")
+                            val from = ChargeScriptGenerator.parseNotifVersion(code)
+                            logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) : script de coupure mis à niveau (v$from→v${ChargeScriptGenerator.NOTIF_VERSION})")
                         } else {
                             complete = false
                             logger.warn(DiagnosticLogger.RPC, "Planning $label (${device.name}) : texte de coupure non mis à jour, retenté au prochain lancement")
@@ -2798,10 +2800,10 @@ class DeviceRepository @Inject constructor(
         appScope.launch { resyncNotificationsFor(device) }
     }
 
-    /** Vrai si un changement de masque de ce canal attend encore d'être appliqué sur l'appareil. */
     /** Ensemble observable des canaux dont un changement de masque attend encore d'être appliqué. */
     val notifyResyncPendingFlow: StateFlow<Set<Long>> get() = appPreferences.notifyResyncPending
 
+    /** Vrai si un changement de masque de ce canal attend encore d'être appliqué sur l'appareil. */
     fun notifyResyncPending(deviceId: Long): Boolean = deviceId in appPreferences.notifyResyncPendingIds()
 
     /**
@@ -2828,8 +2830,9 @@ class DeviceRepository @Inject constructor(
      * [resyncNtfyOutcome] pour refléter le masque du canal, relu en base sous le verrou du canal
      * (deux bascules rapprochées : la seconde attend la première puis applique le dernier masque).
      * Reporté (canal marqué en attente, retenté au lancement suivant) si l'appareil est
-     * injoignable, si une réécriture a échoué, ou si un planning avec coupure sur seuil est dans
-     * son créneau (voir [resyncNtfyOutcome]). Seul un passage complet efface l'attente.
+     * injoignable ou si une réécriture a échoué ; un planning avec coupure sur seuil dans son
+     * créneau attend seul le lancement suivant, le reste est réécrit tout de suite (voir
+     * [resyncNtfyOutcome]). Seul un passage complet efface l'attente.
      *
      * Les scripts transitoires liés à un minuteur en cours (surveillance de charge,
      * hestia_timer_notify) ne sont pas réécrits ici : le nouveau masque s'appliquera au prochain
@@ -2846,7 +2849,8 @@ class DeviceRepository @Inject constructor(
         val reason = when (resyncNtfyOutcome(fresh)) {
             NtfyResyncOutcome.DONE -> null
             NtfyResyncOutcome.UNREACHABLE -> "injoignable"
-            NtfyResyncOutcome.THRESHOLD_RUNNING -> "planning avec seuil en cours"
+            // Attente déjà posée et journalisée par resyncNtfyOutcome.
+            NtfyResyncOutcome.PARTIAL_IN_SLOT -> return@withLock false
             NtfyResyncOutcome.FAILED -> "échec d'une réécriture"
         }
         if (reason != null) {
@@ -2859,36 +2863,44 @@ class DeviceRepository @Inject constructor(
     }
 
     /**
-     * @return faux seulement si l'appareil est injoignable ou un planning avec seuil en cours (à
-     * retenter plus tard) ; un échec de réécriture compte comme fait, voir [countsAsSynced].
+     * @return faux seulement si l'appareil est injoignable (à retenter plus tard) ; un échec de
+     * réécriture ou un planning avec seuil en cours (rattrapé au lancement suivant) comptent comme
+     * faits, voir [countsAsSynced]. Un passage complet efface aussi une attente de masque du canal :
+     * tout vient d'être réécrit avec le masque relu en base.
      * Sérialisé par canal et relu en base sous le verrou, comme [resyncNotificationsFor] : les
      * appelants ont tous écrit la ligne avant d'appeler, et une ligne relue ne peut pas réécrire
      * les scripts avec un masque ou un nom périmé. Ligne supprimée entre-temps : rien à faire.
      */
     private suspend fun resyncNtfyForDevice(device: Device): Boolean = ntfyResyncLocks.withLock(device.id) {
         val fresh = deviceDao.getById(device.id) ?: return@withLock true
-        resyncNtfyOutcome(fresh).countsAsSynced()
+        val outcome = resyncNtfyOutcome(fresh)
+        if (outcome == NtfyResyncOutcome.DONE) appPreferences.setNotifyResyncPending(fresh.id, false)
+        outcome.countsAsSynced()
     }
 
     /**
      * Corps de la resynchronisation, sans verrou (appelé sous [ntfyResyncLocks]). Un planning
      * avec coupure sur seuil dans son créneau n'est jamais réécrit (ça relancerait sa coupure en
-     * plein créneau) : tout l'appareil est alors laissé tel quel et le passage compte comme
-     * incomplet — chaque appelant retente plus tard selon sa propre logique, et ne rien réécrire
-     * du tout évite de recréer les autres plannings à chaque relevé du Tableau pendant le créneau.
+     * plein créneau) : lui seul est laissé tel quel, tout le reste (autres plannings, événements de
+     * volet, minuteur de bouton) est réécrit tout de suite — couper ntfy ou changer de sujet prend
+     * effet aussitôt pour tout ce qui peut l'être sans risque. Le canal est alors marqué en attente
+     * pour quel que soit l'appelant : le planning sauté est réécrit au lancement suivant
+     * ([applyPendingNotifyResyncs], qui le saute à nouveau s'il est encore dans son créneau).
      * Un planning Unique déjà passé (PastOnce) n'est pas un échec.
      */
     private suspend fun resyncNtfyOutcome(device: Device): NtfyResyncOutcome {
         if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return NtfyResyncOutcome.DONE
         var reachable = true
         val failures = mutableListOf<String>()
+        var inSlot = emptyList<Planning>()
         if (hasNativePlannings(device)) {
             // getPlannings fusionne plannings précis et simulations de présence : ce seul relevé
             // couvre désormais les deux (plus besoin d'un second passage par getPresenceWindows).
             when (val r = getPlannings(device)) {
                 is RpcResult.Success -> {
-                    if (thresholdPlanningInProgress(r.value, LocalDateTime.now())) return NtfyResyncOutcome.THRESHOLD_RUNNING
-                    for (p in r.value) {
+                    val split = splitThresholdInSlot(r.value, LocalDateTime.now())
+                    inSlot = split.inSlot
+                    for (p in split.rewriteNow) {
                         val result = updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, p.cutoffThresholdW, p.marginMinutes)
                         if (result is CreatePlanningResult.Error) failures += "planning ${p.onJobId ?: p.cutoffScriptId ?: "présence"}"
                     }
@@ -2911,9 +2923,15 @@ class DeviceRepository @Inject constructor(
         if (failures.isNotEmpty()) {
             logger.warn(DiagnosticLogger.RPC, "Notifications ${device.id} : réécriture échouée (${failures.joinToString()})")
         }
+        if (inSlot.isNotEmpty()) {
+            appPreferences.setNotifyResyncPending(device.id, true)
+            val ids = inSlot.joinToString { (it.onJobId ?: it.cutoffScriptId).toString() }
+            logger.info(DiagnosticLogger.RPC, "Notifications ${device.id} : planning $ids en cours, réécrit au prochain lancement")
+        }
         return when {
             !reachable -> NtfyResyncOutcome.UNREACHABLE
             failures.isNotEmpty() -> NtfyResyncOutcome.FAILED
+            inSlot.isNotEmpty() -> NtfyResyncOutcome.PARTIAL_IN_SLOT
             else -> NtfyResyncOutcome.DONE
         }
     }

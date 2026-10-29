@@ -84,26 +84,41 @@ class NotifyRulesTest {
         assertEquals(configs[2], out[2])
     }
 
+    private fun inSlot(plannings: List<Planning>, now: LocalDateTime) =
+        splitThresholdInSlot(plannings, now).inSlot.isNotEmpty()
+
+    @Test
+    fun `only the running threshold planning is held back`() {
+        val everyDay = (0..6).toSet()
+        val running = Planning(8, 0, 10, 0, everyDay, onJobId = 1, cutoffScriptId = 3, cutoffThresholdW = 5)
+        val later = Planning(18, 0, 20, 0, everyDay, onJobId = 2, cutoffScriptId = 4, cutoffThresholdW = 5)
+        val plain = Planning(8, 0, 10, 0, everyDay, onJobId = 5)
+        val presence = Planning(8, 0, 10, 0, everyDay, cutoffThresholdW = null, marginMinutes = 15)
+        val split = splitThresholdInSlot(listOf(running, later, plain, presence), LocalDateTime.of(2026, 10, 29, 9, 0))
+        assertEquals(listOf(running), split.inSlot)
+        assertEquals(listOf(later, plain, presence), split.rewriteNow)
+    }
+
     @Test
     fun `threshold planning in its slot blocks the resync`() {
         val everyDay = (0..6).toSet()
         val threshold = Planning(8, 0, 10, 0, everyDay, cutoffScriptId = 3, cutoffThresholdW = 5)
         val nine = LocalDateTime.of(2026, 10, 29, 9, 0)
         val eleven = LocalDateTime.of(2026, 10, 29, 11, 0)
-        assertTrue(thresholdPlanningInProgress(listOf(threshold), nine))
-        assertFalse(thresholdPlanningInProgress(listOf(threshold), eleven))
-        assertFalse(thresholdPlanningInProgress(listOf(threshold.copy(cutoffScriptId = null, cutoffThresholdW = null)), nine))
+        assertTrue(inSlot(listOf(threshold), nine))
+        assertFalse(inSlot(listOf(threshold), eleven))
+        assertFalse(inSlot(listOf(threshold.copy(cutoffScriptId = null, cutoffThresholdW = null)), nine))
         val presence = Planning(8, 0, 10, 0, everyDay, cutoffThresholdW = null, marginMinutes = 15)
-        assertFalse(thresholdPlanningInProgress(listOf(presence), nine))
+        assertFalse(inSlot(listOf(presence), nine))
     }
 
     @Test
     fun `one-shot threshold planning blocks only on its date`() {
         val day = java.time.LocalDate.of(2026, 10, 29)
         val once = Planning(8, 0, 10, 0, emptySet(), date = day, cutoffScriptId = 3, cutoffThresholdW = 5)
-        assertTrue(thresholdPlanningInProgress(listOf(once), day.atTime(9, 0)))
-        assertFalse(thresholdPlanningInProgress(listOf(once), day.plusDays(1).atTime(9, 0)))
-        assertFalse(thresholdPlanningInProgress(listOf(once), day.atTime(10, 0)))
+        assertTrue(inSlot(listOf(once), day.atTime(9, 0)))
+        assertFalse(inSlot(listOf(once), day.plusDays(1).atTime(9, 0)))
+        assertFalse(inSlot(listOf(once), day.atTime(10, 0)))
     }
 
     @Test
@@ -111,10 +126,10 @@ class NotifyRulesTest {
         // Jeudi seulement (cron 4) : 22:00 → 02:00 le vendredi.
         val night = Planning(22, 0, 2, 0, setOf(4), cutoffScriptId = 3, cutoffThresholdW = 5)
         val thursday = LocalDateTime.of(2026, 10, 29, 23, 0)
-        assertTrue(thresholdPlanningInProgress(listOf(night), thursday))
-        assertTrue(thresholdPlanningInProgress(listOf(night), thursday.plusHours(2))) // vendredi 01:00
-        assertFalse(thresholdPlanningInProgress(listOf(night), thursday.plusHours(4))) // vendredi 03:00
-        assertFalse(thresholdPlanningInProgress(listOf(night), thursday.minusHours(2))) // jeudi 21:00
+        assertTrue(inSlot(listOf(night), thursday))
+        assertTrue(inSlot(listOf(night), thursday.plusHours(2))) // vendredi 01:00
+        assertFalse(inSlot(listOf(night), thursday.plusHours(4))) // vendredi 03:00
+        assertFalse(inSlot(listOf(night), thursday.minusHours(2))) // jeudi 21:00
     }
 
     @Test
@@ -140,11 +155,13 @@ class NotifyRulesTest {
     }
 
     @Test
-    fun `ntfy catch-up retries only unreachable or running threshold`() {
+    fun `ntfy catch-up retries only an unreachable device`() {
         assertTrue(NtfyResyncOutcome.DONE.countsAsSynced())
         // Échec persistant d'une réécriture : jamais retenté à chaque relevé du Tableau.
         assertTrue(NtfyResyncOutcome.FAILED.countsAsSynced())
         assertFalse(NtfyResyncOutcome.UNREACHABLE.countsAsSynced())
-        assertFalse(NtfyResyncOutcome.THRESHOLD_RUNNING.countsAsSynced())
+        // Planning avec seuil en cours : le reste est réécrit, lui attend le prochain lancement
+        // (canal marqué en attente) — pas de rattrapage à chaque relevé.
+        assertTrue(NtfyResyncOutcome.PARTIAL_IN_SLOT.countsAsSynced())
     }
 }

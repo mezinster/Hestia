@@ -607,10 +607,9 @@ class AddEditDeviceViewModel @Inject constructor(
         // Masque affiché (pas celui lu en base) : deux bascules rapides ne partent pas d'une base périmée.
         val mask = _uiState.value.notifyMask.withKind(kind, enabled)
         logger.info(DiagnosticLogger.UI, "Notification $kind ${if (enabled) "activée" else "coupée"} depuis Modifier (${device.ipAddress})")
-        viewModelScope.launch {
-            repository.setNotifyMask(device, mask)
-            _uiState.update { it.copy(notifyMask = mask) }
-        }
+        // Affiché tout de suite, avant l'enregistrement : une seconde bascule part déjà de ce masque.
+        _uiState.update { it.copy(notifyMask = mask) }
+        viewModelScope.launch { repository.setNotifyMask(device, mask) }
     }
 
     /** Mode édition : retire le mot de passe enregistré (après confirmation). */

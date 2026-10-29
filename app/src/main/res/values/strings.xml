@@ -665,6 +665,6 @@
     <string name="notify_kind_timer_end">Timer end</string>
     <string name="notify_kind_presence">Presence simulation</string>
     <string name="notify_kind_cover_moves">Scheduled cover movements</string>
-    <string name="notify_pending">Applied at next launch: the device was unreachable or a planning with a threshold is running.</string>
+    <string name="notify_pending">Applied at next launch: the device was unreachable, a rewrite failed, or a planning with a threshold is running.</string>
     <string name="notify_globally_off">Notifications are turned off in Settings.</string>
 </resources>

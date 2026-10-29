@@ -642,6 +642,6 @@
     <string name="notify_kind_timer_end">Окончание таймера</string>
     <string name="notify_kind_presence">Имитация присутствия</string>
     <string name="notify_kind_cover_moves">Запланированные движения шторы</string>
-    <string name="notify_pending">Применится при следующем запуске: устройство было недоступно или идёт расписание с порогом.</string>
+    <string name="notify_pending">Применится при следующем запуске: устройство было недоступно, перезапись не удалась или идёт расписание с порогом.</string>
     <string name="notify_globally_off">Уведомления отключены в настройках.</string>
 </resources>

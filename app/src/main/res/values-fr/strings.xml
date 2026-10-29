@@ -659,6 +659,6 @@
     <string name="notify_kind_timer_end">Fin de minuteur</string>
     <string name="notify_kind_presence">Simulation de présence</string>
     <string name="notify_kind_cover_moves">Mouvements programmés du volet</string>
-    <string name="notify_pending">Appliqué au prochain lancement : l\'appareil était injoignable ou un planning avec seuil est en cours.</string>
+    <string name="notify_pending">Appliqué au prochain lancement : l\'appareil était injoignable, une réécriture a échoué ou un planning avec seuil est en cours.</string>
     <string name="notify_globally_off">Les notifications sont désactivées dans les Réglages.</string>
 </resources>
