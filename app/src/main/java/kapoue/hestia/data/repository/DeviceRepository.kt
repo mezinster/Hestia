@@ -699,6 +699,7 @@ class DeviceRepository @Inject constructor(
         val existing = listResult.getOrNull()?.scripts?.firstOrNull { it.name == TimerNotifyScriptGenerator.SCRIPT_NAME }
         if (existing == null || !existing.running) return
         rpcClient.scriptEval(ip, existing.id, TimerNotifyScriptGenerator.evalRemoveChannel(device.switchId))
+        logger.info(DiagnosticLogger.RPC, "Notif fin de minuteur retirée @ $ip#${device.switchId}")
     }
 
     /**
@@ -720,7 +721,7 @@ class DeviceRepository @Inject constructor(
         val config = ChargeScriptGenerator.ChannelConfig(
             device.switchId, thresholdW, graceSec = 0, device.name, endBody, notifyCutoff = device.notifies(NotifyKind.CUTOFF),
         )
-        upsertChargeSupervisorChannel(ip, config).errorOrNull()?.let { return it }
+        upsertChargeSupervisorChannel(ip, config, listOf(device) + siblingsSharingIp(device)).errorOrNull()?.let { return it }
 
         rememberPendingTimer(device.id, seconds, detail, thresholdW = thresholdW)
         return RpcResult.Success(Unit)
@@ -744,7 +745,7 @@ class DeviceRepository @Inject constructor(
             device.switchId, thresholdW, graceSec = UNLIMITED_CHARGE_GRACE_SEC, device.name, endBody = "",
             notifyCutoff = device.notifies(NotifyKind.CUTOFF),
         )
-        return upsertChargeSupervisorChannel(ip, config)
+        return upsertChargeSupervisorChannel(ip, config, listOf(device) + siblingsSharingIp(device))
     }
 
     /**
@@ -770,7 +771,11 @@ class DeviceRepository @Inject constructor(
      * — seul un premier déploiement (aucun script, existant mais arrêté, ou périmé — voir
      * [ChargeScriptGenerator.parseNotifVersion]) réécrit le code en dur.
      */
-    private suspend fun upsertChargeSupervisorChannel(ip: String, config: ChargeScriptGenerator.ChannelConfig): RpcResult<Unit> {
+    private suspend fun upsertChargeSupervisorChannel(
+        ip: String,
+        config: ChargeScriptGenerator.ChannelConfig,
+        rows: List<Device>,
+    ): RpcResult<Unit> {
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
         val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME }
@@ -802,6 +807,8 @@ class DeviceRepository @Inject constructor(
                 .getOrNull()?.result?.let { ChargeScriptGenerator.parseFullEvalResult(it) }
                 ?.filterNot { it.switchId == config.switchId }
                 .orEmpty()
+                // Script périmé = sans drapeaux de notif : les lignes Device des autres canaux font foi.
+                .let { applyMaskToChargeConfigs(it, rows) }
         }
 
         // Pas d'éviction du relais ici, volontairement : ce script reste enable:false en
@@ -941,7 +948,7 @@ class DeviceRepository @Inject constructor(
             ?: return RpcResult.Success(Unit) // rien en cours, rien à couper
         val eval = rpcClient.scriptEval(ip, running.id, PresenceScriptGenerator.evalStopToday(device.switchId))
         eval.errorOrNull()?.let { return it }
-        realignPresenceFlash(ip, running.id)
+        realignPresenceFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
         pushBlockedOffTodayToButtonTimer(ip, device)
         return RpcResult.Success(Unit)
     }
@@ -961,7 +968,7 @@ class DeviceRepository @Inject constructor(
             logger.warn(DiagnosticLogger.RPC, "Déblocage bouton (aujourd'hui) @ $ip : Eval refusé")
             return@withContext
         }
-        realignButtonTimerFlash(ip, running.id)
+        realignButtonTimerFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
     }
 
     /**
@@ -988,7 +995,7 @@ class DeviceRepository @Inject constructor(
             // La mutation n'existe qu'en mémoire vive à ce stade : réaligner la flash tout de
             // suite, sinon le prochain redémarrage de l'appareil la ferait disparaître (bug de
             // fond vécu en direct le 2026-08-21, un planning supprimé ressuscité au rebranchement).
-            realignPresenceFlash(ip, running.id)
+            realignPresenceFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
             pushBlockedToButtonTimer(ip, device, config?.windows.orEmpty())
             return RpcResult.Success(Unit)
         }
@@ -1021,7 +1028,7 @@ class DeviceRepository @Inject constructor(
                 logger.warn(DiagnosticLogger.RPC, "Synchro blocage bouton @ $ip : Eval refusé")
                 return@withContext
             }
-            realignButtonTimerFlash(ip, running.id)
+            realignButtonTimerFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
         }
 
     /**
@@ -1037,14 +1044,16 @@ class DeviceRepository @Inject constructor(
      * va au bout même si l'écran appelant se ferme (jamais un script laissé à l'arrêt parce qu'un
      * ViewModel a été détruit entre le Stop et le Start — leçon du bug de renommage ntfy).
      */
-    private suspend fun realignPresenceFlash(ip: String, scriptId: Int) = withContext(NonCancellable) {
+    /** [rows] : lignes Device des canaux de l'appareil, dont les choix de notif priment sur la mémoire du script. */
+    private suspend fun realignPresenceFlash(ip: String, scriptId: Int, rows: List<Device>) = withContext(NonCancellable) {
         val json = rpcClient.scriptEval(ip, scriptId, PresenceScriptGenerator.evalReadFull()).getOrNull()?.result
         val snapshot = json?.let { PresenceScriptGenerator.parseLiveSnapshot(it) }
         if (snapshot == null) {
             logger.warn(DiagnosticLogger.RPC, "Réalignement présence @ $ip : snapshot illisible, flash laissée en l'état")
             return@withContext
         }
-        val (configs, stateJson) = snapshot
+        val (liveConfigs, stateJson) = snapshot
+        val configs = applyMaskToPresenceConfigs(liveConfigs, rows)
         if (configs.isEmpty()) {
             // Plus aucun canal suivi : suppression complète, comme deployPresenceScript avec une
             // liste vide — libère au passage un des 3 emplacements de script de l'appareil.
@@ -1375,7 +1384,7 @@ class DeviceRepository @Inject constructor(
             eval.errorOrNull()?.let { return it }
             // Même réalignement que la présence : sans lui, la mutation disparaît au prochain
             // redémarrage de l'appareil (voir realignPresenceFlash).
-            realignButtonTimerFlash(ip, running.id)
+            realignButtonTimerFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
             return RpcResult.Success(Unit)
         }
 
@@ -1390,14 +1399,15 @@ class DeviceRepository @Inject constructor(
     }
 
     /** Pendant du réalignement de présence pour le minuteur bouton — voir [realignPresenceFlash]. */
-    private suspend fun realignButtonTimerFlash(ip: String, scriptId: Int) = withContext(NonCancellable) {
+    private suspend fun realignButtonTimerFlash(ip: String, scriptId: Int, rows: List<Device>) = withContext(NonCancellable) {
         val json = rpcClient.scriptEval(ip, scriptId, ButtonTimerScriptGenerator.evalReadFull()).getOrNull()?.result
         val snapshot = json?.let { ButtonTimerScriptGenerator.parseLiveSnapshot(it) }
         if (snapshot == null) {
             logger.warn(DiagnosticLogger.RPC, "Réalignement bouton @ $ip : snapshot illisible, flash laissée en l'état")
             return@withContext
         }
-        val (configs, stateJson) = snapshot
+        val (liveConfigs, stateJson) = snapshot
+        val configs = applyMaskToButtonConfigs(liveConfigs, rows)
         if (configs.isEmpty()) {
             rpcClient.scriptStop(ip, scriptId)
             rpcClient.scriptDelete(ip, scriptId)
@@ -2168,7 +2178,7 @@ class DeviceRepository @Inject constructor(
             if (ButtonTimerScriptGenerator.parseNotifVersion(code) >= ButtonTimerScriptGenerator.NOTIF_VERSION) continue
             // Issue journalisée par realignButtonTimerFlash elle-même ; un échec est retenté demain.
             logger.info(DiagnosticLogger.RPC, "Minuteur bouton @ $ip : texte de coupure périmé, réalignement")
-            realignButtonTimerFlash(ip, button.id)
+            realignButtonTimerFlash(ip, button.id, members)
         }
         if (complete) appPreferences.lastCutoffUpgradeStamp = stamp
     }
