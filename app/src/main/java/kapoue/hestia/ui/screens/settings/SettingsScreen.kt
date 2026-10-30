@@ -259,27 +259,35 @@ fun SettingsScreen(
                         }
                     } else {
                         val head = members.first()
+                        // Une seule carte pour l'en-tête ET ses canaux (idée reprise de l'amont 2.17.0) :
+                        // avec un élément de liste par canal, l'espacement uniforme de la LazyColumn
+                        // faisait flotter les canaux à égale distance de leur en-tête et du bloc
+                        // suivant. Vaut pour tous les blocs multi-canaux (multiprises, variateurs…).
                         item(key = "group-${head.ipAddress}") {
-                            DeviceGroupHeaderRow(
-                                deviceName = head.deviceName.ifBlank { head.name },
-                                channelCount = members.size,
-                                online = connectivity[head.id],
-                                displayIp = activeIp[head.id] ?: head.ipAddress,
-                                isFirst = isFirst,
-                                isLast = isLast,
-                                isSmokeRelay = head.id in smokeRelayDevices,
-                                onEdit = { onEditDevice(head.id) },
-                                onMoveUp = { viewModel.moveUp(head) },
-                                onMoveDown = { viewModel.moveDown(head) },
-                                onDeleteGroup = { groupToDelete = members },
-                            )
-                        }
-                        items(members, key = { it.id }) { channel ->
-                            ChannelSubRow(
-                                device = channel,
-                                online = connectivity[channel.id],
-                                onRename = { channelToRename = channel },
-                            )
+                            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                                DeviceGroupHeaderRow(
+                                    deviceName = head.deviceName.ifBlank { head.name },
+                                    channelCount = members.size,
+                                    online = connectivity[head.id],
+                                    displayIp = activeIp[head.id] ?: head.ipAddress,
+                                    isFirst = isFirst,
+                                    isLast = isLast,
+                                    isSmokeRelay = head.id in smokeRelayDevices,
+                                    onEdit = { onEditDevice(head.id) },
+                                    onMoveUp = { viewModel.moveUp(head) },
+                                    onMoveDown = { viewModel.moveDown(head) },
+                                    onDeleteGroup = { groupToDelete = members },
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(start = 34.dp, end = 12.dp))
+                                members.forEach { channel ->
+                                    ChannelSubRow(
+                                        device = channel,
+                                        online = connectivity[channel.id],
+                                        onRename = { channelToRename = channel },
+                                    )
+                                }
+                                Spacer(Modifier.size(4.dp))
+                            }
                         }
                     }
                 }
@@ -571,75 +579,73 @@ private fun DeviceGroupHeaderRow(
         null -> stringResource(R.string.settings_connectivity_checking)
     }
 
-    // Même fond que les lignes solo (retour David, 2026-09-17) : surfaceVariant, plus terne, se
-    // lisait comme « désactivé » en Material Design — l'icône ci-dessous suffit déjà à signaler
-    // qu'il s'agit d'un bloc multi-canaux, pas besoin d'un fond distinct pour ça.
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            // Même picto de connectivité que les lignes solo (retour David, 2026-09-18) : la
-            // grille (Icons.Filled.ViewModule) ne voulait dire qu'une chose, « ceci est un bloc »
-            // — mais prenait la place du Wifi/WifiOff, laissant le bloc sans aucun indicateur de
-            // connexion. Le texte « N canaux » juste en dessous suffit déjà à signaler un bloc.
-            ConnectivityIndicator(online)
-            Spacer(Modifier.size(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Même correctif que DeviceRow (2026-09-18) : un nom long ne doit jamais
-                    // pousser le picto relais hors de la zone visible.
-                    Text(
-                        deviceName,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (isSmokeRelay) SmokeRelayBadge()
-                }
+    // Plus de carte propre ici : c'est l'appelant qui entoure l'en-tête et ses canaux d'une seule
+    // carte, au même fond que les lignes solo (surface — surfaceVariant, plus terne, se lisait comme
+    // « désactivé » en Material Design, retour David du 2026-09-17).
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Même picto de connectivité que les lignes solo (retour David, 2026-09-18) : la
+        // grille (Icons.Filled.ViewModule) ne voulait dire qu'une chose, « ceci est un bloc »
+        // — mais prenait la place du Wifi/WifiOff, laissant le bloc sans aucun indicateur de
+        // connexion. Le texte « N canaux » juste en dessous suffit déjà à signaler un bloc.
+        ConnectivityIndicator(online)
+        Spacer(Modifier.size(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Même correctif que DeviceRow (2026-09-18) : un nom long ne doit jamais
+                // pousser le picto relais hors de la zone visible.
                 Text(
-                    text = "$displayIp · ${pluralStringResource(R.plurals.settings_group_channels, channelCount, channelCount)} · $connectivityLabel",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontFamily = FontFamily.Monospace,
+                    deviceName,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
                 )
+                if (isSmokeRelay) SmokeRelayBadge()
             }
-            IconButton(onClick = onMoveUp, enabled = !isFirst) {
-                Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.settings_move_up))
+            Text(
+                text = "$displayIp · ${pluralStringResource(R.plurals.settings_group_channels, channelCount, channelCount)} · $connectivityLabel",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+        IconButton(onClick = onMoveUp, enabled = !isFirst) {
+            Icon(Icons.Filled.ArrowUpward, contentDescription = stringResource(R.string.settings_move_up))
+        }
+        IconButton(onClick = onMoveDown, enabled = !isLast) {
+            Icon(Icons.Filled.ArrowDownward, contentDescription = stringResource(R.string.settings_move_down))
+        }
+        Box {
+            IconButton(onClick = { menuExpanded = true }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = null)
             }
-            IconButton(onClick = onMoveDown, enabled = !isLast) {
-                Icon(Icons.Filled.ArrowDownward, contentDescription = stringResource(R.string.settings_move_down))
-            }
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(Icons.Filled.MoreVert, contentDescription = null)
-                }
-                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.settings_open_web)) },
-                        onClick = {
-                            menuExpanded = false
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://$displayIp")))
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.settings_edit_device)) },
-                        onClick = {
-                            menuExpanded = false
-                            onEdit()
-                        },
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.settings_delete_group)) },
-                        onClick = {
-                            menuExpanded = false
-                            onDeleteGroup()
-                        },
-                    )
-                }
+            DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.settings_open_web)) },
+                    onClick = {
+                        menuExpanded = false
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://$displayIp")))
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.settings_edit_device)) },
+                    onClick = {
+                        menuExpanded = false
+                        onEdit()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.settings_delete_group)) },
+                    onClick = {
+                        menuExpanded = false
+                        onDeleteGroup()
+                    },
+                )
             }
         }
     }
@@ -659,7 +665,9 @@ private fun ChannelSubRow(device: Device, online: Boolean?, onRename: () -> Unit
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 34.dp, top = 4.dp, bottom = 4.dp, end = 4.dp),
+            // Pas de marge verticale : dans la carte partagée du bloc, la zone tactile du crayon
+            // (48 dp) suffit à espacer les canaux.
+            .padding(start = 34.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ConnectivityIndicator(online)
