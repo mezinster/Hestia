@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -57,7 +58,7 @@ object ButtonTimerScriptGenerator {
      * Version 2 (2026-10-29, numérotation propre au fork) : durée de charge en tête de la notif de
      * coupure. Réalignée au lancement par `DeviceRepository.upgradeCutoffScriptsIfDue`.
      */
-    const val NOTIF_VERSION = 2
+    const val NOTIF_VERSION = 3
     private const val NOTIF_VERSION_MARKER = "// hestia_notif_ver:"
 
     /** 0 = marqueur absent, donc forcément une version antérieure à son introduction. */
@@ -92,6 +93,10 @@ object ButtonTimerScriptGenerator {
         val name: String,
         val blocked: List<PresenceWindow> = emptyList(),
         val blockedOffToday: Int? = null,
+        /** Faux = pas de notif de fin de minuteur (`ne: false` dans le script). */
+        val notifyEnd: Boolean = true,
+        /** Faux = pas de notif de coupure sur seuil (`nc: false`) ; la coupure a lieu quand même. */
+        val notifyCutoff: Boolean = true,
     )
 
     /**
@@ -116,7 +121,8 @@ object ButtonTimerScriptGenerator {
         val blockedOffTodayLiteral = if (c.blockedOffToday != null) ", blockedOffToday: ${c.blockedOffToday}" else ""
         return "{ switchId: ${c.switchId}, durationSec: $durationLiteral, thresholdW: $thresholdLiteral, " +
             "belowSec: $BELOW_SEC, graceSec: $graceSec, name: \"${NtfyScriptSupport.jsString(c.name)}\", " +
-            "blocked: ${blockedLiteral(c.blocked)}$blockedOffTodayLiteral }"
+            "blocked: ${blockedLiteral(c.blocked)}$blockedOffTodayLiteral" +
+            "${if (c.notifyEnd) "" else ", ne: false"}${if (c.notifyCutoff) "" else ", nc: false"} }"
     }
 
     /** Littéral JS d'un état de suivi vierge, partagé entre [generate] et [evalUpsertChannel]. */
@@ -248,7 +254,7 @@ object ButtonTimerScriptGenerator {
               // Éteinte pendant que le minuteur tournait : fin naturelle, coupure, ou action
               // manuelle. Un nouvel appui bouton pour annuler ne notifie jamais (délibéré).
               if (!isButtonSource(st.source)) {
-                notifyEnd(cfg.name);
+                if (cfg.ne !== false) notifyEnd(cfg.name);
               }
               s.armed = false;
               s.belowSince = null;
@@ -269,7 +275,7 @@ object ButtonTimerScriptGenerator {
                 if (s.belowSince === null) s.belowSince = now;
                 if (now - s.belowSince >= cfg.belowSec) {
                   Shelly.call("Switch.Set", { id: cfg.switchId, on: false });
-                  notifyCutoff(cfg.name, now - s.onSince);
+                  if (cfg.nc !== false) notifyCutoff(cfg.name, now - s.onSince);
                   s.armed = false;
                   s.belowSince = null;
                   s.wasOn = false;
@@ -479,7 +485,9 @@ object ButtonTimerScriptGenerator {
             val thresholdW = obj["thresholdW"]?.jsonPrimitive?.intOrNull
             val blocked = (obj["blocked"] as? JsonArray)?.mapNotNull { parseBlockedWindow(it) }.orEmpty()
             val blockedOffToday = obj["blockedOffToday"]?.jsonPrimitive?.intOrNull
-            ChannelConfig(switchId, durationSec, thresholdW, name, blocked, blockedOffToday)
+            val notifyEnd = obj["ne"]?.jsonPrimitive?.booleanOrNull ?: true
+            val notifyCutoff = obj["nc"]?.jsonPrimitive?.booleanOrNull ?: true
+            ChannelConfig(switchId, durationSec, thresholdW, name, blocked, blockedOffToday, notifyEnd, notifyCutoff)
         }
         configs to stateArr.toString()
     }.getOrNull()

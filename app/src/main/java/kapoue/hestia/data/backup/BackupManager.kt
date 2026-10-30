@@ -93,7 +93,7 @@ class BackupManager @Inject constructor(
     }
 }
 
-private fun Device.toBackup() = DeviceBackup(
+internal fun Device.toBackup() = DeviceBackup(
     name = name,
     ipAddress = ipAddress,
     switchId = switchId,
@@ -118,9 +118,10 @@ private fun Device.toBackup() = DeviceBackup(
     isLight = isLight,
     isCover = isCover,
     certPin = certPin,
+    notifyMask = notifyMask,
 )
 
-private fun DeviceBackup.toEntity() = Device(
+internal fun DeviceBackup.toEntity() = Device(
     name = name,
     ipAddress = ipAddress,
     switchId = switchId,
@@ -145,4 +146,5 @@ private fun DeviceBackup.toEntity() = Device(
     isLight = isLight,
     isCover = isCover,
     certPin = certPin,
+    notifyMask = notifyMask,
 )

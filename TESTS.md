@@ -415,3 +415,32 @@ Points « vrai appareil » recommandés ; sinon `tools/fake_shelly_https.py` (m�
   et `grep -c 'http://[^ ]*@' hestia-journal.txt` → `0` (remplacer `secret` par le mot de passe réellement tapé, et le chemin par celui du fichier exporté).
   Les lignes attendues : « Cible saisie refusée (protégée) : <ip> », « Coupure : N cible(s) protégée(s) retirée(s) pour <ip> »,
   « Coupure à revoir : détecteur <id> on/off », « Relais : N candidat(s) protégé(s) exclu(s) » ; jamais de mot de passe ni d'URL avec identifiants.
+
+## Notifications par appareil (fork, lot D)
+
+Section « Notifications » de l'écran Modifier l'appareil : un interrupteur par type de notification,
+stocké dans `notifyMask` (63 = tout activé, valeur par défaut). Couper un type ne change **jamais** le
+comportement de l'appareil (coupure, minuteur, planning, présence) : seuls les envois ntfy et les
+notifications locales disparaissent. À valider sur un **vrai appareil** avec ntfy activé (plannings,
+scripts et volets se relisent via `Schedule.List` ou l'interface web de l'appareil) : l'émulateur
+`tools/fake_shelly_https.py` ne gère ni plannings ni scripts et ne sert qu'aux flux HTTPS et mot de passe (C1/C2).
+
+- [ ] La section n'apparaît que dans **Modifier** (jamais au flux d'ajout) et est **absente** pour un détecteur de fumée (qui n'est jamais filtré, son relais ntfy non plus).
+- [ ] Prise (relais) : jusqu'à cinq interrupteurs (Début de planning, Fin de planning, Coupure sur seuil, Fin de minuteur, Simulation de présence) ; « Coupure sur seuil » seulement si l'appareil a scripts **et** mesure de puissance, « Simulation de présence » seulement avec scripts.
+- [ ] Variateur : **deux** interrupteurs seulement (Début / Fin de planning). Volet : **un seul** (Mouvements programmés du volet).
+- [ ] Prise, « Fin de planning » coupé : au prochain déclenchement, le ntfy de **début** arrive, celui de **fin** non, et la prise s'éteint quand même à l'heure de fin (vérifier les appels `HTTP.Request` du planning dans `Schedule.List` ou l'interface web).
+- [ ] Prise, « Début de planning » coupé : même vérification, côté début.
+- [ ] Planning avec seuil **en cours** (créneau actif) : seul **ce** planning attend, tout le reste de l'appareil (autres plannings, présence, événements de volet, minuteur bouton) est réécrit **tout de suite** ; la note « Appliqué au prochain lancement… » s'affiche aussitôt (en direct, sans quitter l'écran) ; journal « Notifications <id> : planning <ids> en cours, réécrit au prochain lancement » ; le planning en cours n'est pas réécrit (sa coupure reste armée, mêmes ids dans `Schedule.List` et `Script.List`) ; au lancement suivant, hors créneau, il est réécrit et la note disparaît (encore en créneau : à nouveau sauté, la note reste).
+- [ ] Même créneau actif, mais **ntfy coupé ou sujet changé** dans Réglages, ou **canal renommé** : prend effet aussitôt sur tout l'appareil sauf le planning en cours, qui suit au lancement suivant (même ligne de journal, même note dans Modifier).
+- [ ] Appareil injoignable au moment du changement (ou réécriture en échec) : même note, changement rattrapé au prochain lancement de l'appli une fois l'appareil revenu ; journal « Notifications <id> : resynchronisation reportée (injoignable) » (ou « échec d'une réécriture », avec en plus « réécriture échouée (…) ») ; au lancement suivant, une seule ligne globale « Notifications : N rattrapage(s) appliqué(s) » (aussi quand N = 0), pas de ligne par appareil.
+- [ ] Changement appliqué sur l'appareil **tout de suite**, en arrière-plan, sans bouton supplémentaire : relire l'appareil (interface web) après quelques secondes.
+- [ ] « Fin de minuteur » coupé : plus de ntfy à la fin d'un minuteur, mais le minuteur coupe toujours la prise à l'échéance. Un minuteur déjà en cours n'est pas réécrit : le nouveau choix s'applique dès le prochain démarrage de minuteur.
+- [ ] « Coupure sur seuil » coupé : plus de ntfy sur coupure, la coupure sur seuil a toujours lieu (un minuteur déjà en cours garde son ancien texte, le choix vaut dès le prochain démarrage).
+- [ ] « Simulation de présence » coupé : la présence bascule toujours la prise, sans notification.
+- [ ] Volet, « Mouvements programmés » coupé : une ouverture / fermeture programmée s'exécute **sans** aucun ntfy ni notification locale (les appels `HTTP.Request` ont disparu des tâches du volet dans `Schedule.List`).
+- [ ] **Notifications locales** (Réglages, si activées) filtrées de la même façon : un type coupé ne poste plus de notification sur le téléphone, y compris pour les bornes de planning.
+- [ ] ntfy **et** notifications locales tous deux désactivés dans Réglages (un seul des deux suffit à ne pas afficher la note) : la section affiche « Les notifications sont désactivées dans les Réglages. » et reste cohérente.
+- [ ] Sauvegarde JSON : le `notifyMask` est exporté et restauré ; une **ancienne sauvegarde** (sans ce champ) se restaure avec tout activé (63).
+- [ ] Mise à jour depuis une base v21 : appareils conservés, `notifyMask` à 63 partout (vérification manuelle, pas de banc de migration Room automatisé).
+- [ ] Scripts de coupure en version de notification **2** déjà présents sur un appareil : réécrits en version **3** par la mise à niveau quotidienne, sans toucher à un planning en cours : journal « Planning … : script de coupure mis à niveau (v2→v3) » pour un planning à seuil, « Minuteur bouton @ <ip> : texte de coupure périmé, réalignement » pour un minuteur bouton.
+- [ ] Journal de diagnostic : « Notifications <id> : masque <n> » à chaque changement, plus les lignes de report / rattrapage ci-dessus ; aucun secret.

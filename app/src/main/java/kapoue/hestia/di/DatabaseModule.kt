@@ -27,6 +27,7 @@ import kapoue.hestia.data.local.MIGRATION_17_18
 import kapoue.hestia.data.local.MIGRATION_18_19
 import kapoue.hestia.data.local.MIGRATION_19_20
 import kapoue.hestia.data.local.MIGRATION_20_21
+import kapoue.hestia.data.local.MIGRATION_21_22
 import kapoue.hestia.data.local.dao.DeviceDao
 import kapoue.hestia.data.local.dao.DiagnosticLogDao
 import kapoue.hestia.data.local.dao.PausedCoverEventDao
@@ -49,6 +50,7 @@ object DatabaseModule {
                 MIGRATION_18_19,
                 MIGRATION_19_20,
                 MIGRATION_20_21,
+                MIGRATION_21_22,
             )
             .build()
 

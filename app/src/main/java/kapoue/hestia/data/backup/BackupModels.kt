@@ -1,5 +1,6 @@
 package kapoue.hestia.data.backup
 
+import kapoue.hestia.domain.model.NotifyKind
 import kotlinx.serialization.Serializable
 
 /**
@@ -56,6 +57,8 @@ data class DeviceBackup(
     val isCover: Boolean = false,
     /** Épingle HTTPS (lot C1). Absente d'une ancienne sauvegarde = HTTP. */
     val certPin: String? = null,
+    /** Masque des notifications (lot D). Absent d'une ancienne sauvegarde = tout actif. */
+    val notifyMask: Int = NotifyKind.ALL,
 )
 
 /** Réservé — aucune préférence manuelle en V1 (le thème suit le système). */

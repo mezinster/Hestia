@@ -2,7 +2,6 @@ package kapoue.hestia.domain.model
 
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.LocalTime
 
 /**
  * Un planning : une plage horaire pilotée par l'appareil. Deux réalisations possibles côté
@@ -70,10 +69,12 @@ fun onceEndAt(startHour: Int, startMinute: Int, endHour: Int, endMinute: Int, da
  * actif. Comme les plannings ne se chevauchent jamais, au plus un seul est « en cours » à la fois.
  * Le fuseau de la prise étant identique à celui du téléphone (vérifié), l'heure locale suffit.
  */
-fun Planning.isActiveNow(): Boolean {
+fun Planning.isActiveNow(): Boolean = isActiveAt(LocalDateTime.now())
+
+/** Même règle que [isActiveNow], à un instant [now] fourni (testable, sans lire l'horloge). */
+fun Planning.isActiveAt(now: LocalDateTime): Boolean {
     val date = this.date
     if (date != null) {
-        val now = LocalDateTime.now()
         val startAt = date.atTime(startHour, startMinute)
         return !now.isBefore(startAt) && now.isBefore(onceEndAt(date))
     }
@@ -83,8 +84,8 @@ fun Planning.isActiveNow(): Boolean {
     // la fenêtre nominale, alors que la prise peut légitimement rester allumée jusqu'à [marge]
     // minutes de plus (retour de test réel, 2026-08-22). Nul pour un planning précis, sans effet.
     val margin = marginMinutes ?: 0
-    val nowMin = LocalTime.now().let { it.hour * 60 + it.minute }
-    val dow = LocalDate.now().dayOfWeek.value // 1 = lundi … 7 = dimanche
+    val nowMin = now.hour * 60 + now.minute
+    val dow = now.dayOfWeek.value // 1 = lundi … 7 = dimanche
     val cronDayToday = if (dow == 7) 0 else dow // cron : 0 = dimanche … 6 = samedi
     // Place la fenêtre élargie sur une ligne de temps continue ancrée sur le jour [dayOffset]
     // (0 = aujourd'hui, -1 = hier) — un seul mécanisme pour un créneau qui passe minuit par

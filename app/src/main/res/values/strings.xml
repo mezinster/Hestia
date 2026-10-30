@@ -663,4 +663,14 @@
     <string name="sensor_cutoff_review_pending">A device became protected since this detector was last read. Wake the detector to check its cut-off targets.</string>
     <string name="sensor_cutoff_review_banner">Alarm cut-off to review</string>
     <string name="sensor_cutoff_targets_dropped">Protected devices were removed from the cut-off targets.</string>
+    <string name="notify_section_title">Notifications</string>
+    <string name="notify_section_desc">Choose which notifications this device sends. Switching one off never changes what the device does.</string>
+    <string name="notify_kind_planning_start">Planning start</string>
+    <string name="notify_kind_planning_end">Planning end</string>
+    <string name="notify_kind_cutoff">Threshold cut-off</string>
+    <string name="notify_kind_timer_end">Timer end</string>
+    <string name="notify_kind_presence">Presence simulation</string>
+    <string name="notify_kind_cover_moves">Scheduled cover movements</string>
+    <string name="notify_pending">Applied at next launch: the device was unreachable, a rewrite failed, or a planning with a threshold is running.</string>
+    <string name="notify_globally_off">Notifications are turned off in Settings.</string>
 </resources>

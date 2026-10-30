@@ -48,6 +48,8 @@ import kapoue.hestia.domain.model.CreatePlanningResult
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.FirmwareCheckResult
 import kapoue.hestia.domain.model.LedNightModeState
+import kapoue.hestia.domain.model.NotifyKind
+import kapoue.hestia.domain.model.notifies
 import kapoue.hestia.domain.model.Planning
 import kapoue.hestia.domain.model.PresenceWindow
 import kapoue.hestia.domain.model.isActiveNow
@@ -116,6 +118,9 @@ class DeviceRepository @Inject constructor(
 ) {
     /** Un Unique expiré n'est supprimé qu'une fois, même vu par plusieurs relevés à la fois. */
     private val expiredOnceGuard = ExpiredOnceGuard()
+
+    /** Resynchronisations ntfy d'un même canal jamais simultanées (bascules rapprochées, rattrapage du Tableau). */
+    private val ntfyResyncLocks = DeviceLocks()
 
     // --- Bascule automatique entre les 1 ou 2 adresses IP d'un appareil ---
 
@@ -657,8 +662,14 @@ class DeviceRepository @Inject constructor(
         if (set is RpcResult.Failure) return set
         // Notification de fin best-effort : un souci ici ne doit jamais remettre en cause le
         // minuteur, déjà armé avec succès sur l'appareil.
+        // Notif de fin coupée pour ce canal : aucun script, et retrait d'une éventuelle entrée
+        // laissée par un minuteur précédent (elle notifierait la fin de celui-ci).
         ntfyTopic()?.let { topic ->
-            deployTimerNotifyScript(device, topic, context.getString(R.string.notif_timer_ended, detail.orEmpty()))
+            if (device.notifies(NotifyKind.TIMER_END)) {
+                deployTimerNotifyScript(device, topic, context.getString(R.string.notif_timer_ended, detail.orEmpty()))
+            } else {
+                removeTimerNotifyScript(device)
+            }
         }
         rememberPendingTimer(device.id, seconds, detail, thresholdW = null)
         return RpcResult.Success(Unit)
@@ -710,6 +721,7 @@ class DeviceRepository @Inject constructor(
         val existing = listResult.getOrNull()?.scripts?.firstOrNull { it.name == TimerNotifyScriptGenerator.SCRIPT_NAME }
         if (existing == null || !existing.running) return
         rpcClient.scriptEval(ip, existing.id, TimerNotifyScriptGenerator.evalRemoveChannel(device.switchId))
+        logger.info(DiagnosticLogger.RPC, "Notif fin de minuteur retirée @ $ip#${device.switchId}")
     }
 
     /**
@@ -726,9 +738,12 @@ class DeviceRepository @Inject constructor(
         // 2. Ce canal dans le script superviseur de coupure — les autres canaux qu'il surveille
         // éventuellement déjà ne sont jamais touchés (voir upsertChargeSupervisorChannel).
         cleanupLegacyChargeScripts(ip, device)
-        val endBody = context.getString(R.string.notif_timer_ended, detail.orEmpty())
-        val config = ChargeScriptGenerator.ChannelConfig(device.switchId, thresholdW, graceSec = 0, device.name, endBody)
-        upsertChargeSupervisorChannel(ip, config).errorOrNull()?.let { return it }
+        // Notif de fin coupée = corps vide (voir ChannelConfig.endBody) ; la coupure reste armée.
+        val endBody = if (device.notifies(NotifyKind.TIMER_END)) context.getString(R.string.notif_timer_ended, detail.orEmpty()) else ""
+        val config = ChargeScriptGenerator.ChannelConfig(
+            device.switchId, thresholdW, graceSec = 0, device.name, endBody, notifyCutoff = device.notifies(NotifyKind.CUTOFF),
+        )
+        upsertChargeSupervisorChannel(ip, config, listOf(device) + siblingsSharingIp(device)).errorOrNull()?.let { return it }
 
         rememberPendingTimer(device.id, seconds, detail, thresholdW = thresholdW)
         return RpcResult.Success(Unit)
@@ -750,8 +765,9 @@ class DeviceRepository @Inject constructor(
         cleanupLegacyChargeScripts(ip, device)
         val config = ChargeScriptGenerator.ChannelConfig(
             device.switchId, thresholdW, graceSec = UNLIMITED_CHARGE_GRACE_SEC, device.name, endBody = "",
+            notifyCutoff = device.notifies(NotifyKind.CUTOFF),
         )
-        return upsertChargeSupervisorChannel(ip, config)
+        return upsertChargeSupervisorChannel(ip, config, listOf(device) + siblingsSharingIp(device))
     }
 
     /**
@@ -777,7 +793,11 @@ class DeviceRepository @Inject constructor(
      * — seul un premier déploiement (aucun script, existant mais arrêté, ou périmé — voir
      * [ChargeScriptGenerator.parseNotifVersion]) réécrit le code en dur.
      */
-    private suspend fun upsertChargeSupervisorChannel(ip: String, config: ChargeScriptGenerator.ChannelConfig): RpcResult<Unit> {
+    private suspend fun upsertChargeSupervisorChannel(
+        ip: String,
+        config: ChargeScriptGenerator.ChannelConfig,
+        rows: List<Device>,
+    ): RpcResult<Unit> {
         val list = rpcClient.scriptList(ip)
         list.errorOrNull()?.let { return it }
         val existing = list.getOrNull()?.scripts?.firstOrNull { it.name == ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME }
@@ -809,6 +829,8 @@ class DeviceRepository @Inject constructor(
                 .getOrNull()?.result?.let { ChargeScriptGenerator.parseFullEvalResult(it) }
                 ?.filterNot { it.switchId == config.switchId }
                 .orEmpty()
+                // Script périmé = sans drapeaux de notif : les lignes Device des autres canaux font foi.
+                .let { applyMaskToChargeConfigs(it, rows) }
         }
 
         // Pas d'éviction du relais ici, volontairement : ce script reste enable:false en
@@ -916,7 +938,9 @@ class DeviceRepository @Inject constructor(
         if (windows.isEmpty()) return stopPresence(device)
         val (_, clear) = withIp(device) { i -> rpcClient.clearAutoOff(i, device.switchId) }
         clear.errorOrNull()?.let { return it }
-        return applyPresenceChannel(device, PresenceScriptGenerator.ChannelConfig(device.switchId, device.name, windows))
+        return applyPresenceChannel(
+            device, PresenceScriptGenerator.ChannelConfig(device.switchId, device.name, windows, device.notifies(NotifyKind.PRESENCE)),
+        )
     }
 
     /**
@@ -946,7 +970,7 @@ class DeviceRepository @Inject constructor(
             ?: return RpcResult.Success(Unit) // rien en cours, rien à couper
         val eval = rpcClient.scriptEval(ip, running.id, PresenceScriptGenerator.evalStopToday(device.switchId))
         eval.errorOrNull()?.let { return it }
-        realignPresenceFlash(ip, running.id)
+        realignPresenceFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
         pushBlockedOffTodayToButtonTimer(ip, device)
         return RpcResult.Success(Unit)
     }
@@ -966,7 +990,7 @@ class DeviceRepository @Inject constructor(
             logger.warn(DiagnosticLogger.RPC, "Déblocage bouton (aujourd'hui) @ $ip : Eval refusé")
             return@withContext
         }
-        realignButtonTimerFlash(ip, running.id)
+        realignButtonTimerFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
     }
 
     /**
@@ -993,7 +1017,7 @@ class DeviceRepository @Inject constructor(
             // La mutation n'existe qu'en mémoire vive à ce stade : réaligner la flash tout de
             // suite, sinon le prochain redémarrage de l'appareil la ferait disparaître (bug de
             // fond vécu en direct le 2026-08-21, un planning supprimé ressuscité au rebranchement).
-            realignPresenceFlash(ip, running.id)
+            realignPresenceFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
             pushBlockedToButtonTimer(ip, device, config?.windows.orEmpty())
             return RpcResult.Success(Unit)
         }
@@ -1026,7 +1050,7 @@ class DeviceRepository @Inject constructor(
                 logger.warn(DiagnosticLogger.RPC, "Synchro blocage bouton @ $ip : Eval refusé")
                 return@withContext
             }
-            realignButtonTimerFlash(ip, running.id)
+            realignButtonTimerFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
         }
 
     /**
@@ -1041,15 +1065,18 @@ class DeviceRepository @Inject constructor(
      * qu'avant ce correctif, et le prochain passage retente. [NonCancellable] : une fois commencé,
      * va au bout même si l'écran appelant se ferme (jamais un script laissé à l'arrêt parce qu'un
      * ViewModel a été détruit entre le Stop et le Start — leçon du bug de renommage ntfy).
+     *
+     * [rows] : lignes Device des canaux de l'appareil, dont les choix de notif priment sur la mémoire du script.
      */
-    private suspend fun realignPresenceFlash(ip: String, scriptId: Int) = withContext(NonCancellable) {
+    private suspend fun realignPresenceFlash(ip: String, scriptId: Int, rows: List<Device>) = withContext(NonCancellable) {
         val json = rpcClient.scriptEval(ip, scriptId, PresenceScriptGenerator.evalReadFull()).getOrNull()?.result
         val snapshot = json?.let { PresenceScriptGenerator.parseLiveSnapshot(it) }
         if (snapshot == null) {
             logger.warn(DiagnosticLogger.RPC, "Réalignement présence @ $ip : snapshot illisible, flash laissée en l'état")
             return@withContext
         }
-        val (configs, stateJson) = snapshot
+        val (liveConfigs, stateJson) = snapshot
+        val configs = applyMaskToPresenceConfigs(liveConfigs, rows)
         if (configs.isEmpty()) {
             // Plus aucun canal suivi : suppression complète, comme deployPresenceScript avec une
             // liste vide — libère au passage un des 3 emplacements de script de l'appareil.
@@ -1095,9 +1122,11 @@ class DeviceRepository @Inject constructor(
         val shared = scripts.firstOrNull { it.name == PresenceScriptGenerator.SCRIPT_NAME }
         if (shared != null) {
             val code = rpcClient.scriptGetCode(ip, shared.id).getOrNull()?.data ?: return ip to emptyList()
+            // Texte enregistré sans mémoire des choix de notif : chaque canal reprend ceux de SA
+            // ligne (canal frère compris), jamais les valeurs par défaut.
             val configs = PresenceScriptGenerator.parseSupervisor(code).orEmpty().mapNotNull { (switchId, windows) ->
-                val name = allDevices.firstOrNull { it.switchId == switchId }?.name ?: return@mapNotNull null
-                PresenceScriptGenerator.ChannelConfig(switchId, name, windows)
+                val owner = allDevices.firstOrNull { it.switchId == switchId } ?: return@mapNotNull null
+                PresenceScriptGenerator.ChannelConfig(switchId, owner.name, windows, owner.notifies(NotifyKind.PRESENCE))
             }
             return ip to configs
         }
@@ -1109,7 +1138,7 @@ class DeviceRepository @Inject constructor(
             val entry = scripts.firstOrNull { it.name == PresenceScriptGenerator.legacyScriptName(d.switchId) } ?: return@mapNotNull null
             val code = rpcClient.scriptGetCode(ip, entry.id).getOrNull()?.data ?: return@mapNotNull null
             val windows = PresenceScriptGenerator.parseLegacyChannel(code) ?: return@mapNotNull null
-            entry to PresenceScriptGenerator.ChannelConfig(d.switchId, d.name, windows)
+            entry to PresenceScriptGenerator.ChannelConfig(d.switchId, d.name, windows, d.notifies(NotifyKind.PRESENCE))
         }
         if (legacy.isEmpty()) return ip to emptyList()
         val migrated = legacy.map { it.second }
@@ -1191,9 +1220,10 @@ class DeviceRepository @Inject constructor(
         if (shared != null) {
             val code = rpcClient.scriptGetCode(ip, shared.id).getOrNull()?.data ?: return ip to emptyList()
             val allDevices = listOf(device) + siblingsSharingIp(device)
+            // Même règle que la présence : choix de notif repris de la ligne de chaque canal.
             val configs = ButtonTimerScriptGenerator.parse(code).orEmpty().mapNotNull { (switchId, dur, thr) ->
-                val name = allDevices.firstOrNull { it.switchId == switchId }?.name ?: return@mapNotNull null
-                ButtonTimerScriptGenerator.ChannelConfig(switchId, dur, thr, name)
+                val owner = allDevices.firstOrNull { it.switchId == switchId } ?: return@mapNotNull null
+                buttonTimerChannel(owner, dur, thr)
             }
             return ip to configs
         }
@@ -1206,7 +1236,7 @@ class DeviceRepository @Inject constructor(
             val entry = scripts.firstOrNull { it.name == "hestia_button_timer_${d.switchId}" } ?: return@mapNotNull null
             val code = rpcClient.scriptGetCode(ip, entry.id).getOrNull()?.data ?: return@mapNotNull null
             val (dur, thr) = parseLegacyButtonTimerMarker(code) ?: return@mapNotNull null
-            entry to ButtonTimerScriptGenerator.ChannelConfig(d.switchId, dur, thr, d.name)
+            entry to buttonTimerChannel(d, dur, thr)
         }
         if (legacy.isEmpty()) return ip to emptyList()
         val migrated = legacy.map { it.second }
@@ -1217,6 +1247,14 @@ class DeviceRepository @Inject constructor(
         }
         return ip to migrated
     }
+
+    /** Config bouton d'un canal, notifs de fin et de coupure selon les choix de [device]. */
+    private fun buttonTimerChannel(device: Device, durationSec: Int?, thresholdW: Int?) =
+        ButtonTimerScriptGenerator.ChannelConfig(
+            device.switchId, durationSec, thresholdW, device.name,
+            notifyEnd = device.notifies(NotifyKind.TIMER_END),
+            notifyCutoff = device.notifies(NotifyKind.CUTOFF),
+        )
 
     /** Ancien format (avant le 2026-08-17) : un marqueur `[durée,seuil]` par script, un script par canal. */
     private fun parseLegacyButtonTimerMarker(code: String): Pair<Int?, Int?>? {
@@ -1360,7 +1398,7 @@ class DeviceRepository @Inject constructor(
         if (running != null) {
             val evalCode = if (enabled) {
                 ButtonTimerScriptGenerator.evalUpsertChannel(
-                    ButtonTimerScriptGenerator.ChannelConfig(device.switchId, durationSeconds, thresholdW, device.name),
+                    buttonTimerChannel(device, durationSeconds, thresholdW),
                 )
             } else {
                 ButtonTimerScriptGenerator.evalRemoveChannel(device.switchId)
@@ -1369,14 +1407,14 @@ class DeviceRepository @Inject constructor(
             eval.errorOrNull()?.let { return it }
             // Même réalignement que la présence : sans lui, la mutation disparaît au prochain
             // redémarrage de l'appareil (voir realignPresenceFlash).
-            realignButtonTimerFlash(ip, running.id)
+            realignButtonTimerFlash(ip, running.id, listOf(device) + siblingsSharingIp(device))
             return RpcResult.Success(Unit)
         }
 
         val (_, existing) = loadOrMigrateButtonTimerScript(device)
         val others = existing.filterNot { it.switchId == device.switchId }
         val updated = if (enabled) {
-            others + ButtonTimerScriptGenerator.ChannelConfig(device.switchId, durationSeconds, thresholdW, device.name)
+            others + buttonTimerChannel(device, durationSeconds, thresholdW)
         } else {
             others
         }
@@ -1384,14 +1422,15 @@ class DeviceRepository @Inject constructor(
     }
 
     /** Pendant du réalignement de présence pour le minuteur bouton — voir [realignPresenceFlash]. */
-    private suspend fun realignButtonTimerFlash(ip: String, scriptId: Int) = withContext(NonCancellable) {
+    private suspend fun realignButtonTimerFlash(ip: String, scriptId: Int, rows: List<Device>) = withContext(NonCancellable) {
         val json = rpcClient.scriptEval(ip, scriptId, ButtonTimerScriptGenerator.evalReadFull()).getOrNull()?.result
         val snapshot = json?.let { ButtonTimerScriptGenerator.parseLiveSnapshot(it) }
         if (snapshot == null) {
             logger.warn(DiagnosticLogger.RPC, "Réalignement bouton @ $ip : snapshot illisible, flash laissée en l'état")
             return@withContext
         }
-        val (configs, stateJson) = snapshot
+        val (liveConfigs, stateJson) = snapshot
+        val configs = applyMaskToButtonConfigs(liveConfigs, rows)
         if (configs.isEmpty()) {
             rpcClient.scriptStop(ip, scriptId)
             rpcClient.scriptDelete(ip, scriptId)
@@ -1613,7 +1652,11 @@ class DeviceRepository @Inject constructor(
         }
 
         val scriptId = if (cutoffThresholdW != null) {
-            createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name, ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)?.endBody.orEmpty()) ?: return CreatePlanningResult.Error
+            createCutoffScript(
+                ip, device.switchId, cutoffThresholdW, device.name,
+                ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)?.endBody.orEmpty(),
+                notifyCutoff = device.notifies(NotifyKind.CUTOFF),
+            ) ?: return CreatePlanningResult.Error
         } else {
             null
         }
@@ -1691,9 +1734,13 @@ class DeviceRepository @Inject constructor(
             ChannelControl.LIGHT -> lightRpc.setLight(ip, device.switchId, on = on, brightness = null)
         }
 
-    private data class NtfyPlanningTexts(val topic: String, val title: String, val startBody: String, val endBody: String)
+    /** [startBody]/[endBody] nul = notif coupée pour ce canal (voir [planningNotify]). */
+    private data class NtfyPlanningTexts(val topic: String, val title: String, val startBody: String?, val endBody: String?)
 
-    /** Textes ntfy d'un planning (début/fin), ou null si ntfy est désactivé — rien à générer. */
+    /**
+     * Textes ntfy d'un planning (début/fin), ou null si ntfy est désactivé — rien à générer. Un
+     * corps nul ne produit aucun appel, exactement comme ntfy désactivé pour ce créneau.
+     */
     private fun ntfyPlanningTexts(
         device: Device,
         startHour: Int,
@@ -1703,6 +1750,7 @@ class DeviceRepository @Inject constructor(
         cutoffThresholdW: Int?,
     ): NtfyPlanningTexts? {
         val topic = ntfyTopic() ?: return null
+        val notify = planningNotify(device, isPresence = false)
         val start = formatClockTime(startHour, startMinute)
         val end = formatClockTime(endHour, endMinute)
         return NtfyPlanningTexts(
@@ -1710,12 +1758,12 @@ class DeviceRepository @Inject constructor(
             title = device.name,
             // Seuil de coupure précisé dans la notif de début quand il y en a un (retour David,
             // 2026-09-28) — sinon rien ne distinguait un planning avec coupure d'un planning simple.
-            startBody = if (cutoffThresholdW != null) {
-                context.getString(R.string.notif_planning_started_with_threshold, start, end, cutoffThresholdW)
-            } else {
-                context.getString(R.string.notif_planning_started, start, end)
+            startBody = when {
+                !notify.start -> null
+                cutoffThresholdW != null -> context.getString(R.string.notif_planning_started_with_threshold, start, end, cutoffThresholdW)
+                else -> context.getString(R.string.notif_planning_started, start, end)
             },
-            endBody = context.getString(R.string.notif_planning_ended, start, end),
+            endBody = if (notify.end) context.getString(R.string.notif_planning_ended, start, end) else null,
         )
     }
 
@@ -1732,13 +1780,21 @@ class DeviceRepository @Inject constructor(
      * sa réécriture en place ([upgradeCutoffScriptsIfDue]) : les deux produisent exactement le
      * même script pour les mêmes réglages.
      */
-    private fun cutoffScriptCode(scriptId: Int, switchId: Int, thresholdW: Int, ntfyTitle: String, planEndBody: String): String {
+    private fun cutoffScriptCode(
+        scriptId: Int,
+        switchId: Int,
+        thresholdW: Int,
+        ntfyTitle: String,
+        planEndBody: String,
+        notifyCutoff: Boolean,
+    ): String {
         val topic = ntfyTopic()
         return ChargeScriptGenerator.generate(
             switchId, thresholdW, belowSec = 60, selfId = scriptId,
             ntfyTopic = topic, ntfyTitle = ntfyTitle,
             ntfyBody = if (topic != null) cutoffBodyTemplate() else "",
             planEndBody = planEndBody,
+            notifyCutoff = notifyCutoff,
         )
     }
 
@@ -1754,13 +1810,14 @@ class DeviceRepository @Inject constructor(
         thresholdW: Int,
         ntfyTitle: String,
         planEndBody: String,
+        notifyCutoff: Boolean,
     ): Int? {
         // Pas d'éviction du relais ici, volontairement : ce script reste enable:false en
         // permanence (voir plus bas), il ne consomme donc jamais de slot dans la limite des 3
         // scripts activés — même raison que ChargeScriptGenerator.SUPERVISOR_SCRIPT_NAME, voir
         // upsertChargeSupervisorChannel.
         val id = rpcClient.scriptCreate(ip, ChargeScriptGenerator.uniquePlanningScriptName()).getOrNull()?.id ?: return null
-        val code = cutoffScriptCode(id, switchId, thresholdW, ntfyTitle, planEndBody)
+        val code = cutoffScriptCode(id, switchId, thresholdW, ntfyTitle, planEndBody, notifyCutoff)
         rpcClient.scriptPutCode(ip, id, code).errorOrNull()?.let {
             rpcClient.scriptDelete(ip, id)
             return null
@@ -1843,7 +1900,11 @@ class DeviceRepository @Inject constructor(
         }
 
         val scriptId = if (cutoffThresholdW != null) {
-            createCutoffScript(ip, device.switchId, cutoffThresholdW, device.name, ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)?.endBody.orEmpty()) ?: return CreatePlanningResult.Error
+            createCutoffScript(
+                ip, device.switchId, cutoffThresholdW, device.name,
+                ntfyPlanningTexts(device, startHour, startMinute, endHour, endMinute, cutoffThresholdW)?.endBody.orEmpty(),
+                notifyCutoff = device.notifies(NotifyKind.CUTOFF),
+            ) ?: return CreatePlanningResult.Error
         } else {
             null
         }
@@ -2109,9 +2170,12 @@ class DeviceRepository @Inject constructor(
                     }
                     CutoffScriptUpgrade.REWRITE_TEXT -> {
                         val endBody = ntfyPlanningTexts(device, p.startHour, p.startMinute, p.endHour, p.endMinute, threshold)?.endBody.orEmpty()
-                        val newCode = cutoffScriptCode(scriptId, device.switchId, threshold, device.name, endBody)
+                        val newCode = cutoffScriptCode(
+                            scriptId, device.switchId, threshold, device.name, endBody, notifyCutoff = device.notifies(NotifyKind.CUTOFF),
+                        )
                         if (rpcClient.scriptPutCode(ip, scriptId, newCode).errorOrNull() == null) {
-                            logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) : texte de coupure mis à jour (durée en tête)")
+                            val from = ChargeScriptGenerator.parseNotifVersion(code)
+                            logger.info(DiagnosticLogger.RPC, "Planning $label (${device.name}) : script de coupure mis à niveau (v$from→v${ChargeScriptGenerator.NOTIF_VERSION})")
                         } else {
                             complete = false
                             logger.warn(DiagnosticLogger.RPC, "Planning $label (${device.name}) : texte de coupure non mis à jour, retenté au prochain lancement")
@@ -2138,7 +2202,7 @@ class DeviceRepository @Inject constructor(
             if (ButtonTimerScriptGenerator.parseNotifVersion(code) >= ButtonTimerScriptGenerator.NOTIF_VERSION) continue
             // Issue journalisée par realignButtonTimerFlash elle-même ; un échec est retenté demain.
             logger.info(DiagnosticLogger.RPC, "Minuteur bouton @ $ip : texte de coupure périmé, réalignement")
-            realignButtonTimerFlash(ip, button.id)
+            realignButtonTimerFlash(ip, button.id, members)
         }
         if (complete) appPreferences.lastCutoffUpgradeStamp = stamp
     }
@@ -2536,6 +2600,7 @@ class DeviceRepository @Inject constructor(
         devicePasswords.removeId(device.id)
         reloadSavedPins("mot de passe retiré")
         appPreferences.setSmokeCutoffToReview(appPreferences.smokeCutoffToReview.value - device.id)
+        appPreferences.setNotifyResyncPending(device.id, false)
         // Un détecteur supprimé ne doit plus apparaître dans les futurs déploiements du relais
         // (trouvé en revue de code avant publication, 2026-09-03) — un relais déjà en cours
         // d'exécution garde malgré tout son entrée MAC→nom en mémoire (limite connue et
@@ -2742,16 +2807,123 @@ class DeviceRepository @Inject constructor(
         if (resyncNtfyForDevice(device)) appPreferences.markNtfySynced(device.id)
     }
 
-    /** @return vrai si l'appareil était joignable (donc effectivement resynchronisé). */
-    private suspend fun resyncNtfyForDevice(device: Device): Boolean {
-        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return true
+    /**
+     * Change les types de notification d'un canal (écran Modifier), puis réécrit sur [appScope]
+     * ce qui porte les appels ntfy de ce canal — voir [resyncNotificationsFor]. Sans effet si le
+     * masque enregistré est déjà celui-là.
+     */
+    suspend fun setNotifyMask(device: Device, mask: Int) {
+        val stored = deviceDao.getById(device.id) ?: return
+        if (stored.notifyMask == mask) return
+        deviceDao.updateFresh(listOf(device.id)) { it.copy(notifyMask = mask) }
+        logger.info(DiagnosticLogger.DB, "Notifications ${device.id} : masque $mask")
+        appScope.launch { resyncNotificationsFor(device) }
+    }
+
+    /** Ensemble observable des canaux dont un changement de masque attend encore d'être appliqué. */
+    val notifyResyncPendingFlow: StateFlow<Set<Long>> get() = appPreferences.notifyResyncPending
+
+    /** Vrai si un changement de masque de ce canal attend encore d'être appliqué sur l'appareil. */
+    fun notifyResyncPending(deviceId: Long): Boolean = deviceId in appPreferences.notifyResyncPendingIds()
+
+    /**
+     * Rattrapage, au lancement de l'appli uniquement (aucune tâche de fond), des changements de
+     * masque restés en attente — appelé par le Tableau après [upgradeCutoffScriptsIfDue].
+     */
+    suspend fun applyPendingNotifyResyncs() {
+        val pending = appPreferences.notifyResyncPendingIds()
+        if (pending.isEmpty()) return
+        var applied = 0
+        for (id in pending) {
+            val device = deviceDao.getById(id)
+            if (device == null) {
+                appPreferences.setNotifyResyncPending(id, false)
+                continue
+            }
+            if (resyncNotificationsFor(device)) applied++
+        }
+        logger.info(DiagnosticLogger.RPC, "Notifications : $applied rattrapage(s) appliqué(s)")
+    }
+
+    /**
+     * Réécrit plannings (présence comprise), événements de volet et minuteur de bouton via
+     * [resyncNtfyOutcome] pour refléter le masque du canal, relu en base sous le verrou du canal
+     * (deux bascules rapprochées : la seconde attend la première puis applique le dernier masque).
+     * Reporté (canal marqué en attente, retenté au lancement suivant) si l'appareil est
+     * injoignable ou si une réécriture a échoué ; un planning avec coupure sur seuil dans son
+     * créneau attend seul le lancement suivant, le reste est réécrit tout de suite (voir
+     * [resyncNtfyOutcome]). Seul un passage complet efface l'attente.
+     *
+     * Les scripts transitoires liés à un minuteur en cours (surveillance de charge,
+     * hestia_timer_notify) ne sont pas réécrits ici : le nouveau masque s'appliquera au prochain
+     * démarrage d'un minuteur, qui les construit déjà d'après le masque du canal.
+     *
+     * @return vrai si la resynchronisation a été faite en entier.
+     */
+    private suspend fun resyncNotificationsFor(device: Device): Boolean = ntfyResyncLocks.withLock(device.id) {
+        val fresh = deviceDao.getById(device.id)
+        if (fresh == null) {
+            appPreferences.setNotifyResyncPending(device.id, false)
+            return@withLock false
+        }
+        val reason = when (resyncNtfyOutcome(fresh)) {
+            NtfyResyncOutcome.DONE -> null
+            NtfyResyncOutcome.UNREACHABLE -> "injoignable"
+            // Attente déjà posée et journalisée par resyncNtfyOutcome.
+            NtfyResyncOutcome.PARTIAL_IN_SLOT -> return@withLock false
+            NtfyResyncOutcome.FAILED -> "échec d'une réécriture"
+        }
+        if (reason != null) {
+            appPreferences.setNotifyResyncPending(fresh.id, true)
+            logger.info(DiagnosticLogger.RPC, "Notifications ${fresh.id} : resynchronisation reportée ($reason)")
+            return@withLock false
+        }
+        appPreferences.setNotifyResyncPending(fresh.id, false)
+        true
+    }
+
+    /**
+     * @return faux seulement si l'appareil est injoignable (à retenter plus tard) ; un échec de
+     * réécriture ou un planning avec seuil en cours (rattrapé au lancement suivant) comptent comme
+     * faits, voir [countsAsSynced]. Un passage complet efface aussi une attente de masque du canal :
+     * tout vient d'être réécrit avec le masque relu en base.
+     * Sérialisé par canal et relu en base sous le verrou, comme [resyncNotificationsFor] : les
+     * appelants ont tous écrit la ligne avant d'appeler, et une ligne relue ne peut pas réécrire
+     * les scripts avec un masque ou un nom périmé. Ligne supprimée entre-temps : rien à faire.
+     */
+    private suspend fun resyncNtfyForDevice(device: Device): Boolean = ntfyResyncLocks.withLock(device.id) {
+        val fresh = deviceDao.getById(device.id) ?: return@withLock true
+        val outcome = resyncNtfyOutcome(fresh)
+        if (outcome == NtfyResyncOutcome.DONE) appPreferences.setNotifyResyncPending(fresh.id, false)
+        outcome.countsAsSynced()
+    }
+
+    /**
+     * Corps de la resynchronisation, sans verrou (appelé sous [ntfyResyncLocks]). Un planning
+     * avec coupure sur seuil dans son créneau n'est jamais réécrit (ça relancerait sa coupure en
+     * plein créneau) : lui seul est laissé tel quel, tout le reste (autres plannings, événements de
+     * volet, minuteur de bouton) est réécrit tout de suite — couper ntfy ou changer de sujet prend
+     * effet aussitôt pour tout ce qui peut l'être sans risque. Le canal est alors marqué en attente
+     * pour quel que soit l'appelant : le planning sauté est réécrit au lancement suivant
+     * ([applyPendingNotifyResyncs], qui le saute à nouveau s'il est encore dans son créneau).
+     * Un planning Unique déjà passé (PastOnce) n'est pas un échec.
+     */
+    private suspend fun resyncNtfyOutcome(device: Device): NtfyResyncOutcome {
+        if (device.ipAddress.startsWith(DEMO_IP_PREFIX)) return NtfyResyncOutcome.DONE
         var reachable = true
+        val failures = mutableListOf<String>()
+        var inSlot = emptyList<Planning>()
         if (hasNativePlannings(device)) {
             // getPlannings fusionne plannings précis et simulations de présence : ce seul relevé
             // couvre désormais les deux (plus besoin d'un second passage par getPresenceWindows).
             when (val r = getPlannings(device)) {
-                is RpcResult.Success -> for (p in r.value) {
-                    updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, p.cutoffThresholdW, p.marginMinutes)
+                is RpcResult.Success -> {
+                    val split = splitThresholdInSlot(r.value, LocalDateTime.now())
+                    inSlot = split.inSlot
+                    for (p in split.rewriteNow) {
+                        val result = updatePlanning(device, p, p.startHour, p.startMinute, p.endHour, p.endMinute, p.days, p.date, p.cutoffThresholdW, p.marginMinutes)
+                        if (result is CreatePlanningResult.Error) failures += "planning ${p.onJobId ?: p.cutoffScriptId ?: "présence"}"
+                    }
                 }
                 is RpcResult.RpcError, is RpcResult.Failure -> reachable = false
             }
@@ -2763,11 +2935,25 @@ class DeviceRepository @Inject constructor(
             if (reachable) {
                 val buttonConfig = getButtonTimerConfig(device)
                 if (buttonConfig.enabled) {
-                    setButtonTimer(device, true, buttonConfig.durationSeconds, buttonConfig.thresholdW)
+                    val result = setButtonTimer(device, true, buttonConfig.durationSeconds, buttonConfig.thresholdW)
+                    if (result !is RpcResult.Success) failures += "minuteur bouton"
                 }
             }
         }
-        return reachable
+        if (failures.isNotEmpty()) {
+            logger.warn(DiagnosticLogger.RPC, "Notifications ${device.id} : réécriture échouée (${failures.joinToString()})")
+        }
+        if (inSlot.isNotEmpty()) {
+            appPreferences.setNotifyResyncPending(device.id, true)
+            val ids = inSlot.joinToString { (it.onJobId ?: it.cutoffScriptId).toString() }
+            logger.info(DiagnosticLogger.RPC, "Notifications ${device.id} : planning $ids en cours, réécrit au prochain lancement")
+        }
+        return when {
+            !reachable -> NtfyResyncOutcome.UNREACHABLE
+            failures.isNotEmpty() -> NtfyResyncOutcome.FAILED
+            inSlot.isNotEmpty() -> NtfyResyncOutcome.PARTIAL_IN_SLOT
+            else -> NtfyResyncOutcome.DONE
+        }
     }
 
     // --- Relais ntfy pour les détecteurs de fumée (Lot 4a/4b, voir SMOKE-DETECTOR.md) ---

@@ -657,4 +657,14 @@
     <string name="sensor_cutoff_review_pending">Un appareil est devenu protégé depuis la dernière lecture de ce détecteur. Réveille le détecteur pour vérifier ses cibles de coupure.</string>
     <string name="sensor_cutoff_review_banner">Coupure sur alarme à revoir</string>
     <string name="sensor_cutoff_targets_dropped">Les appareils protégés ont été retirés des cibles de coupure.</string>
+    <string name="notify_section_title">Notifications</string>
+    <string name="notify_section_desc">Choisis les notifications envoyées par cet appareil. En couper une ne change jamais ce que fait l\'appareil.</string>
+    <string name="notify_kind_planning_start">Début de planning</string>
+    <string name="notify_kind_planning_end">Fin de planning</string>
+    <string name="notify_kind_cutoff">Coupure sur seuil</string>
+    <string name="notify_kind_timer_end">Fin de minuteur</string>
+    <string name="notify_kind_presence">Simulation de présence</string>
+    <string name="notify_kind_cover_moves">Mouvements programmés du volet</string>
+    <string name="notify_pending">Appliqué au prochain lancement : l\'appareil était injoignable, une réécriture a échoué ou un planning avec seuil est en cours.</string>
+    <string name="notify_globally_off">Les notifications sont désactivées dans les Réglages.</string>
 </resources>

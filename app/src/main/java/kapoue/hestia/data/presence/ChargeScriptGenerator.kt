@@ -3,6 +3,7 @@ package kapoue.hestia.data.presence
 import kapoue.hestia.data.notifications.NtfyScriptSupport
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -36,8 +37,11 @@ object ChargeScriptGenerator {
      * de coupure (« 1h14 de charge — … », idée d'upstream 2.18.0). Marqueur posé aussi, depuis,
      * sur les scripts de coupure des plannings ([generate]), réécrits en place par
      * `DeviceRepository.upgradeCutoffScriptsIfDue`.
+     *
+     * Version 3 (2026-10-29) : le script honore les drapeaux de notification par canal (`nc`,
+     * voir [ChannelConfig.notifyCutoff]) ; un script en version 2 les ignore et doit être réécrit.
      */
-    const val NOTIF_VERSION = 2
+    const val NOTIF_VERSION = 3
     private const val NOTIF_VERSION_MARKER = "// hestia_notif_ver:"
 
     /** 0 = marqueur absent, donc forcément une version antérieure à son introduction. */
@@ -98,14 +102,21 @@ object ChargeScriptGenerator {
         ntfyBody: String = "",
         ntfyEndBody: String = "",
         planEndBody: String = "",
+        /** Faux = pas de notif de coupure (la coupure elle-même a lieu exactement comme avant). */
+        notifyCutoff: Boolean = true,
     ): String {
         // Titre statique (connu à la génération, un script dédié par planning) mais corps
         // dynamique : la durée de charge n'est calculable qu'à l'exécution, au moment de la
         // coupure (retour David, 2026-09-17) — voir fmtDur ci-dessous.
         val cutoffTitleExpr = "\"${NtfyScriptSupport.jsString(ntfyTitle)}\""
         val cutoffBodyExpr = NtfyScriptSupport.bodyWithDuration(ntfyBody, "fmtDur(now - onSince)")
-        val cutoffNtfyStatement = NtfyScriptSupport.callDynamicTitleAndBody(ntfyTopic, cutoffTitleExpr, cutoffBodyExpr)
-        val endNtfyStatement = NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyEndBody)
+        val cutoffNtfyStatement = if (notifyCutoff) {
+            NtfyScriptSupport.callDynamicTitleAndBody(ntfyTopic, cutoffTitleExpr, cutoffBodyExpr)
+        } else {
+            ""
+        }
+        // Corps vide = aucune notif de fin (jamais un POST au corps vide), même règle que planEndBody.
+        val endNtfyStatement = if (ntfyEndBody.isBlank()) "" else NtfyScriptSupport.call(ntfyTopic, ntfyTitle, ntfyEndBody)
         val planEndNtfyStatement = if (planEndBody.isBlank()) "" else NtfyScriptSupport.call(ntfyTopic, ntfyTitle, planEndBody)
         return """
         // Généré par Hestia — coupure sur seuil de consommation
@@ -223,7 +234,8 @@ object ChargeScriptGenerator {
      * Config d'un canal suivi par le superviseur. [endBody] vide = pas de notif à la fin du
      * minuteur natif sans coupure sur seuil (cas « sans limite de durée », qui n'a pas de fin
      * naturelle à notifier — [graceSec] non nul en est le signe). [name] sert uniquement au titre
-     * des notifications de ce canal.
+     * des notifications de ce canal. [notifyCutoff] faux = pas de notif de coupure sur seuil (la
+     * coupure a lieu quand même) ; la notif de fin se coupe, elle, en passant [endBody] vide.
      */
     data class ChannelConfig(
         val switchId: Int,
@@ -231,12 +243,13 @@ object ChargeScriptGenerator {
         val graceSec: Int,
         val name: String,
         val endBody: String,
+        val notifyCutoff: Boolean = true,
     )
 
     /** Littéral JS d'un canal, partagé entre [generateSupervisor] et [evalUpsertChannel]. */
     private fun channelLiteral(c: ChannelConfig): String =
         "{ switchId: ${c.switchId}, thresholdW: ${c.thresholdW}, graceSec: ${c.graceSec}, " +
-            "name: \"${NtfyScriptSupport.jsString(c.name)}\", endBody: \"${NtfyScriptSupport.jsString(c.endBody)}\" }"
+            "name: \"${NtfyScriptSupport.jsString(c.name)}\", endBody: \"${NtfyScriptSupport.jsString(c.endBody)}\"${if (c.notifyCutoff) "" else ", nc: false"} }"
 
     /** Littéral JS d'un état de suivi vierge, partagé entre [generateSupervisor] et [evalUpsertChannel]. */
     private const val FRESH_STATE = "{ belowSince: null, wasOn: false, onSince: null, lastTimerEnd: null }"
@@ -328,7 +341,7 @@ object ChargeScriptGenerator {
               if (s.belowSince === null) s.belowSince = now;
               if (now - s.belowSince >= $BELOW_SEC) {
                 Shelly.call("Switch.Set", { id: cfg.switchId, on: false });
-                notifyCutoff(cfg.name, now - s.onSince);
+                if (cfg.nc !== false) notifyCutoff(cfg.name, now - s.onSince);
                 s.belowSince = null;
               }
             } else {
@@ -407,7 +420,7 @@ object ChargeScriptGenerator {
         (function () {
           let r = [];
           for (let i = 0; i < CFG.length; i++) {
-            r.push([CFG[i].switchId, CFG[i].thresholdW, CFG[i].graceSec, CFG[i].name, CFG[i].endBody]);
+            r.push([CFG[i].switchId, CFG[i].thresholdW, CFG[i].graceSec, CFG[i].name, CFG[i].endBody, CFG[i].nc !== false]);
           }
           return JSON.stringify(r);
         })();
@@ -424,7 +437,9 @@ object ChargeScriptGenerator {
             val graceSec = fields[2].jsonPrimitive.intOrNull ?: 0
             val name = fields[3].jsonPrimitive.contentOrNull ?: ""
             val endBody = fields[4].jsonPrimitive.contentOrNull ?: ""
-            ChannelConfig(switchId, thresholdW, graceSec, name, endBody)
+            // Sixième élément absent d'un script antérieur aux drapeaux : notif active.
+            val notifyCutoff = fields.getOrNull(5)?.jsonPrimitive?.booleanOrNull ?: true
+            ChannelConfig(switchId, thresholdW, graceSec, name, endBody, notifyCutoff)
         }
     }
 }

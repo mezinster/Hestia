@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import kapoue.hestia.domain.model.DeviceType
 import kapoue.hestia.domain.model.DriverType
+import kapoue.hestia.domain.model.NotifyKind
 
 /**
  * Un enregistrement par **canal**, pas par appareil physique.
@@ -126,4 +127,10 @@ data class Device(
      * Identique sur tous les canaux d'un même appareil physique. Null = HTTP en clair.
      */
     val certPin: String? = null,
+    /**
+     * Masque de bits des notifications actives pour ce canal (voir `NotifyKind`). 63 = tout actif.
+     * Purement un filtre d'envoi : ne change jamais le comportement de l'appareil.
+     */
+    @ColumnInfo(defaultValue = "63")
+    val notifyMask: Int = NotifyKind.ALL,
 )
