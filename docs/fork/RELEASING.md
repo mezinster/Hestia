@@ -58,13 +58,15 @@ functions, carry its changes over while keeping these parameters. The widened co
 
 ## 2. Numbering
 
-- Tag: `fork/<upstream versionName>-fork.<N>`, e.g. `fork/2.16.1-fork.3`.
+- Tag: `fork/<upstream versionName>-fork.<N>`, e.g. `fork/2.18.0-fork.4`.
 - `N` is a single fork-wide counter, **never reset** (even when upstream changes
   version): `versionCode = 1000 + N` always increases, so each APK installs over the
   previous one.
 - APK `versionName`: `<upstream versionName>-fork.<N>`.
 - Last `N` used: `git tag -l 'fork/*' --sort=-creatordate | head -1`.
-- `defaultConfig.versionCode`/`versionName` (read by F-Droid on the upstream side) are never modified.
+- `defaultConfig.versionName`/`versionCode` name the upstream release whose features the fork has caught up with
+  (e.g. `2.18.0`/`58`, upstream's own values): updated only when preparing a fork release, never in a feature branch.
+  The fork APK's real `versionCode` is still `1000 + N`.
 - A release build without `-PforkBuild=N` fails on purpose.
 
 ## 3. Publishing
@@ -172,10 +174,11 @@ Local signing reads `HESTIA_FORK_*` from `~/.gradle/gradle.properties`.
 
 ## 6. Room database
 
-The fork uses database version 20 (dimmers `isLight` in v18, shutters `isCover` in v19, paused
-shutter events `paused_cover_events` in v20). If upstream in turn publishes a v18, v19 or v20 database (different content),
-renumber the fork's migrations (v21 and later, adding `isLight` and `isCover` only if the column is missing,
-and `paused_cover_events` with `CREATE TABLE IF NOT EXISTS`) **before** publishing a merged release.
+The fork uses database version 22 (dimmers `isLight` in v18, shutters `isCover` in v19, paused
+shutter events `paused_cover_events` in v20, HTTPS certificate pins in v21, per-device notifications
+`notifyMask` in v22). Since 2026-10-29 the fork no longer merges upstream code: the schema is the fork's own,
+numbered independently of upstream's. An upstream feature that needs a database change is re-implemented as a
+new fork migration (v23 and later), never merged.
 
 ## 7. Script tests
 
