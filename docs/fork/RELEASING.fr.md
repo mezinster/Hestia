@@ -58,13 +58,15 @@ fonctions, reporter ses changements en gardant ces paramètres. Les conditions �
 
 ## 2. Numérotation
 
-- Tag : `fork/<versionName amont>-fork.<N>`, p. ex. `fork/2.16.1-fork.3`.
+- Tag : `fork/<versionName amont>-fork.<N>`, p. ex. `fork/2.18.0-fork.4`.
 - `N` est un compteur unique du fork, **jamais remis à zéro** (même quand l'amont change de
   version) : `versionCode = 1000 + N` croît toujours, donc chaque APK s'installe par-dessus le
   précédent.
 - `versionName` de l'APK : `<versionName amont>-fork.<N>`.
 - Dernier `N` utilisé : `git tag -l 'fork/*' --sort=-creatordate | head -1`.
-- `defaultConfig.versionCode`/`versionName` (lus par F-Droid côté amont) ne sont jamais modifiés.
+- `defaultConfig.versionName`/`versionCode` désignent la version amont dont le fork a rattrapé les fonctionnalités
+  (p. ex. `2.18.0`/`58`, les valeurs de l'amont) : mis à jour seulement en préparant une version du fork, jamais dans
+  une branche de fonctionnalité. Le vrai `versionCode` de l'APK du fork reste `1000 + N`.
 - Un build release sans `-PforkBuild=N` échoue volontairement.
 
 ## 3. Publier
@@ -173,10 +175,11 @@ La signature locale lit `HESTIA_FORK_*` dans `~/.gradle/gradle.properties`.
 
 ## 6. Base Room
 
-Le fork utilise la version 20 de la base (variateurs `isLight` en v18, volets `isCover` en v19, événements de volet
-en pause `paused_cover_events` en v20). Si l'amont publie à son tour une base v18, v19 ou v20 (autre contenu),
-renuméroter les migrations du fork (v21 et suivantes, n'ajoutant `isLight` et `isCover` que si la colonne est absente,
-et `paused_cover_events` avec `CREATE TABLE IF NOT EXISTS`) **avant** de publier une version fusionnée.
+Le fork utilise la version 22 de la base (variateurs `isLight` en v18, volets `isCover` en v19, événements de volet
+en pause `paused_cover_events` en v20, empreintes de certificat HTTPS en v21, notifications par appareil
+`notifyMask` en v22). Depuis le 2026-10-29, le fork ne fusionne plus le code amont : le schéma est propre au fork,
+numéroté indépendamment de celui de l'amont. Une fonctionnalité amont qui touche la base est réécrite sous forme
+d'une nouvelle migration du fork (v23 et suivantes), jamais fusionnée.
 
 ## 7. Tests des scripts
 

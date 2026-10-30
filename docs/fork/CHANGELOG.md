@@ -6,6 +6,75 @@ Changes in each unofficial test build of this fork, written for testers. The rel
 `fork/<version>` tag publish the section of the same name (`## <version>`); without one, they fall
 back to the list of commits.
 
+## 2.18.0-fork.3
+
+Installs over 2.16.1-fork.2 (same "Hestia (test)" app, your devices and settings are kept). Brings
+the fork up to the features of upstream Hestia 2.18.0, rewritten for the fork and extended to dimmers
+and shutters where it makes sense.
+
+### Devices that require HTTPS (new)
+
+- **Recent Shelly devices that refuse plain HTTP** (firmware 2.0 and later, out of the box) can now be
+  added. Hestia detects it, shows the device's certificate fingerprint and asks you to trust it
+  once; every exchange after that checks it is still the same certificate.
+- **If the certificate changes**, Hestia stops talking to the device and its tile shows
+  "Certificate changed". Edit device → **Encrypted connection (HTTPS)** shows the certificate and
+  lets you forget it.
+
+### Password-protected devices (new)
+
+- **Adding a protected device** asks for its password. It is stored encrypted on the phone, per
+  device, and never goes into backups or the diagnostic log.
+- Edit device → **Device password**: change or remove it. The tile says "Password required" or
+  "Password refused" when something is wrong.
+
+### Smoke detectors and protected devices
+
+- A smoke alarm calls other devices in plain HTTP, without any password. So a device that needs a
+  password or HTTPS **can no longer be chosen as an alarm cut-off target or as the ntfy relay**: it
+  is greyed out in the list with the reason, and typing its address by hand is refused.
+- If a device already in a detector's cut-off list becomes protected, the detector's tile shows
+  **"Alarm cut-off to review"** until you uncheck it.
+- A password-protected smoke detector still reports its alarm and still switches off the open
+  devices you chose.
+
+### Choose notifications per device (new)
+
+- Edit device → **Notifications**: one switch per kind.
+  - plugs and power-strip channels: schedule start, schedule end, threshold cut-off, timer end,
+    presence simulation;
+  - dimmers: schedule start and end;
+  - shutters: scheduled movements;
+  - smoke detectors: none, their alerts are always notified.
+- **Applied by the device itself** (it works with the phone off) and to local notifications.
+  Switching a notification off never changes what the device does: cut-offs, timers and schedules
+  keep working.
+- A schedule with a threshold that is running at that moment is updated at the next app launch
+  (a note in Edit device says so).
+
+### Other improvements
+
+- Threshold cut-off notification: the charging time now comes first.
+- Schedules with a threshold set up by older versions are **upgraded automatically** at launch,
+  never while one is running.
+- Settings: a multi-channel device (power strip, multi-light dimmer) and its channels now show as
+  **one card**.
+
+### Fixes
+
+- One-time (single date) schedules: the year is read correctly, a far-ahead date is no longer seen as
+  past, and an expired one is deleted only once.
+- Demo mode no longer sends anything to its fictitious addresses.
+- Schedules no longer send an empty ntfy notification.
+
+### Good to know
+
+- HTTPS devices, passwords and per-device notifications have **not been tested on real hardware
+  yet**. If you own such a device, your feedback is very welcome — see the
+  [tester guide](https://github.com/mezinster/Hestia/blob/fork/main/docs/fork/TESTING.md).
+- The app's local database is upgraded on first launch. Going back to 2.16.1-fork.2 afterwards
+  requires uninstalling "Hestia (test)" first.
+
 ## 2.16.1-fork.2
 
 Installs over 2.16.1-fork.1 (same "Hestia (test)" app, your devices and settings are kept).
