@@ -65,6 +65,14 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
     couverture se mette en place. Déclencheurs : activation/sujet ntfy, ajout d'un détecteur.
     → *Testable : activer ntfy, ajouter/laisser un détecteur se réveiller une fois, puis déclencher
     un test (3 appuis) — vérifier que la notif arrive.*
+    **Appareils protégés exclus (lot C3, fork, 2026-10-29).** Un relais n'est ni installé ni proposé sur un
+    appareil protégé par mot de passe ou en HTTPS (`relayCandidates`) : le webhook du détecteur y appellerait
+    `Script.Eval` en HTTP clair. Un relais déjà présent sur un appareil qui reçoit ensuite un mot de passe n'est
+    pas supprimé (Hestia n'a pas forcément ce mot de passe) ; il est seulement ignoré : ni candidat, ni cible de
+    webhook, ni picto dans Réglages. Enregistrer un mot de passe ou approuver un premier certificat relance la
+    resynchronisation et remet à zéro les marques « relais à jour », pour que les webhooks de chaque détecteur
+    soient re-poussés à son prochain réveil. Effet de bord accepté : un script orphelin, non appelé, reste sur
+    l'appareil protégé.
   - **4b — éviction prioritaire du relais + picto dans Réglages. ✅ Codé le 2026-09-01, pas encore
     testé sur l'appareil réel.** `DeviceRepository.evictSmokeRelayIfNeeded` appelé juste avant
     chaque création d'un nouveau script métier (minuteur bouton, présence, coupure sur seuil
@@ -121,6 +129,15 @@ Chaque lot produit quelque chose de réellement testable, pas juste du code invi
   → *Testé : Strip4 prise 2 → Plug M, coupure effective dans la seconde suivant un appui long
   (>3s — 3 appuis brefs ne déclenchent que le mode configuration, pas le test, même confusion déjà
   rencontrée avec ntfy).*
+
+  **Cible protégée (lot C3, fork, 2026-10-29).** Un webhook natif ne sait pas s'authentifier : une prise
+  protégée par mot de passe, ou dont le certificat HTTPS est épinglé, n'est jamais une cible de coupure.
+  Règle pure `SmokeTargetGate` (`SmokeTargets.kt`), appliquée à l'ajout manuel, à l'enregistrement de la
+  liste (les cibles devenues protégées sont retirées, avec un message) et à l'affichage (grisées avec une
+  explication, toujours décochables). Enregistrer un mot de passe, ou approuver un premier certificat sur un
+  appareil déjà cible, marque le détecteur « Coupure sur alarme à revoir » ; la marque ne se lève qu'à une
+  vraie lecture du détecteur où plus aucune cible n'est protégée (jamais au réveil manqué). Aucun identifiant
+  n'entre dans une URL de webhook.
 
 - **Lot 6 — Documentation. ✅ Fait le 2026-09-03.** Principe Cloud Shelly étendu dans CLAUDE.md
   (« état, consommation et marche/arrêt » → distingue prise/détecteur) + précision sur le relais

@@ -634,4 +634,10 @@
     <string name="password_remove_confirm_title">Удалить пароль?</string>
     <string name="password_remove_confirm">Hestia забудет этот пароль и будет обращаться к устройству без него. Если устройство защищено, оно снова запросит пароль.</string>
     <string name="tls_dialog_password_suspended">Сохранённый пароль будет приостановлен: введи его снова после подтверждения.</string>
+    <string name="smoke_target_auth_blocked">Это устройство требует аутентификации, и пожарная тревога не может управлять им напрямую.</string>
+    <string name="smoke_target_https_blocked">Это устройство принимает только зашифрованные подключения (HTTPS), и пожарная тревога не может управлять им напрямую.</string>
+    <string name="sensor_cutoff_review_target">Проверь: тревога больше не может выключить это устройство. Сними отметку, чтобы убрать его.</string>
+    <string name="sensor_cutoff_review_pending">С последнего чтения этого датчика одно из устройств стало защищённым. Разбуди датчик, чтобы проверить, что он отключает.</string>
+    <string name="sensor_cutoff_review_banner">Проверь отключение по тревоге</string>
+    <string name="sensor_cutoff_targets_dropped">Защищённые устройства убраны из списка отключаемых.</string>
 </resources>
