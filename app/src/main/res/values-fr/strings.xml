@@ -651,6 +651,12 @@
     <string name="password_remove_confirm_title">Retirer le mot de passe ?</string>
     <string name="password_remove_confirm">Hestia oubliera ce mot de passe et contactera l\'appareil sans. Si l\'appareil est protégé, il redemandera le mot de passe.</string>
     <string name="tls_dialog_password_suspended">Le mot de passe enregistré sera suspendu : saisis-le à nouveau après avoir accepté.</string>
+    <string name="smoke_target_auth_blocked">Cet appareil exige une authentification et ne peut pas être commandé directement par une alarme de fumée.</string>
+    <string name="smoke_target_https_blocked">Cet appareil n\'accepte que les connexions chiffrées (HTTPS) et ne peut pas être commandé directement par une alarme de fumée.</string>
+    <string name="sensor_cutoff_review_target">À revoir : l\'alarme ne peut plus couper cet appareil. Décoche-le pour le retirer.</string>
+    <string name="sensor_cutoff_review_pending">Un appareil est devenu protégé depuis la dernière lecture de ce détecteur. Réveille le détecteur pour vérifier ses cibles de coupure.</string>
+    <string name="sensor_cutoff_review_banner">Coupure sur alarme à revoir</string>
+    <string name="sensor_cutoff_targets_dropped">Les appareils protégés ont été retirés des cibles de coupure.</string>
     <string name="notify_section_title">Notifications</string>
     <string name="notify_section_desc">Choisis les notifications envoyées par cet appareil. En couper une ne change jamais ce que fait l\'appareil.</string>
     <string name="notify_kind_planning_start">Début de planning</string>

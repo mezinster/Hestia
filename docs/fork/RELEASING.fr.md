@@ -87,7 +87,7 @@ puis Release GitHub avec l'APK, son `.sha256` et les notes (`scripts/fork/releas
 Suivre avec `gh run watch` (ou l'onglet *Actions*), puis vérifier
 <https://github.com/mezinster/Hestia/releases/latest>.
 
-Essai sans publier : *Actions → Fork release → Run workflow* (ou
+Essai sans publier : *Actions → Release signed fork APK → Run workflow* (ou
 `gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) reconstruit un tag
 existant (refusé s'il n'est pas dans `fork/main`) et crée la Release **toujours en brouillon** ; la
 publier ensuite dans l'interface ou avec `gh release edit <tag> --draft=false`. La supprimer ensuite (`gh release delete <tag> --yes`)
@@ -152,7 +152,7 @@ Ce qui est supprimé sur GitHub l'est aussi sur Codeberg.
 - GitHub **suspend les workflows planifiés après 60 jours sans activité** dans un dépôt public : un
   push sur `fork/main` reste aussitôt mis en miroir, mais les autres branches, les tags et `main`
   (synchronisations amont) n'arriveraient plus sur Codeberg, sans autre avertissement qu'un e-mail de
-  GitHub. Après une longue pause, vérifier *Actions → Codeberg mirror* : le réactiver si besoin
+  GitHub. Après une longue pause, vérifier *Actions → Mirror GitHub → Codeberg* : le réactiver si besoin
   (`gh workflow enable codeberg-mirror.yml`), puis le lancer une fois
   (`gh workflow run codeberg-mirror.yml --ref fork/main`).
 

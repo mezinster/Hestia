@@ -132,6 +132,9 @@ class DashboardViewModel @Inject constructor(
     /** Problèmes d'accès HTTPS par adresse (fork, lot C1) : bandeaux des tuiles. */
     val accessIssues: StateFlow<Map<String, AccessIssue>> get() = repository.accessIssues
 
+    /** Détecteurs dont la coupure sur alarme vise un appareil devenu protégé. */
+    val smokeCutoffToReview: StateFlow<Set<Long>> get() = repository.smokeCutoffToReview
+
     // combine plafonne à 5 flux typés : on regroupe présence + planning + seuils + on_since +
     // capteurs en un seul.
     private val extras = combine(

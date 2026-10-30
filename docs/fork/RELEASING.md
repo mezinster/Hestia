@@ -87,7 +87,7 @@ then a GitHub Release with the APK, its `.sha256` and the notes (`scripts/fork/r
 Follow it with `gh run watch` (or the *Actions* tab), then check
 <https://github.com/mezinster/Hestia/releases/latest>.
 
-Dry run without publishing: *Actions → Fork release → Run workflow* (or
+Dry run without publishing: *Actions → Release signed fork APK → Run workflow* (or
 `gh workflow run fork-release.yml --ref fork/main -f tag=fork/<x.y.z>-fork.<N>`) rebuilds an
 existing tag (refused unless it is in `fork/main`) and creates the Release **always as a draft**;
 then publish it in the web UI or with `gh release edit <tag> --draft=false`. Delete it afterwards (`gh release delete <tag> --yes`)
@@ -152,7 +152,7 @@ Whatever is deleted on GitHub is deleted on Codeberg too.
 - GitHub **pauses scheduled workflows after 60 days without activity** in a public repository: pushes
   to `fork/main` still mirror immediately, but other branches, tags and `main` (upstream syncs) would
   no longer reach Codeberg, without any warning (except an email from GitHub). After a long pause,
-  check *Actions → Codeberg mirror*: re-enable it if needed (`gh workflow enable codeberg-mirror.yml`),
+  check *Actions → Mirror GitHub → Codeberg*: re-enable it if needed (`gh workflow enable codeberg-mirror.yml`),
   then run it once (`gh workflow run codeberg-mirror.yml --ref fork/main`).
 
 ## 5. Local fallback (CI unavailable)

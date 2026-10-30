@@ -657,6 +657,12 @@
     <string name="password_remove_confirm_title">Remove the password?</string>
     <string name="password_remove_confirm">Hestia will forget this password and contact the device without one. If the device is protected, it will ask for the password again.</string>
     <string name="tls_dialog_password_suspended">The saved password will be suspended: enter it again after accepting.</string>
+    <string name="smoke_target_auth_blocked">This device requires authentication and cannot be controlled directly by a smoke alarm.</string>
+    <string name="smoke_target_https_blocked">This device only accepts encrypted connections (HTTPS) and cannot be controlled directly by a smoke alarm.</string>
+    <string name="sensor_cutoff_review_target">To review: the alarm can no longer switch this device off. Uncheck it to remove it.</string>
+    <string name="sensor_cutoff_review_pending">A device became protected since this detector was last read. Wake the detector to check its cut-off targets.</string>
+    <string name="sensor_cutoff_review_banner">Alarm cut-off to review</string>
+    <string name="sensor_cutoff_targets_dropped">Protected devices were removed from the cut-off targets.</string>
     <string name="notify_section_title">Notifications</string>
     <string name="notify_section_desc">Choose which notifications this device sends. Switching one off never changes what the device does.</string>
     <string name="notify_kind_planning_start">Planning start</string>

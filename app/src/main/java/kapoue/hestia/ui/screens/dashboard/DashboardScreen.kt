@@ -86,6 +86,7 @@ fun DashboardScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val permissionUsable by viewModel.permissionUsable.collectAsStateWithLifecycle()
     val accessIssues by viewModel.accessIssues.collectAsStateWithLifecycle()
+    val smokeCutoffToReview by viewModel.smokeCutoffToReview.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
@@ -285,6 +286,7 @@ fun DashboardScreen(
                                             onOpenDetail = { onOpenDetail(tile.device.id) },
                                             onOpenFirmware = { onOpenFirmware(tile.device.id) },
                                             accessIssue = accessIssueFor(tile.device, accessIssues),
+                                            cutoffToReview = tile.device.id in smokeCutoffToReview,
                                         )
                                     } else {
                                         DeviceTile(

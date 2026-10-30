@@ -276,6 +276,35 @@ internal fun AccessIssueBanner(issue: AccessIssue, onClick: () -> Unit) {
     }
 }
 
+/** Bandeau « coupure à revoir » du détecteur — même allure que [AccessIssueBanner], tap = détail. */
+@Composable
+private fun CutoffReviewBanner(onClick: () -> Unit) {
+    val colors = MaterialTheme.stateColors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .background(colors.offlineBg)
+            .padding(vertical = 6.dp),
+    ) {
+        Icon(
+            Icons.Filled.Warning,
+            contentDescription = null,
+            tint = colors.warningText,
+            modifier = Modifier.size(14.dp),
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = stringResource(R.string.sensor_cutoff_review_banner),
+            color = colors.warningText,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
 /**
  * Tuile d'un détecteur de fumée — voir SMOKE-DETECTOR.md. Volontairement distincte de
  * [DeviceTile] : pas de fait physique marche/arrêt, pas de minuteur, pas d'interrupteur (pas de
@@ -287,6 +316,7 @@ fun SmokeDetectorTile(
     onOpenDetail: () -> Unit,
     onOpenFirmware: () -> Unit,
     accessIssue: AccessIssue? = null,
+    cutoffToReview: Boolean = false,
 ) {
     val colors = MaterialTheme.stateColors
     val sensor = tile.sensorStatus ?: SensorStatus.Loading
@@ -420,6 +450,10 @@ fun SmokeDetectorTile(
             }
             if (accessIssue != null) {
                 AccessIssueBanner(issue = accessIssue, onClick = onOpenFirmware)
+            }
+            // Le problème d'accès garde la priorité ; sinon une cible de coupure devenue protégée.
+            if (accessIssue == null && cutoffToReview) {
+                CutoffReviewBanner(onClick = onOpenDetail)
             }
             if (tile.device.firmwareUpdateAvailable) {
                 FirmwareUpdateBanner(onClick = onOpenFirmware)

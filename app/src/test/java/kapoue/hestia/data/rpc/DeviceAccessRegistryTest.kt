@@ -414,4 +414,14 @@ class DeviceAccessRegistryTest {
         assertFalse(r.httpsSeen(ip))
         assertTrue(r.httpsSeen("b"))
     }
+
+    @Test fun `password addresses follow reloads`() = runTest {
+        val src = FakePasswords(mapOf("192.168.1.50" to pw(PasswordState.UNVERIFIED)))
+        val r = DeviceAccessRegistry(SavedPinSource { emptyMap() }, src)
+        r.reload()
+        assertEquals(setOf("192.168.1.50"), r.passwordAddresses.value)
+        src.data = emptyMap()
+        r.reload()
+        assertEquals(emptySet<String>(), r.passwordAddresses.value)
+    }
 }
