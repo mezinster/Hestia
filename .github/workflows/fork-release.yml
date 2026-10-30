@@ -48,7 +48,10 @@ jobs:
       # on refuse tout tag qui n'est pas dans l'historique de fork/main avant d'exposer les secrets.
       # Contrôle fait ici, sans exécuter le moindre script venant du tag (check-tag.sh tourne ensuite
       # dans ci-build.sh, une fois l'origine du tag vérifiée).
+      # bash explicite : dans un conteneur, GitHub lance les étapes avec sh, qui ne connaît pas [[ =~ ]]
+      # (tout tag, même valide, était refusé).
       - name: Origine du tag
+        shell: bash
         run: |
           [[ "$TAG" =~ ^fork/[0-9]+\.[0-9]+\.[0-9]+-fork\.[1-9][0-9]*$ ]] \
             || { echo "Tag invalide : $TAG" >&2; exit 1; }
